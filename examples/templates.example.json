@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "templates": [
+    {
+      "template_id": "tpl_breakfast",
+      "name": "早餐",
+      "status": "active",
+      "l1_id": "tag_expense",
+      "l2_id": "tag_cash",
+      "l3_id": "tag_food",
+      "l4_id": "tag_711",
+      "default_amount": "0",
+      "default_description": "",
+      "focus_target": "amount",
+      "sort_order": 10,
+      "created_at": "2026-05-08T08:30:00+08:00",
+      "updated_at": "2026-05-08T08:30:00+08:00",
+      "archived_at": null
+    }
+  ]
+}

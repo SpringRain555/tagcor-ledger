@@ -1,0 +1,2 @@
+schema_version,transaction_id,revision,status,entry_type,occurred_at,recorded_at,updated_at,currency,amount,l1_id,l2_id,l3_id,l4_id,l1_name_snapshot,l2_name_snapshot,l3_name_snapshot,l4_name_snapshot,description,source,template_id,correlation_id
+1,txn_5c3d0d1a0d3f4e66b0c8b2abf9d5431a,1,active,expense,2026-05-08T08:30:00+08:00,2026-05-08T08:31:00+08:00,2026-05-08T08:31:00+08:00,TWD,85,tag_expense,tag_cash,tag_food,tag_711,支出,現金,伙食,7-11,早餐,template,tpl_breakfast,corr_5f03a3dd2b8740198365bd7e4ab6d2d3
