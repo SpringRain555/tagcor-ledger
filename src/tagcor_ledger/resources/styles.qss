@@ -21,7 +21,10 @@ QMessageBox QLabel {
 
 QLineEdit,
 QComboBox,
-QTableWidget {
+QDateTimeEdit,
+QTableWidget,
+QTableView,
+QListWidget {
     color: #17202A;
     background-color: #FFFFFF;
     border: 1px solid #A9B4C2;
@@ -37,7 +40,10 @@ QLineEdit {
 }
 
 QLineEdit:focus,
-QComboBox:focus {
+QComboBox:focus,
+QDateTimeEdit:focus,
+QTableView:focus,
+QListWidget:focus {
     color: #17202A;
     background-color: #FFFFFF;
     border: 2px solid #1F6FEB;
@@ -53,6 +59,24 @@ QComboBox:disabled {
 QComboBox {
     min-height: 28px;
     padding-right: 26px;
+}
+
+QListWidget {
+    padding: 8px;
+    background-color: #17202A;
+    color: #E7ECF2;
+    border: 0;
+    border-radius: 0;
+}
+
+QListWidget::item {
+    padding: 10px 12px;
+    border-radius: 6px;
+}
+
+QListWidget::item:selected {
+    color: #FFFFFF;
+    background-color: #1F6FEB;
 }
 
 QComboBox::drop-down {
@@ -104,6 +128,13 @@ QTableWidget {
     alternate-background-color: #F8FAFC;
 }
 
+QTableView {
+    gridline-color: #D6DEE8;
+    alternate-background-color: #F8FAFC;
+    selection-background-color: #1F6FEB;
+    selection-color: #FFFFFF;
+}
+
 QTableWidget::item {
     color: #17202A;
     background-color: #FFFFFF;
@@ -136,4 +167,16 @@ QToolTip {
     background-color: #17202A;
     border: 1px solid #334155;
     padding: 4px 6px;
+}
+
+QLabel#pageTitle {
+    color: #17202A;
+    font-size: 20pt;
+    font-weight: 700;
+    padding: 4px 0 12px 0;
+}
+
+QLabel#errorLabel {
+    color: #B42318;
+    font-weight: 600;
 }

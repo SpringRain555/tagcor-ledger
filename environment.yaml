@@ -4,7 +4,7 @@ channels:
 dependencies:
   - python=3.12
   - "pip>=24.0"
-  - pyqt=6
+  - pyside6
   - "setuptools>=69.0"
   - "pytest>=8.0"
   - "pytest-qt>=4.4"
