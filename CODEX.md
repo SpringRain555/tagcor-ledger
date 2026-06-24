@@ -1,112 +1,60 @@
-# CODEX.md
+# CODEX Project Context
 
-## 專案定位
+開始修改前依序閱讀：
 
-TagCor Ledger 是一個以四層標籤為核心的本機桌面記帳工具。第一階段目標是用 Python + PyQt6 建立鍵盤優先的快速記帳流程，資料先以 CSV + JSON 保存，並透過清楚的 repository 介面保留未來切換 SQLite 的可能。
+1. `docs/index.md`
+2. `docs/requirements/REQ-0001-stable-core.md`
+3. `docs/architecture/overview.md`
+4. `docs/architecture/data-model.md`
+5. `docs/architecture/ui-workflows.md`
+6. `docs/roadmap.md`
+7. `docs/changelog.md`
 
-目前 repo 仍在規劃階段，主要依據文件為：
+## 產品定位
 
-- `docs/計劃書.md`：產品範圍、架構、資料模型、里程碑與驗收。
-- `docs/資料格式規格.md`：CSV/JSON schema、長期保存規則、manifest、backup、audit 與 migration。
-- `docs/模組化與階段實作.md`：模組邊界、依賴方向、打包保留空間與階段性實作內容。
-- `README.md`：簡介與入口說明。
+TagCor Ledger 是 Windows-first、本機個人記帳工具。產品重點是快速輸入、清楚帳戶餘額、可搜尋交易、可靠備份與資料自主，不是企業會計或雲端多人協作系統。
 
-## 開發原則
+## 架構規則
 
-1. 先遵守 `docs/計劃書.md` 的分層設計，不把 UI、資料存取與業務規則混在一起。
-2. 所有資料修改必須經過 Application Use Case。
-3. UI 不得直接讀寫 CSV/JSON。
-4. 金額必須使用 `Decimal`，禁止使用 float 表示帳務金額。
-5. 所有檔案寫入必須使用 atomic writer。
-6. 所有使用者資料操作必須寫入 audit log。
-7. 長時間 IO 或批次操作必須背景化，避免 PyQt UI 凍結。
-8. 新增或修改 schema 時，必須同步更新 migration、範例資料與測試。
+- `domain/` 不依賴 Qt、SQLite 或檔案系統。
+- `application/` 定義使用者操作流程並回傳 `Result`。
+- `infrastructure/` 負責 SQLite、legacy migration、備份與匯出。
+- `ui/` 僅透過 controller/use case 操作資料，不直接執行 SQL。
+- SQLite `data/ledger.sqlite3` 是唯一帳務真實來源。
+- CSV/JSON 只作為 legacy import 或匯出格式。
+- 所有帳務寫入與 audit event 必須在同一資料庫交易內完成。
 
-## 建議架構
+## 資料規則
 
-```text
-src/tagcor_ledger/
-├── __main__.py
-├── main.py
-├── app/
-├── domain/
-├── application/
-├── infrastructure/
-├── ui/
-└── resources/
+- 金額使用 `Money(amount_minor: int, currency: str)`，禁止 float。
+- 首輪只允許 TWD；跨幣別操作應明確拒絕。
+- 支出 posting 為負、收入 posting 為正。
+- 轉帳必須產生同額一負一正 posting，總和為零。
+- 作廢交易保留資料並從餘額與預設查詢排除。
+- 分類為兩層；schema 可支援多筆 allocation，但首輪 UI 只建立一筆。
+- 大量交易查詢必須使用索引與 keyset pagination，不可讀取全表後在 Python 排序。
+
+## UI 與文字
+
+- 使用 PySide6。
+- 使用者可見文字採繁體中文。
+- 「對象／商家」與「備註」是不同欄位。
+- 日期顯示格式為 `yyyy/MM/dd HH:mm`，儲存為含 timezone offset 的 ISO 8601。
+- 驗證錯誤優先使用行內提示；詳細例外只放在 Result details 或診斷紀錄。
+
+## Migration 與資料安全
+
+- 偵測 legacy CSV/JSON 時先建立原檔備份。
+- migration 必須在單一 SQLite transaction 內完成。
+- 以 legacy 檔案 fingerprint 記錄匯入狀態，重跑不得重複匯入。
+- 還原前驗證 SHA-256 與 `PRAGMA integrity_check`，並先備份目前資料庫。
+
+## 驗證基準
+
+```powershell
+python -m ruff check --no-cache .
+python -m mypy --no-incremental src
+python -m pytest -q
 ```
 
-責任分工：
-
-- `app/`：啟動流程、dependency wiring、使用者資料目錄、資源讀取。
-- `domain/`：純業務模型與規則，例如 `Transaction`、`Money`、`TagPath`。
-- `application/`：使用者操作流程，例如新增交易、管理標籤、備份還原。
-- `infrastructure/`：CSV/JSON、檔案鎖、原子寫入、備份、logging、manifest、migration。
-- `ui/`：PyQt6 視窗、表單、對話框、樣式與焦點行為。
-- `resources/`：QSS、icon 等打包時需要的靜態資源。
-
-MVP 階段採中等顆粒模組化；不要為每個小 use case 或每個小 widget 各自建立檔案。詳細規劃以 `docs/模組化與階段實作.md` 為準。
-
-## 資料模型重點
-
-- Ledger 內部儲存 Tag ID 與 tag name snapshot；Tag ID 用於關聯，snapshot 用於保存交易當下語意。
-- Tag 改名只更新 `tags.json`，不重寫 ledger snapshot。
-- 只有 tag 合併、拆分或批次轉換才需要 dry-run、備份、背景任務與還原策略。
-- `default_amount` 等 Decimal 值在 JSON 中以字串保存。
-- 所有 schema 檔案都要具備 `schema_version`。
-- 已使用 tag 與交易不得實體刪除，使用 `archived` / `voided` 狀態。
-
-## Use Case Result
-
-Application Use Case 應統一回傳類似結構：
-
-```text
-success: bool
-error_code: string | null
-message: string
-details: dict
-correlation_id: string
-```
-
-UI 顯示 `message` 與 `correlation_id`；詳細例外寫入 `error.log`。
-
-## 測試要求
-
-新增功能時至少考慮：
-
-- Domain 單元測試：金額、TagPath、交易驗證。
-- Application 單元測試：成功、驗證失敗、repository 例外。
-- Infrastructure 整合測試：CSV/JSON 讀寫、atomic writer、backup/restore。
-- UI 關鍵手動驗收：Tab 順序、快捷鍵、模板套用、錯誤提示。
-
-## 文件維護
-
-文件放置原則：
-
-- `README.md` 留在根目錄，作為專案入口。
-- `CODEX.md` 留在根目錄，讓 Codex 優先讀取。
-- 企劃、架構、規格、測試計畫等長文件集中放在 `docs/`。
-
-當變更以下內容時，請同步更新 `docs/計劃書.md`：
-
-- 分層架構。
-- 資料 schema。
-- 使用者流程。
-- 里程碑與驗收條件。
-- 重大技術決策。
-
-當變更以下內容時，請同步更新 `docs/模組化與階段實作.md`：
-
-- 模組邊界與依賴方向。
-- 階段性實作內容。
-- 打包入口、資源讀取、使用者資料目錄策略。
-- 拆分時機與模組顆粒。
-
-當變更以下內容時，請同步更新 `docs/資料格式規格.md`：
-
-- CSV/JSON 欄位。
-- schema version。
-- ID、時間、金額、狀態 enum 規則。
-- backup、manifest、audit、migration 格式。
-
-當開始新增實作後，也請更新 `README.md`，補上安裝、啟動、測試與資料位置說明。
+新增資料模型、migration 或 UI 流程時，同步更新 requirements、architecture、roadmap、changelog 與相關測試。
