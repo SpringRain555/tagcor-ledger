@@ -54,9 +54,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             from tagcor_ledger.ui.app import run_gui
         except ModuleNotFoundError as exc:
-            if exc.name == "PyQt6":
+            if exc.name == "PySide6":
                 print(
-                    "PyQt6 is not installed. Create the conda environment from environment.yaml "
+                    "PySide6 is not installed. Create the conda environment from environment.yaml "
                     "or install the package with GUI dependencies.",
                     file=sys.stderr,
                 )
@@ -71,6 +71,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "data_dir": str(context.paths.data_dir),
         "config_dir": str(context.paths.config_dir),
         "ledger_dir": str(context.paths.ledger_dir),
+        "database_path": str(context.paths.database_path),
         "backup_dir": str(context.paths.backup_dir),
         "export_dir": str(context.paths.export_dir),
         "log_dir": str(context.paths.log_dir),

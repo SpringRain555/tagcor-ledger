@@ -6,10 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    from platformdirs import user_data_dir
-except ImportError:  # pragma: no cover - dependency is declared, fallback helps early dev shells.
-    user_data_dir = None
+from platformdirs import user_data_dir
 
 
 APP_NAME = "TagCorLedger"
@@ -27,6 +24,10 @@ class AppPaths:
     log_dir: Path
     tmp_dir: Path
 
+    @property
+    def database_path(self) -> Path:
+        return self.ledger_dir / "ledger.sqlite3"
+
     def as_dict(self) -> dict[str, str]:
         return {
             "data_dir": str(self.data_dir),
@@ -43,9 +44,7 @@ def default_data_dir() -> Path:
     env_value = os.environ.get(DATA_DIR_ENV)
     if env_value:
         return Path(env_value).expanduser().resolve()
-    if user_data_dir is not None:
-        return Path(user_data_dir(APP_NAME, APP_AUTHOR)).expanduser().resolve()
-    return (Path.home() / APP_NAME).resolve()
+    return Path(user_data_dir(APP_NAME, APP_AUTHOR)).expanduser().resolve()
 
 
 def resolve_app_paths(data_dir: str | Path | None = None) -> AppPaths:

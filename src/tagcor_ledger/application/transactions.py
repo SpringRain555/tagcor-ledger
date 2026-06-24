@@ -22,7 +22,7 @@ from tagcor_ledger.infrastructure.repositories import initialize_data_store
 
 
 @dataclass(frozen=True)
-class AddTransactionRequest:
+class LegacyAddTransactionRequest:
     occurred_at: str
     entry_type: str
     amount: str
@@ -45,11 +45,11 @@ class RecentTransaction:
     status: str
 
 
-def new_transaction_id() -> str:
+def legacy_new_transaction_id() -> str:
     return f"txn_{uuid4().hex}"
 
 
-def current_timestamp() -> str:
+def legacy_current_timestamp() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
@@ -58,7 +58,7 @@ def ledger_path_for_occurred_at(paths: AppPaths, occurred_at: str) -> Path:
     return paths.ledger_dir / f"ledger_{occurred.year}.csv"
 
 
-class AddTransaction:
+class LegacyAddTransaction:
     def __init__(self, paths: AppPaths) -> None:
         self.paths = paths
 
@@ -151,7 +151,7 @@ class AddTransaction:
         write_manifest(self.paths.config_dir / "data_manifest.json", manifest)
 
 
-class ListRecentTransactions:
+class LegacyListRecentTransactions:
     def __init__(self, paths: AppPaths) -> None:
         self.paths = paths
 
@@ -197,7 +197,7 @@ def row_to_recent_transaction(row: dict[str, str]) -> RecentTransaction:
     )
 
 
-def transaction_to_dict(transaction: RecentTransaction) -> dict[str, Any]:
+def legacy_transaction_to_dict(transaction: RecentTransaction) -> dict[str, Any]:
     return {
         "transaction_id": transaction.transaction_id,
         "occurred_at": transaction.occurred_at,
@@ -208,3 +208,22 @@ def transaction_to_dict(transaction: RecentTransaction) -> dict[str, Any]:
         "description": transaction.description,
         "status": transaction.status,
     }
+
+
+# The SQLite implementation supersedes the original CSV prototype while these
+# re-exports keep the public import path stable for scripts and integrations.
+from tagcor_ledger.application.transaction_service import (  # noqa: E402,F401
+    AddTransaction,
+    AddTransactionRequest,
+    AddTransfer,
+    AddTransferRequest,
+    ListRecentTransactions,
+    ListTransactions,
+    TransactionQuery,
+    UpdateTransaction,
+    UpdateTransactionRequest,
+    VoidTransaction,
+    current_timestamp,
+    new_transaction_id,
+    transaction_to_dict,
+)

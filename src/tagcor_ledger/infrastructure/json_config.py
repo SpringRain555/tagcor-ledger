@@ -20,9 +20,11 @@ class JsonConfigRepository:
     def read(self) -> dict[str, Any]:
         with self.path.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected a JSON object in {self.path}.")
         if self.validator is not None:
             self.validator(data)
-        return data
+        return dict(data)
 
     def write(self, document: Mapping[str, Any]) -> None:
         if self.validator is not None:

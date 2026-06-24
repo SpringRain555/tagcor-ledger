@@ -1,17 +1,17 @@
 from pathlib import Path
+import sqlite3
 
 from tagcor_ledger.app.paths import resolve_app_paths
-from tagcor_ledger.application.transactions import (
+from tagcor_ledger.application.transaction_service import (
     AddTransaction,
     AddTransactionRequest,
     ListRecentTransactions,
 )
 from tagcor_ledger.domain.models import TagPath
-from tagcor_ledger.infrastructure.csv_ledger import CsvLedgerRepository
 from tagcor_ledger.infrastructure.repositories import initialize_data_store
 
 
-def test_add_transaction_writes_ledger_audit_and_manifest(tmp_path: Path) -> None:
+def test_add_transaction_writes_sqlite_posting_and_audit(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "ledger-data")
     initialize_data_store(paths)
     request = AddTransactionRequest(
@@ -25,16 +25,14 @@ def test_add_transaction_writes_ledger_audit_and_manifest(tmp_path: Path) -> Non
     result = AddTransaction(paths).execute(request)
 
     assert result.success is True
-    ledger_path = paths.ledger_dir / "ledger_2026.csv"
-    rows = CsvLedgerRepository(ledger_path).read_rows()
-    assert len(rows) == 1
-    assert rows[0]["amount"] == "85"
-    assert rows[0]["l4_name_snapshot"] == "7-11"
-    assert rows[0]["correlation_id"] == result.correlation_id
-    assert (paths.log_dir / "audit.log").read_text(encoding="utf-8").strip()
-    assert "data/ledger_2026.csv" in (paths.config_dir / "data_manifest.json").read_text(
-        encoding="utf-8"
-    )
+    with sqlite3.connect(paths.database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        transaction = connection.execute("SELECT * FROM transactions").fetchone()
+        posting = connection.execute("SELECT * FROM account_postings").fetchone()
+        audit = connection.execute("SELECT * FROM audit_events").fetchone()
+    assert transaction["correlation_id"] == result.correlation_id
+    assert posting["amount_minor"] == -85
+    assert audit["action"] == "transaction.create"
 
 
 def test_list_recent_transactions_returns_snapshot_name(tmp_path: Path) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from io import StringIO
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from tagcor_ledger.domain.validation import LEDGER_FIELDS, validate_ledger_row
 from tagcor_ledger.infrastructure.file_ops import atomic_write_text
@@ -27,7 +27,7 @@ class CsvLedgerRepository:
             validate_ledger_row(row)
         return rows
 
-    def write_rows(self, rows: list[Mapping[str, str]]) -> None:
+    def write_rows(self, rows: Sequence[Mapping[str, str]]) -> None:
         for row in rows:
             validate_ledger_row(row)
         buffer = StringIO()

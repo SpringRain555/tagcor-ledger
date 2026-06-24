@@ -12,6 +12,7 @@ from tagcor_ledger.domain.validation import (
     validate_tags_document,
     validate_templates_document,
 )
+from tagcor_ledger.infrastructure.database import initialize_database
 from tagcor_ledger.infrastructure.csv_ledger import CsvLedgerRepository
 from tagcor_ledger.infrastructure.json_config import JsonConfigRepository
 from tagcor_ledger.infrastructure.manifest import generate_manifest, write_manifest
@@ -139,7 +140,7 @@ def default_templates(now: str | None = None) -> dict[str, object]:
     }
 
 
-def initialize_data_store(paths: AppPaths, *, overwrite: bool = False) -> dict[str, Path]:
+def initialize_legacy_data_store(paths: AppPaths, *, overwrite: bool = False) -> dict[str, Path]:
     ensure_directories(paths)
     now = phase1_timestamp()
     settings_path = paths.config_dir / "settings.json"
@@ -180,3 +181,10 @@ def initialize_data_store(paths: AppPaths, *, overwrite: bool = False) -> dict[s
         "ledger": ledger_path,
         "manifest": manifest_path,
     }
+
+
+def initialize_data_store(paths: AppPaths, *, overwrite: bool = False) -> dict[str, Path]:
+    """Initialize the canonical SQLite store without destructive overwrite."""
+
+    del overwrite
+    return {"database": initialize_database(paths)}

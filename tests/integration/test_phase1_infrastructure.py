@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import sqlite3
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.domain.validation import LEDGER_FIELDS
@@ -15,23 +16,20 @@ from tagcor_ledger.infrastructure.repositories import (
 )
 
 
-def test_initialize_data_store_writes_canonical_files(tmp_path: Path) -> None:
+def test_initialize_data_store_writes_canonical_database(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "ledger-data")
 
     written = initialize_data_store(paths)
 
-    assert written["settings"].is_file()
-    assert written["tags"].is_file()
-    assert written["templates"].is_file()
-    assert written["ledger"].is_file()
-    assert written["manifest"].is_file()
-
-    manifest = json.loads(written["manifest"].read_text(encoding="utf-8"))
-    manifest_paths = {entry["path"] for entry in manifest["files"]}
-    assert "config/settings.json" in manifest_paths
-    assert "config/tags.json" in manifest_paths
-    assert "config/templates.json" in manifest_paths
-    assert any(path.startswith("data/ledger_") for path in manifest_paths)
+    assert written["database"] == paths.database_path
+    assert paths.database_path.is_file()
+    with sqlite3.connect(paths.database_path) as connection:
+        version = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
+        account = connection.execute(
+            "SELECT name FROM accounts WHERE account_id = 'acct_cash'"
+        ).fetchone()
+    assert version == (1,)
+    assert account == ("現金",)
 
 
 def test_json_repository_round_trip(tmp_path: Path) -> None:
