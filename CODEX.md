@@ -4,11 +4,12 @@
 
 1. `docs/index.md`
 2. `docs/requirements/REQ-0001-stable-core.md`
-3. `docs/architecture/overview.md`
-4. `docs/architecture/data-model.md`
-5. `docs/architecture/ui-workflows.md`
-6. `docs/roadmap.md`
-7. `docs/changelog.md`
+3. `docs/requirements/REQ-0002-phase-1-2.md`
+4. `docs/architecture/overview.md`
+5. `docs/architecture/data-model.md`
+6. `docs/architecture/ui-workflows.md`
+7. `docs/roadmap.md`
+8. `docs/changelog.md`
 
 ## 產品定位
 
@@ -18,10 +19,10 @@ TagCor Ledger 是 Windows-first、本機個人記帳工具。產品重點是快�
 
 - `domain/` 不依賴 Qt、SQLite 或檔案系統。
 - `application/` 定義使用者操作流程並回傳 `Result`。
-- `infrastructure/` 負責 SQLite、legacy migration、備份與匯出。
+- `infrastructure/` 負責 SQLite migration、repository、排程持久化、備份與匯出。
 - `ui/` 僅透過 controller/use case 操作資料，不直接執行 SQL。
 - SQLite `data/ledger.sqlite3` 是唯一帳務真實來源。
-- CSV/JSON 只作為 legacy import 或匯出格式。
+- CSV 僅作為匯出格式；執行期不得重新加入 CSV/JSON store 或 legacy importer。
 - 所有帳務寫入與 audit event 必須在同一資料庫交易內完成。
 
 ## 資料規則
@@ -44,10 +45,12 @@ TagCor Ledger 是 Windows-first、本機個人記帳工具。產品重點是快�
 
 ## Migration 與資料安全
 
-- 偵測 legacy CSV/JSON 時先建立原檔備份。
-- migration 必須在單一 SQLite transaction 內完成。
-- 以 legacy 檔案 fingerprint 記錄匯入狀態，重跑不得重複匯入。
+- 所有 schema 變更必須加入 ordered migration registry，禁止直接改既有版本。
+- migration 必須可重跑，且不得重複建立欄位或資料。
+- 0.1.x CSV/JSON 舊資料須先使用 0.2.0 轉成 SQLite；目前 runtime 不負責自動匯入。
 - 還原前驗證 SHA-256 與 `PRAGMA integrity_check`，並先備份目前資料庫。
+- 排程只產生 snapshot 待確認項目，不得自動入帳。
+- 每次漏期生成上限 366 期；`next_due_date` 必須指向下一個尚未生成日期。
 
 ## 驗證基準
 

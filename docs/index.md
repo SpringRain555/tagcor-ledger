@@ -12,6 +12,7 @@
 ## 維護者文件
 
 - [穩固核心版需求](requirements/REQ-0001-stable-core.md)
+- [Phase 1–2 需求](requirements/REQ-0002-phase-1-2.md)
 - [架構總覽](architecture/overview.md)
 - [資料模型](architecture/data-model.md)
 - [儲存配置](architecture/storage-layout.md)

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tagcor-ledger"
-version = "0.2.0"
-description = "Keyboard-first local ledger tool built around four-level tags."
+version = "0.4.0"
+description = "Windows-first local personal ledger with SQLite and PySide6."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -46,16 +46,10 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-exclude = [
-    "src/tagcor_ledger/application/transactions.py",
-    "src/tagcor_ledger/ui/controllers.py",
-    "src/tagcor_ledger/ui/main_window.py",
-    "src/tagcor_ledger/ui/transaction_panel.py",
-]
 
 [[tool.mypy.overrides]]
 module = [
     "tagcor_ledger.ui.app",
-    "tagcor_ledger.ui.main_window_v2",
+    "tagcor_ledger.ui.main_window_phase12",
 ]
 disable_error_code = ["import-untyped", "misc"]

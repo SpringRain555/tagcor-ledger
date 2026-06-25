@@ -63,25 +63,78 @@ class TransactionRecord:
     payee_name: str
     description: str
     correlation_id: str
+    replaces_transaction_id: str | None = None
 
 
-@dataclass(frozen=True)
-class TagPath:
-    l1_id: str
-    l2_id: str
-    l3_id: str
-    l4_id: str
+@dataclass(frozen=True, slots=True)
+class TransactionFilter:
+    search: str = ""
+    date_from: str | None = None
+    date_to: str | None = None
+    account_id: str | None = None
+    category_id: str | None = None
+    status: str = "active"
 
-    def as_tuple(self) -> tuple[str, str, str, str]:
-        return (self.l1_id, self.l2_id, self.l3_id, self.l4_id)
+
+@dataclass(frozen=True, slots=True)
+class ApplicationSettings:
+    default_account_id: str
+    default_entry_type: str
+    transactions_page_size: int
+    startup_backup: str
+    timezone: str = "Asia/Taipei"
+    default_currency: str = "TWD"
 
 
-@dataclass(frozen=True)
-class TagNameSnapshot:
-    l1_name: str
-    l2_name: str
-    l3_name: str
-    l4_name: str
+@dataclass(frozen=True, slots=True)
+class TransactionTemplate:
+    template_id: str
+    name: str
+    status: str
+    entry_type: str
+    account_id: str
+    destination_account_id: str | None
+    category_id: str | None
+    amount_minor: int | None
+    currency: str
+    payee_name: str
+    description: str
+    sort_order: int
 
-    def as_tuple(self) -> tuple[str, str, str, str]:
-        return (self.l1_name, self.l2_name, self.l3_name, self.l4_name)
+
+@dataclass(frozen=True, slots=True)
+class RecurringSchedule:
+    schedule_id: str
+    name: str
+    status: str
+    entry_type: str
+    account_id: str
+    destination_account_id: str | None
+    category_id: str | None
+    amount_minor: int | None
+    currency: str
+    payee_name: str
+    description: str
+    frequency: str
+    interval_count: int
+    start_date: str
+    next_due_date: str
+    end_date: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledOccurrence:
+    occurrence_id: str
+    schedule_id: str
+    schedule_name: str
+    due_date: str
+    status: str
+    entry_type: str
+    account_id: str
+    destination_account_id: str | None
+    category_id: str | None
+    amount_minor: int | None
+    currency: str
+    payee_name: str
+    description: str
+    invalid_reason: str | None

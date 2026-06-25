@@ -84,6 +84,17 @@ class AccountService:
                 details={"reason": str(exc)},
             )
 
+    def restore(self, account_id: str) -> Result:
+        try:
+            self.store.restore_account(account_id)
+            return Result.ok("帳戶已恢復使用。")
+        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+            return Result.fail(
+                "ACCOUNT_RESTORE_FAILED",
+                "帳戶無法恢復；請檢查是否已有同名帳戶。",
+                details={"reason": str(exc)},
+            )
+
 
 class CategoryService:
     def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
@@ -148,5 +159,16 @@ class CategoryService:
             return Result.fail(
                 "CATEGORY_RENAME_FAILED",
                 "分類名稱無法更新。",
+                details={"reason": str(exc)},
+            )
+
+    def restore(self, category_id: str) -> Result:
+        try:
+            self.store.restore_category(category_id)
+            return Result.ok("分類已恢復使用。")
+        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+            return Result.fail(
+                "CATEGORY_RESTORE_FAILED",
+                "分類無法恢復；請先恢復上層分類並檢查同名項目。",
                 details={"reason": str(exc)},
             )

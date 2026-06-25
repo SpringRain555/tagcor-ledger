@@ -9,13 +9,13 @@ from typing import Any
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.domain.models import Account, Category, TransactionRecord
+from tagcor_ledger.domain.models import Account, Category, TransactionFilter, TransactionRecord
 from tagcor_ledger.domain.money import Money
+from tagcor_ledger.infrastructure.clock import now_iso
 from tagcor_ledger.infrastructure.database import (
     connect_database,
     database_transaction,
     initialize_database,
-    now_iso,
 )
 
 
@@ -111,6 +111,36 @@ class LedgerStore:
                 connection,
                 correlation_id=f"corr_{uuid4().hex}",
                 action="account.archive",
+                entity_type="account",
+                entity_id=account_id,
+                details={},
+            )
+
+    def restore_account(self, account_id: str) -> None:
+        with database_transaction(self.paths.database_path) as connection:
+            row = connection.execute(
+                "SELECT name FROM accounts WHERE account_id = ? AND status = 'archived'",
+                (account_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("ACCOUNT_NOT_FOUND")
+            duplicate = connection.execute(
+                """
+                SELECT 1 FROM accounts
+                WHERE name = ? COLLATE NOCASE AND status = 'active' AND account_id != ?
+                """,
+                (row["name"], account_id),
+            ).fetchone()
+            if duplicate is not None:
+                raise ValueError("ACCOUNT_ACTIVE_NAME_CONFLICT")
+            connection.execute(
+                "UPDATE accounts SET status = 'active', updated_at = ? WHERE account_id = ?",
+                (now_iso(), account_id),
+            )
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="account.restore",
                 entity_type="account",
                 entity_id=account_id,
                 details={},
@@ -253,6 +283,47 @@ class LedgerStore:
                 connection,
                 correlation_id=f"corr_{uuid4().hex}",
                 action="category.archive",
+                entity_type="category",
+                entity_id=category_id,
+                details={},
+            )
+
+    def restore_category(self, category_id: str) -> None:
+        with database_transaction(self.paths.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT name, parent_id FROM categories
+                WHERE category_id = ? AND status = 'archived'
+                """,
+                (category_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("CATEGORY_NOT_FOUND")
+            parent_id = row["parent_id"]
+            if parent_id is not None:
+                parent = connection.execute(
+                    "SELECT status FROM categories WHERE category_id = ?", (parent_id,)
+                ).fetchone()
+                if parent is None or parent["status"] != "active":
+                    raise ValueError("CATEGORY_PARENT_NOT_ACTIVE")
+            duplicate = connection.execute(
+                """
+                SELECT 1 FROM categories
+                WHERE parent_id IS ? AND name = ? COLLATE NOCASE
+                  AND status = 'active' AND category_id != ?
+                """,
+                (parent_id, row["name"], category_id),
+            ).fetchone()
+            if duplicate is not None:
+                raise ValueError("CATEGORY_ACTIVE_NAME_CONFLICT")
+            connection.execute(
+                "UPDATE categories SET status = 'active', updated_at = ? WHERE category_id = ?",
+                (now_iso(), category_id),
+            )
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="category.restore",
                 entity_type="category",
                 entity_id=category_id,
                 details={},
@@ -428,6 +499,100 @@ class LedgerStore:
             )
         return self.get_transaction(transaction_id)
 
+    def replace_transfer(
+        self,
+        *,
+        original_transaction_id: str,
+        new_transaction_id: str,
+        occurred_at: str,
+        money: Money,
+        source_account_id: str,
+        destination_account_id: str,
+        payee_name: str,
+        description: str,
+        correlation_id: str,
+    ) -> TransactionRecord:
+        if source_account_id == destination_account_id:
+            raise ValueError("TRANSFER_SAME_ACCOUNT")
+        timestamp = now_iso()
+        with database_transaction(self.paths.database_path) as connection:
+            original = connection.execute(
+                """
+                SELECT entry_type, status FROM transactions WHERE transaction_id = ?
+                """,
+                (original_transaction_id,),
+            ).fetchone()
+            if original is None or original["entry_type"] != "transfer":
+                raise NotFoundError("TRANSFER_NOT_FOUND")
+            if original["status"] != "active":
+                raise ValueError("TRANSFER_NOT_ACTIVE")
+            self._require_active_account(connection, source_account_id, money.currency)
+            self._require_active_account(connection, destination_account_id, money.currency)
+            payee_id = self._upsert_payee(connection, payee_name, timestamp)
+            connection.execute(
+                """
+                INSERT INTO transactions(
+                    transaction_id, revision, status, entry_type, occurred_at,
+                    recorded_at, updated_at, payee_id, payee_name_snapshot,
+                    description, source, correlation_id, replaces_transaction_id
+                ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, ?, ?, 'manual', ?, ?)
+                """,
+                (
+                    new_transaction_id,
+                    occurred_at,
+                    timestamp,
+                    timestamp,
+                    payee_id,
+                    payee_name.strip(),
+                    description.strip(),
+                    correlation_id,
+                    original_transaction_id,
+                ),
+            )
+            connection.executemany(
+                """
+                INSERT INTO account_postings(
+                    posting_id, transaction_id, account_id, amount_minor, currency, sequence
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        f"post_{uuid4().hex}",
+                        new_transaction_id,
+                        source_account_id,
+                        -money.amount_minor,
+                        money.currency,
+                        1,
+                    ),
+                    (
+                        f"post_{uuid4().hex}",
+                        new_transaction_id,
+                        destination_account_id,
+                        money.amount_minor,
+                        money.currency,
+                        2,
+                    ),
+                ],
+            )
+            connection.execute(
+                """
+                UPDATE transactions
+                SET status = 'voided', revision = revision + 1, updated_at = ?
+                WHERE transaction_id = ?
+                """,
+                (timestamp, original_transaction_id),
+            )
+            self._refresh_fts(connection, new_transaction_id)
+            self._audit(
+                connection,
+                correlation_id=correlation_id,
+                action="transaction.transfer_replace",
+                entity_type="transaction",
+                entity_id=new_transaction_id,
+                details={"replaces_transaction_id": original_transaction_id},
+            )
+        return self.get_transaction(new_transaction_id)
+
     def update_transaction(
         self,
         *,
@@ -541,46 +706,62 @@ class LedgerStore:
         *,
         limit: int = 50,
         cursor: tuple[str, str] | None = None,
-        search: str = "",
-        account_id: str | None = None,
-        category_id: str | None = None,
-        include_voided: bool = False,
+        cursor_direction: str = "next",
+        transaction_filter: TransactionFilter | None = None,
     ) -> tuple[list[TransactionRecord], tuple[str, str] | None]:
         if not 1 <= limit <= 200:
             raise ValueError("PAGE_LIMIT_INVALID")
+        filters = transaction_filter or TransactionFilter()
         conditions: list[str] = []
         parameters: list[Any] = []
         joins = ""
-        if not include_voided:
+        if filters.status == "active":
             conditions.append("t.status = 'active'")
+        elif filters.status == "voided":
+            conditions.append("t.status = 'voided'")
+        elif filters.status != "all":
+            raise ValueError("TRANSACTION_STATUS_FILTER_INVALID")
         if cursor is not None:
-            conditions.append("(t.occurred_at < ? OR (t.occurred_at = ? AND t.transaction_id < ?))")
+            operator = "<" if cursor_direction == "next" else ">"
+            conditions.append(
+                f"(t.occurred_at {operator} ? OR "
+                f"(t.occurred_at = ? AND t.transaction_id {operator} ?))"
+            )
             parameters.extend([cursor[0], cursor[0], cursor[1]])
-        if account_id:
+        if filters.date_from:
+            conditions.append("t.occurred_at >= ?")
+            parameters.append(filters.date_from)
+        if filters.date_to:
+            conditions.append("t.occurred_at <= ?")
+            parameters.append(filters.date_to)
+        if filters.account_id:
             conditions.append("EXISTS (SELECT 1 FROM account_postings fp WHERE fp.transaction_id = t.transaction_id AND fp.account_id = ?)")
-            parameters.append(account_id)
-        if category_id:
+            parameters.append(filters.account_id)
+        if filters.category_id:
             conditions.append(
                 "EXISTS (SELECT 1 FROM category_allocations fc "
                 "JOIN categories fcat ON fcat.category_id = fc.category_id "
                 "WHERE fc.transaction_id = t.transaction_id "
                 "AND (fc.category_id = ? OR fcat.parent_id = ?))"
             )
-            parameters.extend([category_id, category_id])
-        if search.strip():
+            parameters.extend([filters.category_id, filters.category_id])
+        if filters.search.strip():
             joins = "JOIN transaction_fts fts ON fts.transaction_id = t.transaction_id"
             conditions.append("transaction_fts MATCH ?")
-            parameters.append(_fts_query(search))
+            parameters.append(_fts_query(filters.search))
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        order = "ASC" if cursor_direction == "previous" else "DESC"
         sql = (
             self._transaction_select(joins=joins)
-            + f" {where} ORDER BY t.occurred_at DESC, t.transaction_id DESC LIMIT ?"
+            + f" {where} ORDER BY t.occurred_at {order}, t.transaction_id {order} LIMIT ?"
         )
         parameters.append(limit + 1)
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(sql, parameters).fetchall()
         has_more = len(rows) > limit
         page_rows = rows[:limit]
+        if cursor_direction == "previous":
+            page_rows = list(reversed(page_rows))
         records = [self._row_to_transaction(row) for row in page_rows]
         next_cursor = None
         if has_more and page_rows:
@@ -592,6 +773,23 @@ class LedgerStore:
         with connect_database(self.paths.database_path) as connection:
             row = connection.execute("PRAGMA integrity_check").fetchone()
         return str(row[0]) if row is not None else "unknown"
+
+    def payee_suggestions(self, prefix: str = "", limit: int = 20) -> list[str]:
+        pattern = f"{prefix.strip()}%"
+        with connect_database(self.paths.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT p.name, MAX(t.occurred_at) AS last_used
+                FROM payees p
+                LEFT JOIN transactions t ON t.payee_id = p.payee_id
+                WHERE p.status = 'active' AND p.name LIKE ? COLLATE NOCASE
+                GROUP BY p.payee_id
+                ORDER BY last_used DESC, p.name COLLATE NOCASE
+                LIMIT ?
+                """,
+                (pattern, limit),
+            ).fetchall()
+        return [str(row["name"]) for row in rows]
 
     @staticmethod
     def _transaction_select(*, joins: str = "") -> str:
@@ -605,7 +803,8 @@ class LedgerStore:
                c.category_id, c.name AS category_name,
                pc.category_id AS parent_category_id,
                pc.name AS parent_category_name,
-               t.payee_name_snapshot, t.description, t.correlation_id
+               t.payee_name_snapshot, t.description, t.correlation_id,
+               t.replaces_transaction_id
         FROM transactions t
         JOIN account_postings p1 ON p1.transaction_id = t.transaction_id AND p1.sequence = 1
         JOIN accounts a1 ON a1.account_id = p1.account_id
@@ -658,6 +857,11 @@ class LedgerStore:
             payee_name=str(row["payee_name_snapshot"]),
             description=str(row["description"]),
             correlation_id=str(row["correlation_id"]),
+            replaces_transaction_id=(
+                str(row["replaces_transaction_id"])
+                if row["replaces_transaction_id"] is not None
+                else None
+            ),
         )
 
     @staticmethod

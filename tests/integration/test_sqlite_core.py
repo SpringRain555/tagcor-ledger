@@ -14,6 +14,7 @@ from tagcor_ledger.application.transaction_service import (
     UpdateTransactionRequest,
     VoidTransaction,
 )
+from tagcor_ledger.domain.models import TransactionFilter
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -63,16 +64,21 @@ def test_keyset_pagination_search_and_void(tmp_path: Path) -> None:
         )
         assert result.success
 
-    first = ListTransactions(paths, store).execute(TransactionQuery(limit=2, search="測試"))
+    first = ListTransactions(paths, store).execute(
+        TransactionQuery(
+            limit=2,
+            transaction_filter=TransactionFilter(search="測試"),
+        )
+    )
     assert len(first.details["transactions"]) == 2
     assert first.details["next_cursor"] is not None
     cursor = first.details["next_cursor"]
     second = ListTransactions(paths, store).execute(
         TransactionQuery(
             limit=2,
-            search="測試",
             cursor_occurred_at=cursor["occurred_at"],
             cursor_transaction_id=cursor["transaction_id"],
+            transaction_filter=TransactionFilter(search="測試"),
         )
     )
     assert len(second.details["transactions"]) == 1

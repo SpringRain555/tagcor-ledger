@@ -15,6 +15,9 @@
 - `audit_events`：與帳務寫入同 transaction 的操作紀錄。
 - `transaction_fts`：對象、備註、分類與帳戶全文搜尋。
 - `schema_migrations`、`settings`：資料版本與執行設定。
+- `transaction_templates`：收入、支出與轉帳表單模板，金額可為空。
+- `recurring_schedules`：日、週、月、年排程、間隔、結束日與下一個到期日。
+- `scheduled_occurrences`：排程產生的 snapshot，狀態為 pending、confirmed 或 skipped。
 
 ## 金額與 posting
 
@@ -24,11 +27,25 @@
 - 轉帳：來源為負、目的為正，幣別與金額相同。
 - 帳戶餘額為期初餘額加上所有有效交易 posting。
 
-## 交易修改與作廢
+## 交易修改、替換與作廢
 
 - 一般交易以 optimistic revision 更新。
-- 轉帳首輪不提供直接編輯，應作廢後重建。
+- 轉帳修改使用原子替換：建立新轉帳、設定 `replaces_transaction_id`、作廢舊轉帳及寫入 audit 必須同時成功。
 - 作廢只更新狀態與 revision，不刪除 posting 或 audit。
+
+## Migration registry
+
+- Schema v1：核心帳務、FTS5、settings 與 audit。
+- Schema v2：`transactions.replaces_transaction_id`。
+- Schema v3：模板、週期排程與待確認項目。
+- 每個版本只記錄一次於 `schema_migrations`，初始化可安全重跑。
+
+## 排程規則
+
+- 排程只建立待確認 snapshot，不直接建立交易。
+- 修改排程不更新既有 occurrence。
+- 月排程以開始日為 anchor；目標月份不存在該日時使用月末。
+- 每次最多產生 366 期，`next_due_date` 保留下一個尚未生成日期。
 
 ## 索引
 

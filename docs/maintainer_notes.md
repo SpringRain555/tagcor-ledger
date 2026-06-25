@@ -14,6 +14,12 @@
 
 禁止以 Python 載入全部交易後排序或搜尋。新增常用篩選時先確認 query plan 與索引。
 
-## 相容模組
+## 已移除相容層
 
-`application/transactions.py` 與舊 PyQt6 UI 檔只保留 Phase 2 相容參考；新功能放在 `transaction_service.py` 與 PySide6 v2 UI。
+舊 PyQt6、TagPath、CSV/JSON runtime 與 importer 不得重新加入。若需處理 0.1.x 資料，使用 0.2.0 做一次性 SQLite 轉換。
+
+## 排程
+
+- 不建立背景程序或 Windows 工作排程。
+- 產生 occurrence 時必須遵守 366 期上限與唯一 `(schedule_id, due_date)`。
+- 確認 occurrence 與帳務寫入必須在同一 SQLite transaction。

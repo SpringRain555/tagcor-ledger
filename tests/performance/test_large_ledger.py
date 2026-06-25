@@ -7,6 +7,7 @@ import pytest
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.application.transaction_service import AddTransaction, AddTransactionRequest
+from tagcor_ledger.domain.models import TransactionFilter
 from tagcor_ledger.infrastructure.database import database_transaction
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -39,8 +40,10 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     started = perf_counter()
     filtered, _ = store.list_transactions(
         limit=50,
-        account_id="acct_cash",
-        category_id="cat_food",
+        transaction_filter=TransactionFilter(
+            account_id="acct_cash",
+            category_id="cat_food",
+        ),
     )
     filter_elapsed = perf_counter() - started
 

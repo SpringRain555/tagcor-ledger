@@ -14,4 +14,4 @@ PySide6 是 Qt 官方 binding、授權較適合長期桌面發布，並與同工
 
 ## 後果
 
-需要更新環境、Signal/import 與 UI 測試；Phase 2 PyQt6 模組不再擴充。
+需要更新環境、Signal/import 與 UI 測試；舊 PyQt6 模組已從執行套件移除。

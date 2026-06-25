@@ -1,8 +1,4 @@
-"""Command entry point for TagCor Ledger.
-
-The command can either print startup information for smoke checks or launch the
-Phase 2 PyQt MVP with ``--gui``.
-"""
+"""Command entry point for TagCor Ledger."""
 
 from __future__ import annotations
 
@@ -14,7 +10,7 @@ from typing import Sequence
 
 from tagcor_ledger import __version__
 from tagcor_ledger.app.bootstrap import bootstrap
-from tagcor_ledger.infrastructure.repositories import initialize_data_store
+from tagcor_ledger.infrastructure.database import initialize_database
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--gui",
         action="store_true",
-        help="Launch the PyQt desktop UI.",
+        help="Launch the PySide6 desktop UI.",
     )
     return parser
 
@@ -46,11 +42,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     context = bootstrap(data_dir=args.data_dir, ensure_dirs=args.init_data)
-    initialized_files = None
+    initialized_files: dict[str, Path] | None = None
     if args.init_data:
-        initialized_files = initialize_data_store(context.paths)
+        initialized_files = {"database": initialize_database(context.paths)}
     if args.gui:
-        initialize_data_store(context.paths)
+        initialize_database(context.paths)
         try:
             from tagcor_ledger.ui.app import run_gui
         except ModuleNotFoundError as exc:

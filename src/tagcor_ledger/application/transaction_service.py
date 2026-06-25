@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.application.result import Result, new_correlation_id
-from tagcor_ledger.domain.models import TagPath, TransactionRecord
+from tagcor_ledger.domain.models import TransactionFilter, TransactionRecord
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
 
@@ -26,8 +26,6 @@ class AddTransactionRequest:
     category_id: str = "cat_food_711"
     payee_name: str = ""
     source: str = "manual"
-    tag_path: TagPath | None = None
-    template_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,14 +53,24 @@ class UpdateTransactionRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ReplaceTransferRequest:
+    original_transaction_id: str
+    occurred_at: str
+    amount: str
+    source_account_id: str
+    destination_account_id: str
+    payee_name: str = ""
+    description: str = ""
+    currency: str = "TWD"
+
+
+@dataclass(frozen=True, slots=True)
 class TransactionQuery:
     limit: int = 50
     cursor_occurred_at: str | None = None
     cursor_transaction_id: str | None = None
-    search: str = ""
-    account_id: str | None = None
-    category_id: str | None = None
-    include_voided: bool = False
+    cursor_direction: str = "next"
+    transaction_filter: TransactionFilter = TransactionFilter()
 
     def cursor(self) -> tuple[str, str] | None:
         if self.cursor_occurred_at is None or self.cursor_transaction_id is None:
@@ -72,10 +80,6 @@ class TransactionQuery:
 
 def new_transaction_id() -> str:
     return f"txn_{uuid4().hex}"
-
-
-def current_timestamp() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def _validate_occurred_at(value: str) -> None:
@@ -95,14 +99,13 @@ class AddTransaction:
             if request.entry_type not in {"income", "expense"}:
                 raise ValueError("ENTRY_TYPE_INVALID")
             money = Money.from_decimal_string(request.amount, currency=request.currency)
-            account_id, category_id = _resolve_legacy_selection(request)
             record = self.store.create_transaction(
                 transaction_id=new_transaction_id(),
                 entry_type=request.entry_type,
                 occurred_at=request.occurred_at,
                 money=money,
-                account_id=account_id,
-                category_id=category_id,
+                account_id=request.account_id,
+                category_id=request.category_id,
                 payee_name=request.payee_name,
                 description=request.description,
                 source=request.source,
@@ -210,6 +213,47 @@ class UpdateTransaction:
             )
 
 
+class ReplaceTransfer:
+    def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
+        self.store = store or LedgerStore(paths)
+
+    def execute(self, request: ReplaceTransferRequest) -> Result:
+        correlation_id = new_correlation_id()
+        try:
+            _validate_occurred_at(request.occurred_at)
+            money = Money.from_decimal_string(request.amount, currency=request.currency)
+            record = self.store.replace_transfer(
+                original_transaction_id=request.original_transaction_id,
+                new_transaction_id=new_transaction_id(),
+                occurred_at=request.occurred_at,
+                money=money,
+                source_account_id=request.source_account_id,
+                destination_account_id=request.destination_account_id,
+                payee_name=request.payee_name,
+                description=request.description,
+                correlation_id=correlation_id,
+            )
+            return Result.ok(
+                "轉帳已重新建立，原交易已作廢。",
+                details={"transaction": transaction_to_dict(record)},
+                correlation_id=correlation_id,
+            )
+        except (MoneyError, ValueError, NotFoundError) as exc:
+            return Result.fail(
+                _error_code(exc, "TRANSFER_REPLACE_FAILED"),
+                "轉帳無法重新建立，原交易未變更。",
+                details={"reason": str(exc)},
+                correlation_id=correlation_id,
+            )
+        except sqlite3.Error as exc:
+            return Result.fail(
+                "DATABASE_WRITE_FAILED",
+                "轉帳無法重新建立，原交易未變更。",
+                details={"reason": str(exc)},
+                correlation_id=correlation_id,
+            )
+
+
 class VoidTransaction:
     def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
         self.store = store or LedgerStore(paths)
@@ -245,10 +289,8 @@ class ListTransactions:
             records, next_cursor = self.store.list_transactions(
                 limit=request.limit,
                 cursor=request.cursor(),
-                search=request.search,
-                account_id=request.account_id,
-                category_id=request.category_id,
-                include_voided=request.include_voided,
+                cursor_direction=request.cursor_direction,
+                transaction_filter=request.transaction_filter,
             )
             return Result.ok(
                 "交易已載入。",
@@ -260,6 +302,14 @@ class ListTransactions:
                             "transaction_id": next_cursor[1],
                         }
                         if next_cursor is not None
+                        else None
+                    ),
+                    "previous_cursor": (
+                        {
+                            "occurred_at": records[0].occurred_at,
+                            "transaction_id": records[0].transaction_id,
+                        }
+                        if request.cursor() is not None and records
                         else None
                     ),
                 },
@@ -325,23 +375,8 @@ def transaction_to_dict(transaction: TransactionRecord) -> dict[str, Any]:
         "description": transaction.description,
         "tag_path_name": path_name,
         "correlation_id": transaction.correlation_id,
+        "replaces_transaction_id": transaction.replaces_transaction_id,
     }
-
-
-def _resolve_legacy_selection(request: AddTransactionRequest) -> tuple[str, str]:
-    if request.tag_path is None:
-        return request.account_id, request.category_id
-    account_id = (
-        "acct_cash"
-        if request.tag_path.l2_id == "tag_cash"
-        else request.tag_path.l2_id.replace("tag_", "acct_", 1)
-    )
-    category_id = (
-        "cat_food_711"
-        if request.tag_path.l4_id == "tag_711"
-        else request.tag_path.l4_id.replace("tag_", "cat_", 1)
-    )
-    return account_id, category_id
 
 
 def _error_code(exc: Exception, fallback: str) -> str:

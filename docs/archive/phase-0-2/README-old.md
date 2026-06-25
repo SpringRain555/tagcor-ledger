@@ -6,10 +6,10 @@ TagCor Ledger 是一個以四層標籤為核心的本機桌面記帳工具。第
 
 ## 文件
 
-- [docs/計劃書.md](docs/計劃書.md)：產品目標、完整架構、資料模型、核心流程、里程碑與驗收條件。
-- [docs/資料格式規格.md](docs/資料格式規格.md)：長期使用導向的 CSV/JSON schema、驗證規則、snapshot、備份、manifest 與 migration 規則。
-- [docs/模組化與階段實作.md](docs/模組化與階段實作.md)：適中顆粒的模組邊界、依賴方向、打包保留空間與階段性實作內容。
-- [CODEX.md](CODEX.md)：供 Codex 與後續開發者遵循的專案開發指南。
+- [計劃書.md](計劃書.md)：產品目標、完整架構、資料模型、核心流程、里程碑與驗收條件。
+- [資料格式規格.md](資料格式規格.md)：長期使用導向的 CSV/JSON schema、驗證規則、snapshot、備份、manifest 與 migration 規則。
+- [模組化與階段實作.md](模組化與階段實作.md)：適中顆粒的模組邊界、依賴方向、打包保留空間與階段性實作內容。
+- [CODEX-old.md](CODEX-old.md)：當時供 Codex 與後續開發者遵循的專案開發指南。
 
 ## 開發環境
 

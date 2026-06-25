@@ -1,17 +1,20 @@
 # TagCor Ledger
 
-TagCor Ledger 是 Windows-first、本機優先的個人記帳桌面應用程式。核心目標是讓使用者快速記錄收入、支出與帳戶轉帳，同時保有清楚的帳戶餘額、分類搜尋、備份與資料可攜性。
+TagCor Ledger 是 Windows-first、本機優先的繁體中文個人記帳桌面應用程式。資料只存放在本機 SQLite，主要流程是快速記錄收入、支出與帳戶轉帳，並提供搜尋、備份、模板及週期排程。
 
-目前版本以 SQLite 作為唯一帳務真實來源，CSV 僅用於舊資料匯入與人類可讀匯出。介面使用 PySide6，所有主要操作與訊息使用繁體中文。
+目前版本：`0.4.0`（Phase 1–2）
 
-## 核心能力
+## 功能
 
 - 「流向 → 帳戶 → 分類 → 細項」快速記帳。
-- 帳戶、兩層分類、對象／商家與備註分開儲存。
-- 收入、支出、同幣別轉帳、交易編輯與作廢。
-- SQLite WAL、外鍵、索引、FTS5 搜尋與 keyset pagination。
-- 舊 CSV/JSON 啟動遷移：先備份、單一交易匯入、可重跑且不重複。
-- SQLite 一致性備份、SHA-256 manifest 與 UTF-8 BOM CSV 匯出。
+- 收入、支出、同為 TWD 的帳戶轉帳。
+- 交易日期、帳戶、分類、狀態與全文搜尋篩選。
+- keyset pagination 上一頁／下一頁，每頁 20、50 或 100 筆。
+- 一般交易編輯、原子轉帳替換、交易作廢。
+- 帳戶與兩層分類新增、改名、封存及恢復。
+- 對象／商家近期使用自動完成。
+- 交易模板、複製交易、週期排程與待確認流程。
+- SQLite 一致性備份、SHA-256 驗證、還原前自動備份及 CSV 匯出。
 
 ## 安裝
 
@@ -21,19 +24,114 @@ conda activate tagcor-ledger
 python -m pip install -e ".[dev]"
 ```
 
+既有環境更新：
+
+```powershell
+conda env update -f environment.yaml --prune
+conda activate tagcor-ledger
+python -m pip install -e ".[dev]"
+```
+
 ## 啟動
+
+使用預設 Windows 使用者資料目錄：
 
 ```powershell
 python -m tagcor_ledger --gui
 ```
 
-指定測試資料目錄：
+使用指定資料目錄：
 
 ```powershell
 python -m tagcor_ledger --data-dir .\.local-data --init-data --gui
 ```
 
-預設資料庫位於使用者資料目錄的 `data/ledger.sqlite3`。
+只初始化資料庫並顯示路徑：
+
+```powershell
+python -m tagcor_ledger --data-dir .\.local-data --init-data --json
+```
+
+SQLite 位於 `<資料目錄>\data\ledger.sqlite3`。不要在程式執行時手動搬移 `ledger.sqlite3`、`-wal` 或 `-shm`。
+
+## 操作方法
+
+### 快速記帳
+
+1. 選擇「支出」、「收入」或「轉帳」。
+2. 選擇帳戶；一般交易再選分類與細項，轉帳改選轉入帳戶。
+3. 填寫時間、對象／商家、TWD 整數金額與備註。
+4. 按「儲存交易」。
+
+轉帳的來源與目的帳戶不可相同。模板或複製交易只會預填表單，不會直接入帳。
+
+快捷鍵：
+
+- `Ctrl+N`：切到快速記帳並聚焦金額。
+- `Ctrl+S`：儲存快速記帳表單。
+- `Esc`：清除快速記帳表單。
+
+### 交易紀錄
+
+- 可同時使用文字、日期區間、帳戶、分類與狀態篩選。
+- 按「套用篩選」後，使用「上一頁／下一頁」瀏覽。
+- 「編輯／替換」：
+  - 收入與支出直接更新，revision 衝突時拒絕覆寫。
+  - 轉帳會在同一 SQLite transaction 建立新轉帳、作廢舊轉帳並保留替換關聯。
+- 「複製到快速記帳」會使用目前時間，保留其他欄位供確認。
+- 「作廢」保留原始資料與 audit，但不再影響帳戶餘額。
+
+### 帳戶與分類
+
+- 可新增、重新命名、封存或恢復。
+- 已有同名使用中項目時不能恢復。
+- 恢復細項前必須先恢復其上層分類。
+- 有使用中細項的上層分類不能直接封存。
+
+### 設定
+
+可設定：
+
+- 預設帳戶。
+- 預設流向。
+- 交易列表每頁 20、50 或 100 筆。
+- 啟動備份：永不、每日一次、每次啟動。
+
+幣別固定為 TWD，時區固定為 Asia/Taipei。
+
+### 備份、驗證、還原與匯出
+
+- 「建立完整備份」使用 SQLite backup API，產生 `ledger.sqlite3` 與 `backup_manifest.json`。
+- 可驗證內建備份，或選擇包含 manifest 的外部備份資料夾。
+- 還原前會自動備份目前資料。
+- checksum 錯誤、SQLite 損壞或 schema 比目前程式更新的備份會被拒絕。
+- CSV 匯出使用 UTF-8 BOM，僅供交換與閱讀，不是可還原的正式備份。
+
+### 模板
+
+1. 進入「模板與排程 → 模板」。
+2. 新增收入、支出或轉帳模板；金額可留空。
+3. 選取模板後按「套用到快速記帳」。
+4. 在快速記帳頁確認或補齊內容後再儲存。
+
+### 週期排程
+
+- 支援日、週、月、年及間隔倍數，可設定結束日期。
+- 月份不存在指定日期時使用該月最後一天。
+- 修改排程不會改變已產生的待確認項目。
+- 排程不會背景執行，也不會自動入帳；程式啟動時只產生已到期項目並顯示待確認數量。
+- 每次最多產生 366 期。若仍有漏期，畫面會提示再次按「繼續產生到期項目」，最終不會遺漏。
+
+### 待確認
+
+- 「修改後確認入帳」可補金額或修正帳戶、分類、對象及備註。
+- 「略過」將該期標記為已略過，不入帳。
+- 「批次確認有效項目」只處理金額、帳戶與分類仍有效的項目。
+- 帳戶或分類已封存、金額未填時，列表會顯示原因。
+
+## 舊資料
+
+本版本不包含 CSV/JSON 自動升級 runtime。若仍有 0.1.x 舊資料，必須先使用 `0.2.0` 將資料轉成 SQLite，再使用目前版本開啟。
 
 ## 驗證
 
@@ -43,18 +141,17 @@ python -m mypy --no-incremental src
 python -m pytest -q
 ```
 
+執行 200,000 筆效能回歸：
+
+```powershell
+$env:TAGCOR_RUN_PERFORMANCE = "1"
+python -m pytest -q tests\performance\test_large_ledger.py
+```
+
 ## 文件
 
-完整入口請見 [docs/index.md](docs/index.md)。重要文件包括：
+完整入口請見 [docs/index.md](docs/index.md)，包含需求、架構、資料模型、UI 流程、Roadmap、Changelog 與維護說明。
 
-- [需求規格](docs/requirements/REQ-0001-stable-core.md)
-- [架構總覽](docs/architecture/overview.md)
-- [資料模型](docs/architecture/data-model.md)
-- [UI 流程](docs/architecture/ui-workflows.md)
-- [Roadmap](docs/roadmap.md)
-- [改動歷史](docs/changelog.md)
-- [CODEX.md](CODEX.md)
+## 尚未包含
 
-## 目前邊界
-
-首輪僅支援 TWD 與同幣別轉帳。預算、週期交易、拆分交易 UI、銀行同步、匯率與正式對帳流程列入後續規劃。
+預算、拆分交易 UI、正式對帳、多幣別、銀行同步與 Windows Installer。

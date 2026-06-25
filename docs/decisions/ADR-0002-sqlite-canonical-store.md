@@ -6,7 +6,7 @@
 
 ## 決策
 
-使用 Python 內建 `sqlite3`，SQLite 為唯一帳務真實來源；CSV 僅保留 legacy import 與匯出。
+使用 Python 內建 `sqlite3`，SQLite 為唯一帳務真實來源；CSV 僅保留匯出。
 
 ## 理由
 
@@ -16,4 +16,4 @@ CSV 新增交易需反覆讀寫全檔且無索引、外鍵或跨帳戶原子交�
 
 - 使用者不應直接編輯資料庫。
 - 必須維護 schema migration、備份與匯出。
-- legacy CSV 匯入完成後仍保留原檔備份。
+- 0.1.x CSV/JSON 必須先使用 0.2.0 轉成 SQLite，目前 runtime 不再包含 importer。

@@ -11,7 +11,7 @@ Phase 2 原型以年度 CSV 反覆全檔讀寫，最近交易也會載入全部�
 3. SQLite 為唯一帳務真實來源，啟用 WAL、外鍵、migration、索引與 FTS5。
 4. 支援帳戶、兩層分類、對象／商家、收入、支出、同幣別轉帳、編輯與作廢。
 5. 查詢採 keyset pagination，不得全表載入。
-6. legacy CSV/JSON 需先備份再匯入，且可重跑、不重複。
+6. Schema migration 需有明確 registry、可重跑且不重複。
 7. 提供一致性備份、checksum manifest、完整性檢查與 CSV 匯出。
 8. UI 使用 PySide6，主要操作與訊息使用繁體中文。
 9. 維持 domain/application/infrastructure/ui 分層並通過 Ruff、mypy、pytest。
@@ -22,12 +22,12 @@ Phase 2 原型以年度 CSV 反覆全檔讀寫，最近交易也會載入全部�
 - 轉帳兩筆 posting 加總為零。
 - 作廢交易不再影響餘額，資料仍可追溯。
 - 常用查詢使用索引、FTS5 與固定頁面大小。
-- migration 失敗時 SQLite 不留下部分匯入資料。
+- migration 重跑時 schema version 與資料不得重複。
 - 備份可通過 checksum 與 `integrity_check`。
 - UI 可完成快速記帳、搜尋、帳戶與分類管理、備份與匯出。
 
 ## 非目標
 
-- 預算、週期交易、銀行同步、匯率、正式對帳。
+- 預算、銀行同步、匯率、正式對帳。
 - 拆分交易 UI；資料表先保留擴充能力。
 - 多人協作、雲端後端、企業會計與複式會計報表。
