@@ -1,27 +1,51 @@
-# 儲存配置
+# Storage Layout
+
+## 一般使用
+
+系統路徑設定儲存在使用者設定目錄中的外部 JSON，不放在 ledger SQLite 內。
 
 ```text
-TagCorLedger/
+ledger_dir/
+├── ledger.sqlite3
+├── ledger.sqlite3-wal
+└── ledger.sqlite3-shm
+
+backup_dir/
+└── backup_YYYYMMDD_HHMMSS_xxxxxx/
+    ├── ledger.sqlite3
+    └── backup_manifest.json
+```
+
+`ledger_dir` 與 `backup_dir` 必須不同，且不可互相包含。
+
+## 開發/測試 `--data-dir`
+
+指定 `--data-dir <root>` 時使用舊式開發布局：
+
+```text
+root/
+├── config/
 ├── data/
 │   └── ledger.sqlite3
 ├── backups/
-│   ├── backup_YYYYMMDD_HHMMSS_xxxxxx/
-│   │   ├── ledger.sqlite3
-│   │   └── backup_manifest.json
 ├── exports/
-│   ├── transactions_YYYYMMDD_HHMMSS.csv
-│   └── balance_snapshots_YYYYMMDD_HHMMSS.csv
 ├── logs/
-├── config/
 └── tmp/
 ```
 
-## 規則
+此模式方便測試，不代表一般使用者必須把資料放在專案資料夾。
 
-- `ledger.sqlite3` 是唯一帳務真實來源。
-- `-wal`、`-shm` 是 SQLite 執行期檔案，不可手動搬移。
-- 備份使用 SQLite backup API，不直接複製使用中的資料庫。
-- 匯出檔不是備份。
-- 交易與餘額盤點 CSV 都是 UTF-8 BOM 人類可讀匯出，不是可還原資料庫。
-- 外部備份資料夾必須同時包含資料庫與 manifest。
-- 0.1.x CSV/JSON 不由目前 runtime 讀取；須先以 0.2.0 轉為 SQLite。
+## 備份
+
+備份使用 SQLite backup API，並寫入 manifest：
+
+- `manifest_version`
+- `database_schema_version`
+- `backup_id`
+- `created_at`
+- `reason`
+- `database_file`
+- `sha256`
+- `integrity_check`
+
+還原前必須驗證 checksum、`PRAGMA integrity_check` 與 schema version。

@@ -29,7 +29,7 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
             occurred_at="2026-06-24T20:00:00+08:00",
             entry_type="expense",
             amount="85",
-            payee_name="效能測試",
+            description="效能測試",
         )
     )
     add_elapsed = perf_counter() - started
@@ -119,9 +119,8 @@ def _seed_transactions(paths, count: int) -> None:
             """
             INSERT INTO transactions(
                 transaction_id, revision, status, entry_type, occurred_at,
-                recorded_at, updated_at, payee_name_snapshot, description,
-                source, correlation_id
-            ) VALUES (?, 1, 'active', 'expense', ?, ?, ?, '', '', 'manual', ?)
+                recorded_at, updated_at, description, source, correlation_id
+            ) VALUES (?, 1, 'active', 'expense', ?, ?, ?, '', 'manual', ?)
             """,
             transactions,
         )

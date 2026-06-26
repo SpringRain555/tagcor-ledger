@@ -13,7 +13,6 @@ from PySide6.QtCore import (
     QDateTime,
     QModelIndex,
     QPersistentModelIndex,
-    QStringListModel,
     Qt,
     Signal,
 )
@@ -22,7 +21,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QCompleter,
     QDateEdit,
     QDateTimeEdit,
     QDialog,
@@ -140,11 +138,9 @@ class QuickEntryPage(QWidget):
         self.detail = QComboBox()
         self.occurred_at = QDateTimeEdit(QDateTime.currentDateTime())
         self.amount = QLineEdit()
-        self.payee = QLineEdit()
         self.description = QLineEdit()
         self.error = QLabel()
         self.save_button = QPushButton("儲存交易")
-        self.payee_model = QStringListModel()
         self._build()
         self.reload_options()
         self.apply_defaults()
@@ -157,23 +153,17 @@ class QuickEntryPage(QWidget):
         self.occurred_at.setCalendarPopup(True)
         self.occurred_at.setDisplayFormat("yyyy/MM/dd HH:mm")
         self.amount.setPlaceholderText("例如：120")
-        self.payee.setPlaceholderText("例如：便利商店")
         self.description.setPlaceholderText("可留空")
         self.error.setObjectName("errorLabel")
         self.error.setWordWrap(True)
-        completer = QCompleter(self.payee_model, self)
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchStartsWith)
-        self.payee.setCompleter(completer)
 
         form = QFormLayout()
         form.addRow("流向", self.flow)
         form.addRow("帳戶", self.account)
         form.addRow("轉入帳戶", self.destination)
-        form.addRow("分類", self.category)
-        form.addRow("細項", self.detail)
+        form.addRow("類別", self.category)
+        form.addRow("項目", self.detail)
         form.addRow("時間", self.occurred_at)
-        form.addRow("對象／商家", self.payee)
         form.addRow("金額（TWD）", self.amount)
         form.addRow("備註", self.description)
         form.addRow("", self.error)
@@ -185,7 +175,6 @@ class QuickEntryPage(QWidget):
 
         self.flow.currentIndexChanged.connect(self._sync_flow)
         self.category.currentIndexChanged.connect(self._reload_details)
-        self.payee.textEdited.connect(self._reload_payees)
         self.save_button.clicked.connect(self.submit)
         self.amount.returnPressed.connect(self.submit)
         self.description.returnPressed.connect(self.submit)
@@ -196,7 +185,6 @@ class QuickEntryPage(QWidget):
         _fill_combo(self.destination, self.controller.account_options(), "name", "account_id")
         _fill_combo(self.category, self.controller.category_options(), "name", "category_id")
         self._reload_details()
-        self._reload_payees(self.payee.text())
 
     def apply_defaults(self) -> None:
         settings = self.controller.get_settings()
@@ -211,7 +199,6 @@ class QuickEntryPage(QWidget):
         self._select_category(draft.get("category_id"))
         amount_minor = draft.get("amount_minor")
         self.amount.setText(_minor_text(amount_minor) if amount_minor is not None else "")
-        self.payee.setText(str(draft.get("payee_name", "")))
         self.description.setText(str(draft.get("description", "")))
         if use_current_time:
             self.occurred_at.setDateTime(QDateTime.currentDateTime())
@@ -221,7 +208,6 @@ class QuickEntryPage(QWidget):
     def clear_form(self) -> None:
         self.occurred_at.setDateTime(QDateTime.currentDateTime())
         self.amount.clear()
-        self.payee.clear()
         self.description.clear()
         self.error.clear()
         self.amount.setFocus()
@@ -242,7 +228,6 @@ class QuickEntryPage(QWidget):
                 if self.flow.currentData() != "transfer"
                 else None
             ),
-            payee_name=self.payee.text().strip(),
             description=self.description.text().strip(),
         )
         if result.success:
@@ -251,9 +236,6 @@ class QuickEntryPage(QWidget):
             self.saved.emit()
             return
         self.error.setText(_result_message(result))
-
-    def _reload_payees(self, prefix: str) -> None:
-        self.payee_model.setStringList(self.controller.payee_suggestions(prefix))
 
     def _sync_flow(self) -> None:
         transfer = self.flow.currentData() == "transfer"
@@ -305,7 +287,7 @@ class BalanceSnapshotPage(QWidget):
         )
         self.transactions = QTableView()
         self.transactions_model = RowsModel(
-            ["時間", "類型", "帳戶", "分類", "對象／商家", "金額"],
+            ["時間", "類型", "帳戶", "類別／項目", "金額"],
             _transaction_values,
         )
         self._build()
@@ -503,7 +485,7 @@ class TransactionsPage(QWidget):
         self.controller = controller
         self.table = QTableView()
         self.model = RowsModel(
-            ["時間", "類型", "帳戶", "分類", "對象／商家", "金額", "備註", "狀態"],
+            ["時間", "類型", "帳戶", "類別／項目", "金額", "備註", "狀態"],
             _transaction_values,
         )
         self.search = QLineEdit()
@@ -525,7 +507,7 @@ class TransactionsPage(QWidget):
     def _build(self) -> None:
         title = QLabel("交易紀錄")
         title.setObjectName("pageTitle")
-        self.search.setPlaceholderText("搜尋對象、備註、分類或帳戶")
+        self.search.setPlaceholderText("搜尋備註、類別、項目或帳戶")
         self.date_from.setDisplayFormat("yyyy/MM/dd")
         self.date_to.setDisplayFormat("yyyy/MM/dd")
         for date_widget in (self.date_from, self.date_to):
@@ -588,7 +570,7 @@ class TransactionsPage(QWidget):
             self.controller.category_options(),
             "name",
             "category_id",
-            first=("全部分類", None),
+            first=("全部類別", None),
         )
 
     def first_page(self) -> None:
@@ -688,7 +670,6 @@ class TransactionEditDialog(QDialog):
         self.detail = QComboBox()
         self.occurred_at = QDateTimeEdit()
         self.amount = QLineEdit(str(transaction["amount"]))
-        self.payee = QLineEdit(str(transaction["payee_name"]))
         self.description = QLineEdit(str(transaction["description"]))
         self.error = QLabel()
         self._build()
@@ -708,10 +689,9 @@ class TransactionEditDialog(QDialog):
         if transfer:
             form.addRow("轉入帳戶", self.destination)
         else:
-            form.addRow("分類", self.category)
-            form.addRow("細項", self.detail)
+            form.addRow("類別", self.category)
+            form.addRow("項目", self.detail)
         form.addRow("時間", self.occurred_at)
-        form.addRow("對象／商家", self.payee)
         form.addRow("金額（TWD）", self.amount)
         form.addRow("備註", self.description)
         form.addRow("", self.error)
@@ -760,7 +740,6 @@ class TransactionEditDialog(QDialog):
         common = {
             "occurred_at": _iso_datetime(self.occurred_at),
             "amount": self.amount.text().strip(),
-            "payee_name": self.payee.text().strip(),
             "description": self.description.text().strip(),
         }
         if self.transaction["entry_type"] == "transfer":
@@ -794,7 +773,7 @@ class CatalogPage(QWidget):
         headers = (
             ["帳戶", "類型", "幣別", "目前餘額", "狀態"]
             if kind == "account"
-            else ["分類", "細項", "狀態"]
+            else ["類別", "項目", "狀態"]
         )
         mapper = _account_values if kind == "account" else _category_values
         self.model = RowsModel(headers, mapper)
@@ -803,18 +782,20 @@ class CatalogPage(QWidget):
         self.refresh()
 
     def _build(self) -> None:
-        title = QLabel("帳戶" if self.kind == "account" else "分類")
+        title = QLabel("帳戶" if self.kind == "account" else "類別／項目")
         title.setObjectName("pageTitle")
-        add_button = QPushButton("新增帳戶" if self.kind == "account" else "新增分類")
-        add_child = QPushButton("新增細項")
+        add_button = QPushButton("新增帳戶" if self.kind == "account" else "新增類別")
+        add_child = QPushButton("新增項目")
         rename = QPushButton("重新命名")
         toggle = QPushButton("封存／恢復所選項目")
+        delete_button = QPushButton("刪除未使用")
         row = QHBoxLayout()
         row.addWidget(add_button)
         if self.kind == "category":
             row.addWidget(add_child)
         row.addWidget(rename)
         row.addWidget(toggle)
+        row.addWidget(delete_button)
         row.addStretch()
         _setup_table(self.table, self.model)
         layout = QVBoxLayout(self)
@@ -825,6 +806,7 @@ class CatalogPage(QWidget):
         add_child.clicked.connect(self.add_child)
         rename.clicked.connect(self.rename_selected)
         toggle.clicked.connect(self.toggle_selected)
+        delete_button.clicked.connect(self.delete_selected)
 
     def refresh(self) -> None:
         if self.kind == "account":
@@ -846,7 +828,7 @@ class CatalogPage(QWidget):
     def add_item(self) -> None:
         name, accepted = QInputDialog.getText(
             self,
-            "新增帳戶" if self.kind == "account" else "新增分類",
+            "新增帳戶" if self.kind == "account" else "新增類別",
             "名稱",
         )
         if not accepted:
@@ -872,14 +854,14 @@ class CatalogPage(QWidget):
         labels = [str(item["name"]) for item in parents]
         selected, accepted = QInputDialog.getItem(
             self,
-            "新增細項",
-            "上層分類",
+            "新增項目",
+            "上層類別",
             labels,
             editable=False,
         )
         if not accepted:
             return
-        name, accepted = QInputDialog.getText(self, "新增細項", "細項名稱")
+        name, accepted = QInputDialog.getText(self, "新增項目", "項目名稱")
         if accepted:
             parent_id = str(parents[labels.index(selected)]["category_id"])
             self._finish(self.controller.create_category(name, parent_id))
@@ -922,6 +904,24 @@ class CatalogPage(QWidget):
             )
         self._finish(result)
 
+    def delete_selected(self) -> None:
+        item = self.model.selected_item(self.table)
+        if item is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "確認刪除",
+            "只會刪除完全未使用的設定項；已有歷史資料者請改用封存。是否繼續？",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        result = (
+            self.controller.delete_account(str(item["account_id"]))
+            if self.kind == "account"
+            else self.controller.delete_category(str(item["category_id"]))
+        )
+        self._finish(result)
+
     def _finish(self, result: Any) -> None:
         if not result.success:
             QMessageBox.warning(self, "操作失敗", _result_message(result))
@@ -938,6 +938,7 @@ class MaintenancePage(QWidget):
         self.controller = controller
         self.list = QListWidget()
         self.result = QLabel()
+        self.protect_restore = QCheckBox("還原前先建立備份")
         self._build()
         self.refresh()
 
@@ -956,6 +957,7 @@ class MaintenancePage(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(title)
         layout.addLayout(buttons)
+        layout.addWidget(self.protect_restore)
         layout.addWidget(self.list)
         layout.addWidget(self.result)
         create.clicked.connect(self.create_backup)
@@ -1017,7 +1019,10 @@ class MaintenancePage(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.controller.restore_backup(path)
+            self.controller.restore_backup(
+                path,
+                create_backup_first=self.protect_restore.isChecked(),
+            )
             self.result.setText("備份已還原。")
             self.restored.emit()
             self.refresh()
@@ -1045,31 +1050,23 @@ class SettingsPage(QWidget):
         self.account = QComboBox()
         self.flow = QComboBox()
         self.page_size = QComboBox()
-        self.startup_backup = QComboBox()
         self.balance_snapshot_reminder = QCheckBox("每日提醒記錄預設帳戶目前金額")
         self.result = QLabel()
         self._build()
         self.reload()
 
     def _build(self) -> None:
-        title = QLabel("設定")
+        title = QLabel("一般設定")
         title.setObjectName("pageTitle")
         for key in ("expense", "income", "transfer"):
             self.flow.addItem(ENTRY_NAMES[key], key)
         for size in (20, 50, 100):
             self.page_size.addItem(f"{size} 筆", size)
-        for label, value in (
-            ("永不", "never"),
-            ("每日一次", "daily"),
-            ("每次啟動", "always"),
-        ):
-            self.startup_backup.addItem(label, value)
         save = QPushButton("儲存設定")
         form = QFormLayout()
         form.addRow("預設帳戶", self.account)
         form.addRow("預設流向", self.flow)
         form.addRow("交易列表每頁", self.page_size)
-        form.addRow("啟動備份", self.startup_backup)
         form.addRow("餘額盤點提醒", self.balance_snapshot_reminder)
         form.addRow("固定幣別", QLabel("TWD"))
         form.addRow("固定時區", QLabel("Asia/Taipei"))
@@ -1093,7 +1090,6 @@ class SettingsPage(QWidget):
         _select_data(self.account, settings.default_account_id)
         _select_data(self.flow, settings.default_entry_type)
         _select_data(self.page_size, settings.transactions_page_size)
-        _select_data(self.startup_backup, settings.startup_backup)
         self.balance_snapshot_reminder.setChecked(settings.balance_snapshot_reminder)
 
     def save(self) -> None:
@@ -1102,7 +1098,6 @@ class SettingsPage(QWidget):
                 default_account_id=str(self.account.currentData()),
                 default_entry_type=str(self.flow.currentData()),
                 transactions_page_size=int(self.page_size.currentData()),
-                startup_backup=str(self.startup_backup.currentData()),
                 balance_snapshot_reminder=self.balance_snapshot_reminder.isChecked(),
             )
         )
@@ -1131,7 +1126,6 @@ class DraftDialog(QDialog):
         self.category = QComboBox()
         self.detail = QComboBox()
         self.amount = QLineEdit()
-        self.payee = QLineEdit()
         self.description = QLineEdit()
         self.frequency = QComboBox()
         self.interval = QSpinBox()
@@ -1160,10 +1154,9 @@ class DraftDialog(QDialog):
         form.addRow("流向", self.flow)
         form.addRow("帳戶", self.account)
         form.addRow("轉入帳戶", self.destination)
-        form.addRow("分類", self.category)
-        form.addRow("細項", self.detail)
+        form.addRow("類別", self.category)
+        form.addRow("項目", self.detail)
         form.addRow("金額（可留空）", self.amount)
-        form.addRow("對象／商家", self.payee)
         form.addRow("備註", self.description)
         if self.schedule:
             form.addRow("週期", self.frequency)
@@ -1205,7 +1198,6 @@ class DraftDialog(QDialog):
             self._select_category(self.current.get("category_id"))
             if self.current.get("amount_minor") is not None:
                 self.amount.setText(_minor_text(int(self.current["amount_minor"])))
-            self.payee.setText(str(self.current.get("payee_name", "")))
             self.description.setText(str(self.current.get("description", "")))
             if self.schedule:
                 _select_data(self.frequency, self.current["frequency"])
@@ -1240,7 +1232,6 @@ class DraftDialog(QDialog):
                     else None
                 ),
                 "amount_minor": amount_minor,
-                "payee_name": self.payee.text().strip(),
                 "description": self.description.text().strip(),
             }
             if self.schedule:
@@ -1314,7 +1305,7 @@ class AutomationPage(QWidget):
         self.controller = controller
         self.templates = QTableView()
         self.template_model = RowsModel(
-            ["名稱", "類型", "金額", "對象／商家", "備註"],
+            ["名稱", "類型", "金額", "備註"],
             _template_values,
         )
         self.schedules = QTableView()
@@ -1450,7 +1441,6 @@ class PendingEditDialog(QDialog):
         self.amount = QLineEdit(
             _minor_text(item["amount_minor"]) if item.get("amount_minor") is not None else ""
         )
-        self.payee = QLineEdit(str(item["payee_name"]))
         self.description = QLineEdit(str(item["description"]))
         self.error = QLabel()
         self._build()
@@ -1463,10 +1453,9 @@ class PendingEditDialog(QDialog):
         if self.item["entry_type"] == "transfer":
             form.addRow("轉入帳戶", self.destination)
         else:
-            form.addRow("分類", self.category)
-            form.addRow("細項", self.detail)
+            form.addRow("類別", self.category)
+            form.addRow("項目", self.detail)
         form.addRow("金額（TWD）", self.amount)
-        form.addRow("對象／商家", self.payee)
         form.addRow("備註", self.description)
         form.addRow("", self.error)
         buttons = QDialogButtonBox(
@@ -1536,7 +1525,6 @@ class PendingEditDialog(QDialog):
                 if self.item["entry_type"] != "transfer"
                 else None
             ),
-            payee_name=self.payee.text().strip(),
             description=self.description.text().strip(),
         )
         if not result.success:
@@ -1557,7 +1545,7 @@ class PendingPage(QWidget):
         self.controller = controller
         self.table = QTableView()
         self.model = RowsModel(
-            ["到期日", "排程", "類型", "金額", "對象／商家", "狀態說明"],
+            ["到期日", "排程", "類型", "金額", "狀態說明"],
             _occurrence_values,
         )
         self.has_more = False
@@ -1630,6 +1618,179 @@ class PendingPage(QWidget):
         self.refresh()
 
 
+class PathSettingsPage(QWidget):
+    changed = Signal()
+
+    def __init__(self, controller: LedgerController) -> None:
+        super().__init__()
+        self.controller = controller
+        self.ledger_dir = QLineEdit()
+        self.backup_dir = QLineEdit()
+        self.result = QLabel()
+        self._build()
+        self.reload()
+
+    def _build(self) -> None:
+        title = QLabel("資料路徑")
+        title.setObjectName("pageTitle")
+        self.result.setWordWrap(True)
+        browse_ledger = QPushButton("選擇記帳資料路徑")
+        browse_backup = QPushButton("選擇備份路徑")
+        switch_button = QPushButton("切換到既有資料")
+        move_button = QPushButton("搬移目前資料")
+
+        form = QFormLayout()
+        form.addRow("記帳資料路徑", self.ledger_dir)
+        form.addRow("", browse_ledger)
+        form.addRow("備份路徑", self.backup_dir)
+        form.addRow("", browse_backup)
+        actions = QHBoxLayout()
+        actions.addWidget(switch_button)
+        actions.addWidget(move_button)
+        actions.addStretch()
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addLayout(form)
+        layout.addLayout(actions)
+        layout.addWidget(
+            QLabel("記帳資料會存放 ledger.sqlite3；備份會建立在獨立備份路徑下。備份路徑不可與資料路徑相同或互相包含。")
+        )
+        layout.addWidget(self.result)
+        layout.addStretch()
+
+        browse_ledger.clicked.connect(lambda: self._choose(self.ledger_dir))
+        browse_backup.clicked.connect(lambda: self._choose(self.backup_dir))
+        switch_button.clicked.connect(lambda: self._save(move_current=False))
+        move_button.clicked.connect(lambda: self._save(move_current=True))
+
+    def reload(self) -> None:
+        settings = self.controller.get_path_settings()
+        self.ledger_dir.setText(str(settings.ledger_dir))
+        self.backup_dir.setText(str(settings.backup_dir))
+
+    def _choose(self, target: QLineEdit) -> None:
+        selected = QFileDialog.getExistingDirectory(self, "選擇資料夾")
+        if selected:
+            target.setText(selected)
+
+    def _save(self, *, move_current: bool) -> None:
+        result = self.controller.save_path_settings(
+            ledger_dir=Path(self.ledger_dir.text().strip()),
+            backup_dir=Path(self.backup_dir.text().strip()),
+            move_current=move_current,
+        )
+        self.result.setText(_result_message(result))
+        if result.success:
+            self.reload()
+            self.changed.emit()
+
+
+class ResetPage(QWidget):
+    reset_done = Signal()
+
+    def __init__(self, controller: LedgerController) -> None:
+        super().__init__()
+        self.controller = controller
+        self.backup_first = QCheckBox("重製前先建立備份")
+        self.result = QLabel()
+        self._build()
+
+    def _build(self) -> None:
+        title = QLabel("重製與還原")
+        title.setObjectName("pageTitle")
+        reset_button = QPushButton("重製目前記帳資料")
+        self.result.setWordWrap(True)
+        layout = QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addWidget(
+            QLabel("重製會移除目前記帳資料庫並重新建立預設帳戶與類別；不會刪除備份資料夾。")
+        )
+        layout.addWidget(self.backup_first)
+        layout.addWidget(reset_button)
+        layout.addWidget(self.result)
+        layout.addStretch()
+        reset_button.clicked.connect(self.reset)
+
+    def reset(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "確認重製",
+            "這會清空目前記帳資料並重新初始化。是否繼續？",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.controller.reset_ledger(
+                create_backup_first=self.backup_first.isChecked()
+            )
+            self.result.setText("記帳資料已重製。")
+            self.reset_done.emit()
+        except Exception as exc:
+            QMessageBox.warning(self, "重製失敗", str(exc))
+
+
+class OperationSettingsPage(QWidget):
+    apply_requested = Signal(dict)
+    changed = Signal()
+
+    def __init__(self, controller: LedgerController) -> None:
+        super().__init__()
+        self.accounts = CatalogPage(controller, "account")
+        self.categories = CatalogPage(controller, "category")
+        self.automation = AutomationPage(controller)
+        self._build()
+
+    def _build(self) -> None:
+        tabs = QTabWidget()
+        tabs.addTab(self.accounts, "帳戶")
+        tabs.addTab(self.categories, "類別")
+        tabs.addTab(self.automation, "模板與週期排程")
+        layout = QVBoxLayout(self)
+        layout.addWidget(tabs)
+        self.accounts.changed.connect(self.changed.emit)
+        self.categories.changed.connect(self.changed.emit)
+        self.automation.changed.connect(self.changed.emit)
+        self.automation.apply_requested.connect(self.apply_requested.emit)
+
+    def refresh(self) -> None:
+        self.accounts.refresh()
+        self.categories.refresh()
+        self.automation.refresh()
+
+
+class SystemSettingsPage(QWidget):
+    saved = Signal()
+    restored = Signal()
+    paths_changed = Signal()
+
+    def __init__(self, controller: LedgerController, paths: AppPaths) -> None:
+        super().__init__()
+        self.general = SettingsPage(controller, paths)
+        self.paths = PathSettingsPage(controller)
+        self.maintenance = MaintenancePage(controller)
+        self.reset = ResetPage(controller)
+        self._build()
+
+    def _build(self) -> None:
+        tabs = QTabWidget()
+        tabs.addTab(self.general, "一般設定")
+        tabs.addTab(self.paths, "資料路徑")
+        tabs.addTab(self.maintenance, "備份與還原")
+        tabs.addTab(self.reset, "重製與還原")
+        layout = QVBoxLayout(self)
+        layout.addWidget(tabs)
+        self.general.saved.connect(self.saved.emit)
+        self.paths.changed.connect(self.paths_changed.emit)
+        self.maintenance.restored.connect(self.restored.emit)
+        self.reset.reset_done.connect(self.restored.emit)
+
+    def reload(self) -> None:
+        self.general.reload()
+        self.paths.reload()
+        self.maintenance.refresh()
+
+
 class MainWindow(QMainWindow):
     def __init__(self, paths: AppPaths) -> None:
         super().__init__()
@@ -1640,11 +1801,8 @@ class MainWindow(QMainWindow):
         self.balance = BalanceSnapshotPage(self.controller)
         self.pending = PendingPage(self.controller)
         self.transactions = TransactionsPage(self.controller)
-        self.accounts = CatalogPage(self.controller, "account")
-        self.categories = CatalogPage(self.controller, "category")
-        self.automation = AutomationPage(self.controller)
-        self.maintenance = MaintenancePage(self.controller)
-        self.settings = SettingsPage(self.controller, paths)
+        self.operation_settings = OperationSettingsPage(self.controller)
+        self.system_settings = SystemSettingsPage(self.controller, paths)
         self._build(paths)
         self.refresh_pending_badge()
         self._show_balance_snapshot_reminder()
@@ -1661,22 +1819,16 @@ class MainWindow(QMainWindow):
             "餘額盤點",
             "待確認",
             "交易紀錄",
-            "帳戶",
-            "分類",
-            "模板與排程",
-            "備份與匯出",
-            "設定",
+            "操作設定",
+            "系統設定",
         ]
         widgets = [
             self.quick,
             self.balance,
             self.pending,
             self.transactions,
-            self.accounts,
-            self.categories,
-            self.automation,
-            self.maintenance,
-            self.settings,
+            self.operation_settings,
+            self.system_settings,
         ]
         self.navigation.addItems(labels)
         for page in widgets:
@@ -1696,13 +1848,12 @@ class MainWindow(QMainWindow):
         self.balance.changed.connect(self._balance_changed)
         self.balance.record_transaction_requested.connect(self._focus_new)
         self.transactions.duplicate_requested.connect(self._prefill_quick)
-        self.accounts.changed.connect(self._catalog_changed)
-        self.categories.changed.connect(self._catalog_changed)
-        self.automation.apply_requested.connect(self._prefill_quick)
-        self.automation.changed.connect(self._automation_changed)
+        self.operation_settings.apply_requested.connect(self._prefill_quick)
+        self.operation_settings.changed.connect(self._catalog_changed)
         self.pending.changed.connect(self.refresh_pending_badge)
-        self.maintenance.restored.connect(self._restored)
-        self.settings.saved.connect(self._settings_changed)
+        self.system_settings.restored.connect(self._restored)
+        self.system_settings.saved.connect(self._settings_changed)
+        self.system_settings.paths_changed.connect(self._restored)
         self._add_shortcuts()
 
     def _add_shortcuts(self) -> None:
@@ -1736,12 +1887,12 @@ class MainWindow(QMainWindow):
         self.quick.reload_options()
         self.balance.reload_accounts()
         self.transactions.reload_filters()
-        self.settings.reload()
-        self.automation.refresh()
+        self.system_settings.reload()
+        self.operation_settings.refresh()
         self.pending.refresh()
 
     def _automation_changed(self) -> None:
-        self.automation.refresh()
+        self.operation_settings.refresh()
         self.pending.refresh()
 
     def _settings_changed(self) -> None:
@@ -1751,16 +1902,15 @@ class MainWindow(QMainWindow):
         self._show_balance_snapshot_reminder()
 
     def _restored(self) -> None:
+        self.statusBar().showMessage(f"資料庫位置：{self.controller.paths.database_path}")
         self.quick.reload_options()
         self.quick.apply_defaults()
         self.balance.reload_accounts()
         self.transactions.reload_filters()
         self.transactions.first_page()
-        self.accounts.refresh()
-        self.categories.refresh()
-        self.automation.refresh()
+        self.operation_settings.refresh()
         self.pending.refresh()
-        self.settings.reload()
+        self.system_settings.reload()
 
     def refresh_pending_badge(self) -> None:
         count = len(self.controller.list_pending())
@@ -1850,7 +2000,6 @@ def _transaction_values(item: dict[str, Any]) -> list[str]:
         str(item["entry_type_name"]),
         account,
         category,
-        str(item["payee_name"]),
         f"{item['amount']} {item['currency']}",
         str(item["description"]),
         STATUS_NAMES.get(str(item["status"]), str(item["status"])),
@@ -1885,7 +2034,6 @@ def _template_values(item: dict[str, Any]) -> list[str]:
         str(item["name"]),
         ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
         amount,
-        str(item["payee_name"]),
         str(item["description"]),
     ]
 
@@ -1913,6 +2061,5 @@ def _occurrence_values(item: dict[str, Any]) -> list[str]:
         str(item["schedule_name"]),
         ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
         amount,
-        str(item["payee_name"]),
         str(item.get("invalid_reason") or "可確認"),
     ]

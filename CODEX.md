@@ -1,61 +1,44 @@
 # CODEX Project Context
 
-開始修改前依序閱讀：
+請先閱讀：
 
-1. `docs/index.md`
-2. `docs/requirements/REQ-0001-stable-core.md`
-3. `docs/requirements/REQ-0002-phase-1-2.md`
-4. `docs/requirements/REQ-0003-balance-snapshots.md`
-5. `docs/architecture/overview.md`
-6. `docs/architecture/data-model.md`
-7. `docs/architecture/ui-workflows.md`
-8. `docs/roadmap.md`
-9. `docs/changelog.md`
+1. `README.md`
+2. `docs/index.md`
+3. `docs/requirements/REQ-0001-stable-core.md`
+4. `docs/requirements/REQ-0002-phase-1-2.md`
+5. `docs/requirements/REQ-0003-balance-snapshots.md`
+6. `docs/requirements/REQ-0004-phase-4-settings-paths-terms.md`
+7. `docs/architecture/overview.md`
+8. `docs/architecture/data-model.md`
+9. `docs/architecture/ui-workflows.md`
+10. `docs/architecture/storage-layout.md`
+11. `docs/roadmap.md`
+12. `docs/changelog.md`
 
-## 產品定位
+## 專案定位
 
-TagCor Ledger 是 Windows-first、本機個人記帳工具。產品重點是快速輸入、清楚帳戶餘額、可搜尋交易、可靠備份與資料自主，不是企業會計或雲端多人協作系統。
+TagCor Ledger 是 Windows-first、本機優先的個人記帳工具。主資料庫是 SQLite；CSV 只作交換格式。介面固定使用繁體中文與 PySide6。
 
-## 架構規則
+## 架構邊界
 
-- `domain/` 不依賴 Qt、SQLite 或檔案系統。
-- `application/` 定義使用者操作流程並回傳 `Result`。
-- `infrastructure/` 負責 SQLite migration、repository、排程持久化、備份與匯出。
-- `ui/` 僅透過 controller/use case 操作資料，不直接執行 SQL。
-- SQLite `data/ledger.sqlite3` 是唯一帳務真實來源。
-- CSV 僅作為匯出格式；執行期不得重新加入 CSV/JSON store 或 legacy importer。
-- 所有帳務寫入與 audit event 必須在同一資料庫交易內完成。
+- `domain/`：Money、帳戶、類別、交易、模板、排程、餘額盤點模型；不得依賴 Qt 或 SQLite。
+- `application/`：use case、Result、設定、備份/還原/重製協調；不得直接寫 UI。
+- `infrastructure/`：SQLite migration、store、backup、CSV export。
+- `ui/`：PySide6 視圖與 controller；不得直接撰寫 SQL。
+- 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔。
 
-## 資料規則
+## 重要規則
 
-- 金額使用 `Money(amount_minor: int, currency: str)`，禁止 float。
-- 首輪只允許 TWD；跨幣別操作應明確拒絕。
-- 支出 posting 為負、收入 posting 為正。
-- 轉帳必須產生同額一負一正 posting，總和為零。
-- 作廢交易保留資料並從餘額與預設查詢排除。
-- 餘額盤點只記錄實際金額，不建立交易或 posting，不直接改變帳戶餘額。
-- 盤點差額以查詢時的有效 posting 即時計算，不儲存衍生差額作為真實來源。
-- 分類為兩層；schema 可支援多筆 allocation，但首輪 UI 只建立一筆。
-- 大量交易查詢必須使用索引與 keyset pagination，不可讀取全表後在 Python 排序。
+- 金額一律使用 `Money(amount_minor: int, currency: str)`，禁止 float。
+- 目前固定 TWD 與 Asia/Taipei。
+- UI 用詞：`類別` 表示第一層，`項目` 表示第二層；不要再用「分類／細項」。
+- Phase 4 已移除「對象／商家」欄位，不得新增 payee model、payees table 或 payee UI。
+- 備份只能由使用者手動建立；啟動流程不得自動備份。
+- 還原/重製前保護備份必須由使用者明確勾選。
+- 刪除設定項只允許未被任何歷史資料引用；否則使用封存。
+- 盤點不建立交易、不建立 posting、不改變帳戶餘額。
 
-## UI 與文字
-
-- 使用 PySide6。
-- 使用者可見文字採繁體中文。
-- 「對象／商家」與「備註」是不同欄位。
-- 日期顯示格式為 `yyyy/MM/dd HH:mm`，儲存為含 timezone offset 的 ISO 8601。
-- 驗證錯誤優先使用行內提示；詳細例外只放在 Result details 或診斷紀錄。
-
-## Migration 與資料安全
-
-- 所有 schema 變更必須加入 ordered migration registry，禁止直接改既有版本。
-- migration 必須可重跑，且不得重複建立欄位或資料。
-- 0.1.x CSV/JSON 舊資料須先使用 0.2.0 轉成 SQLite；目前 runtime 不負責自動匯入。
-- 還原前驗證 SHA-256 與 `PRAGMA integrity_check`，並先備份目前資料庫。
-- 排程只產生 snapshot 待確認項目，不得自動入帳。
-- 每次漏期生成上限 366 期；`next_due_date` 必須指向下一個尚未生成日期。
-
-## 驗證基準
+## 驗證指令
 
 ```powershell
 python -m ruff check --no-cache .
@@ -63,4 +46,20 @@ python -m mypy --no-incremental src
 python -m pytest -q
 ```
 
-新增資料模型、migration 或 UI 流程時，同步更新 requirements、architecture、roadmap、changelog 與相關測試。
+如需 UI 測試：
+
+```powershell
+$env:QT_QPA_PLATFORM = "offscreen"
+python -m pytest -q tests\ui
+```
+
+如需效能測試：
+
+```powershell
+$env:TAGCOR_RUN_PERFORMANCE = "1"
+python -m pytest -q tests\performance\test_large_ledger.py
+```
+
+## 文件維護
+
+任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog；舊 Phase 0–2 文件只保留於 archive。

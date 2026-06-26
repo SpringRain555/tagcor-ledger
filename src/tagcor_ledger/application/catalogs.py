@@ -42,23 +42,17 @@ class AccountService:
         opening_balance: str = "0",
     ) -> Result:
         try:
-            opening = Money.from_decimal_string(
-                opening_balance,
-                allow_zero=True,
-            )
+            opening = Money.from_decimal_string(opening_balance, allow_zero=True)
             account = self.store.create_account(
                 name=name,
                 account_type=account_type,
                 opening_balance_minor=opening.amount_minor,
             )
-            return Result.ok(
-                "帳戶已建立。",
-                details={"account_id": account.account_id},
-            )
+            return Result.ok("帳戶已建立。", details={"account_id": account.account_id})
         except (MoneyError, ValueError, sqlite3.IntegrityError) as exc:
             return Result.fail(
                 "ACCOUNT_CREATE_FAILED",
-                "帳戶無法建立，請檢查名稱與期初餘額。",
+                "帳戶無法建立，請確認名稱沒有重複且金額格式正確。",
                 details={"reason": str(exc)},
             )
 
@@ -91,7 +85,18 @@ class AccountService:
         except (ValueError, NotFoundError, sqlite3.Error) as exc:
             return Result.fail(
                 "ACCOUNT_RESTORE_FAILED",
-                "帳戶無法恢復；請檢查是否已有同名帳戶。",
+                "帳戶無法恢復，請確認沒有同名使用中帳戶。",
+                details={"reason": str(exc)},
+            )
+
+    def delete(self, account_id: str) -> Result:
+        try:
+            self.store.delete_account(account_id)
+            return Result.ok("帳戶已刪除。")
+        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+            return Result.fail(
+                "ACCOUNT_DELETE_FAILED",
+                "帳戶無法刪除；預設帳戶或已有歷史資料的帳戶請改用封存。",
                 details={"reason": str(exc)},
             )
 
@@ -111,7 +116,7 @@ class CategoryService:
             include_archived=include_archived,
         )
         return Result.ok(
-            "分類已載入。",
+            "類別已載入。",
             details={
                 "categories": [
                     {
@@ -129,46 +134,54 @@ class CategoryService:
     def create(self, *, name: str, parent_id: str | None = None) -> Result:
         try:
             category = self.store.create_category(name=name, parent_id=parent_id)
-            return Result.ok(
-                "分類已建立。",
-                details={"category_id": category.category_id},
-            )
+            return Result.ok("類別／項目已建立。", details={"category_id": category.category_id})
         except (ValueError, sqlite3.IntegrityError) as exc:
             return Result.fail(
                 "CATEGORY_CREATE_FAILED",
-                "分類無法建立，請檢查名稱與上層分類。",
+                "類別／項目無法建立，請確認名稱沒有重複且上層類別有效。",
                 details={"reason": str(exc)},
             )
 
     def archive(self, category_id: str) -> Result:
         try:
             self.store.archive_category(category_id)
-            return Result.ok("分類已封存。")
+            return Result.ok("類別／項目已封存。")
         except (ValueError, NotFoundError, sqlite3.Error) as exc:
             return Result.fail(
                 "CATEGORY_ARCHIVE_FAILED",
-                "分類無法封存；請先處理仍在使用的細項。",
+                "類別／項目無法封存；請先處理仍在使用的子項目。",
                 details={"reason": str(exc)},
             )
 
     def rename(self, category_id: str, name: str) -> Result:
         try:
             self.store.rename_category(category_id, name)
-            return Result.ok("分類名稱已更新。")
+            return Result.ok("類別／項目名稱已更新。")
         except (ValueError, NotFoundError, sqlite3.Error) as exc:
             return Result.fail(
                 "CATEGORY_RENAME_FAILED",
-                "分類名稱無法更新。",
+                "類別／項目名稱無法更新。",
                 details={"reason": str(exc)},
             )
 
     def restore(self, category_id: str) -> Result:
         try:
             self.store.restore_category(category_id)
-            return Result.ok("分類已恢復使用。")
+            return Result.ok("類別／項目已恢復使用。")
         except (ValueError, NotFoundError, sqlite3.Error) as exc:
             return Result.fail(
                 "CATEGORY_RESTORE_FAILED",
-                "分類無法恢復；請先恢復上層分類並檢查同名項目。",
+                "類別／項目無法恢復；請先恢復上層類別並確認沒有同名項目。",
+                details={"reason": str(exc)},
+            )
+
+    def delete(self, category_id: str) -> Result:
+        try:
+            self.store.delete_category(category_id)
+            return Result.ok("類別／項目已刪除。")
+        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+            return Result.fail(
+                "CATEGORY_DELETE_FAILED",
+                "類別／項目無法刪除；若已有歷史資料或子項目，請改用封存。",
                 details={"reason": str(exc)},
             )

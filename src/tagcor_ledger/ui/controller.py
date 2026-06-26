@@ -1,10 +1,12 @@
-"""Presentation controller for the Phase 1–2 PySide6 interface."""
+"""Presentation controller for the PySide6 interface."""
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from typing import Any
 
+from tagcor_ledger.app.path_settings import PathSettingsError, PathSettingsService
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.application.automation import AutomationService
 from tagcor_ledger.application.balance import (
@@ -29,11 +31,13 @@ from tagcor_ledger.application.transaction_service import (
 )
 from tagcor_ledger.domain.models import (
     ApplicationSettings,
+    CreateBalanceSnapshotRequest,
     RecurringSchedule,
+    SystemPathSettings,
     TransactionFilter,
     TransactionTemplate,
-    CreateBalanceSnapshotRequest,
 )
+from tagcor_ledger.infrastructure.database import connect_database
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -41,6 +45,7 @@ from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 class LedgerController:
     def __init__(self, paths: AppPaths) -> None:
         self.paths = paths
+        self.path_settings = PathSettingsService()
         self._wire_services()
         self._run_startup_tasks()
 
@@ -60,9 +65,6 @@ class LedgerController:
         self.void_transaction_record = VoidTransaction(self.paths, self.store)
 
     def _run_startup_tasks(self) -> None:
-        if self.settings.startup_backup_due():
-            self.maintenance.create_backup(reason="startup")
-            self.settings.mark_startup_backup()
         self.startup_generation = self.automation.generate_due()
         self.refresh_balance_snapshot_reminder_due()
 
@@ -99,7 +101,6 @@ class LedgerController:
         account_id: str,
         destination_account_id: str | None,
         category_id: str | None,
-        payee_name: str,
         description: str,
     ) -> Result:
         if entry_type == "transfer":
@@ -111,12 +112,11 @@ class LedgerController:
                     amount=amount,
                     source_account_id=account_id,
                     destination_account_id=destination_account_id,
-                    payee_name=payee_name,
                     description=description,
                 )
             )
         if category_id is None:
-            return Result.fail("CATEGORY_REQUIRED", "請選擇分類細項。")
+            return Result.fail("CATEGORY_REQUIRED", "請選擇類別／項目。")
         return self.add_transaction.execute(
             AddTransactionRequest(
                 occurred_at=occurred_at,
@@ -124,7 +124,6 @@ class LedgerController:
                 amount=amount,
                 account_id=account_id,
                 category_id=category_id,
-                payee_name=payee_name,
                 description=description,
             )
         )
@@ -181,6 +180,9 @@ class LedgerController:
     def rename_account(self, account_id: str, name: str) -> Result:
         return self.accounts.rename(account_id, name)
 
+    def delete_account(self, account_id: str) -> Result:
+        return self.accounts.delete(account_id)
+
     def create_category(self, name: str, parent_id: str | None = None) -> Result:
         return self.categories.create(name=name, parent_id=parent_id)
 
@@ -193,14 +195,80 @@ class LedgerController:
     def rename_category(self, category_id: str, name: str) -> Result:
         return self.categories.rename(category_id, name)
 
+    def delete_category(self, category_id: str) -> Result:
+        return self.categories.delete(category_id)
+
     def get_settings(self) -> ApplicationSettings:
         return self.settings.get()
 
     def save_settings(self, settings: ApplicationSettings) -> Result:
         return self.settings.update(settings)
 
-    def payee_suggestions(self, prefix: str = "") -> list[str]:
-        return self.store.payee_suggestions(prefix=prefix, limit=20)
+    def get_path_settings(self) -> SystemPathSettings:
+        return SystemPathSettings(
+            ledger_dir=self.paths.ledger_dir,
+            backup_dir=self.paths.backup_dir,
+        )
+
+    def save_path_settings(
+        self,
+        *,
+        ledger_dir: Path,
+        backup_dir: Path,
+        move_current: bool = False,
+    ) -> Result:
+        try:
+            settings = self.path_settings.save(
+                SystemPathSettings(ledger_dir=ledger_dir, backup_dir=backup_dir)
+            )
+            next_paths = self._paths_for_settings(settings)
+            if move_current:
+                self._move_current_database(next_paths.database_path)
+            self.paths = next_paths
+            self._wire_services()
+            return Result.ok("資料路徑設定已更新。")
+        except (PathSettingsError, OSError, sqlite3.Error, ValueError) as exc:
+            return Result.fail(
+                "PATH_SETTINGS_SAVE_FAILED",
+                "資料路徑設定無法儲存，請確認兩個路徑分開且可寫入。",
+                details={"reason": str(exc)},
+            )
+
+    def _paths_for_settings(self, settings: SystemPathSettings) -> AppPaths:
+        root = settings.ledger_dir.parent
+        return AppPaths(
+            data_dir=root,
+            config_dir=self.paths.config_dir,
+            ledger_dir=settings.ledger_dir,
+            backup_dir=settings.backup_dir,
+            export_dir=root / "exports",
+            log_dir=root / "logs",
+            tmp_dir=root / "tmp",
+        )
+
+    def _move_current_database(self, target_database: Path) -> None:
+        source_database = self.paths.database_path
+        if source_database.resolve() == target_database.resolve():
+            return
+        if target_database.exists():
+            raise ValueError("TARGET_LEDGER_ALREADY_EXISTS")
+        target_database.parent.mkdir(parents=True, exist_ok=True)
+        if source_database.exists():
+            with connect_database(source_database) as source:
+                destination = sqlite3.connect(target_database)
+                try:
+                    source.backup(destination)
+                finally:
+                    destination.close()
+            for path in (
+                source_database,
+                source_database.with_name(f"{source_database.name}-wal"),
+                source_database.with_name(f"{source_database.name}-shm"),
+            ):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    continue
 
     def create_backup(self) -> Path:
         return self.maintenance.create_backup()
@@ -211,8 +279,12 @@ class LedgerController:
     def validate_backup(self, path: Path) -> dict[str, Any]:
         return self.maintenance.validate_backup(path)
 
-    def restore_backup(self, path: Path) -> None:
-        self.maintenance.restore_backup(path)
+    def restore_backup(self, path: Path, *, create_backup_first: bool = False) -> None:
+        self.maintenance.restore_backup(path, create_backup_first=create_backup_first)
+        self._wire_services()
+
+    def reset_ledger(self, *, create_backup_first: bool = False) -> None:
+        self.maintenance.reset_ledger(create_backup_first=create_backup_first)
         self._wire_services()
 
     def export_csv(self) -> Path:

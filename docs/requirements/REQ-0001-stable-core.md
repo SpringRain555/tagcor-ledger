@@ -1,33 +1,22 @@
-# REQ-0001 穩固核心版
+# REQ-0001：穩固核心
 
-## 背景
+## 目標
 
-Phase 2 原型以年度 CSV 反覆全檔讀寫，最近交易也會載入全部年度檔案後排序。此模式不適合作為長期記帳資料庫，也缺少帳戶、轉帳、搜尋分頁與完整繁中管理介面。
+建立可長期使用的本機個人記帳核心，主資料庫使用 SQLite，介面使用繁體中文 PySide6。
 
 ## 需求
 
-1. 產品定位為 Windows-first、本機個人記帳。
-2. 保留四步快速輸入，但帳戶、分類與交易類型需正規化。
-3. SQLite 為唯一帳務真實來源，啟用 WAL、外鍵、migration、索引與 FTS5。
-4. 支援帳戶、兩層分類、對象／商家、收入、支出、同幣別轉帳、編輯與作廢。
-5. 查詢採 keyset pagination，不得全表載入。
-6. Schema migration 需有明確 registry、可重跑且不重複。
-7. 提供一致性備份、checksum manifest、完整性檢查與 CSV 匯出。
-8. UI 使用 PySide6，主要操作與訊息使用繁體中文。
-9. 維持 domain/application/infrastructure/ui 分層並通過 Ruff、mypy、pytest。
+1. Windows-first、本機優先。
+2. 金額使用 `Money(amount_minor: int, currency: str)`，禁止 float。
+3. 固定 TWD 與 Asia/Taipei。
+4. 支援帳戶、兩層類別/項目、收入、支出、同幣別轉帳、編輯與作廢。
+5. 轉帳必須在同一 SQLite transaction 建立來源與目的 posting。
+6. 交易、posting、allocation 與 audit 必須保持一致。
+7. 交易列表不得一次載入全部資料，需使用分頁。
+8. CSV 只作匯出/交換格式，不作主資料庫。
 
-## 成功條件
+## Phase 4 修正
 
-- 支出、收入與轉帳可正確影響帳戶餘額。
-- 轉帳兩筆 posting 加總為零。
-- 作廢交易不再影響餘額，資料仍可追溯。
-- 常用查詢使用索引、FTS5 與固定頁面大小。
-- migration 重跑時 schema version 與資料不得重複。
-- 備份可通過 checksum 與 `integrity_check`。
-- UI 可完成快速記帳、搜尋、帳戶與分類管理、備份與匯出。
-
-## 非目標
-
-- 預算、銀行同步、匯率、正式對帳。
-- 拆分交易 UI；資料表先保留擴充能力。
-- 多人協作、雲端後端、企業會計與複式會計報表。
+- UI 與文件使用「類別／項目」，不再使用「分類／細項」。
+- 已移除「對象／商家」欄位；具體收支內容由「項目」與「備註」表達。
+- 備份改為手動建立。

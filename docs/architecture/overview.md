@@ -1,36 +1,27 @@
-# 架構總覽
-
-## 架構方向
-
-TagCor Ledger 是單機、同進程 PySide6 應用程式。SQLite 提供交易一致性與索引查詢，不拆分 HTTP backend。
+# Architecture Overview
 
 ```text
 PySide6 UI
-  → UI Controller
-    → Application Use Cases
-      → Repository / Automation / Maintenance Services
-        → SQLite / backup files / CSV exports
+  → LedgerController
+  → application services / Result
+  → infrastructure stores / SQLite / backup / CSV
+  → domain models
 ```
 
 ## 分層
 
-- `domain`：Money、帳戶、分類、交易與餘額盤點模型。
-- `application`：交易、餘額盤點、設定、模板、排程、待確認、帳戶與分類 use cases。
-- `infrastructure`：ordered migration、SQLite repository、排程持久化、備份與匯出。
-- `ui`：側邊導覽、快速輸入、交易表格、管理及待確認頁面。
-- `app`：資料路徑、啟動與依賴組裝。
+- `domain`：純模型與 Money，不依賴 Qt 或 SQLite。
+- `application`：交易、設定、帳戶/類別、模板/排程、盤點、備份/還原/重製 use cases。
+- `infrastructure`：SQLite schema migration、store、backup API、CSV export。
+- `ui`：PySide6 widgets 與 controller。
+- `app`：啟動、路徑、外部系統設定。
 
-## 設計原則
+## 資料流
 
-- UI 不直接執行 SQL。
-- Application 不依賴 Qt。
-- 寫入與 audit 同一 transaction。
-- 金額以整數 minor units 儲存。
-- 交易列表使用 keyset pagination。
-- 餘額盤點不直接入帳，差額依查詢時交易 posting 即時計算。
-- CSV 是交換格式，不是執行期資料庫。
-- 排程只在程式啟動或使用者要求時產生待確認項目，不啟動背景程序。
+UI 不直接操作 SQL。所有 UI 操作透過 controller 呼叫 application service。service 回傳 `Result`，UI 將錯誤顯示為繁體中文訊息。
 
-## 技術債控制
+## Phase 4 邊界
 
-舊 PyQt6、TagPath、CSV/JSON runtime 與 importer 已從執行套件移除。歷史內容只保存在 `docs/archive/phase-0-2/`。
+- 系統路徑設定在 SQLite 外部，因為資料庫路徑本身不能可靠存放在資料庫內。
+- payee 已移除；「項目」負責描述具體收支項目，備註負責補充說明。
+- 備份只由明確手動操作觸發。

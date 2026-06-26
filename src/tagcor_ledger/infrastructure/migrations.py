@@ -8,7 +8,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 4
+LATEST_SCHEMA_VERSION = 5
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -245,11 +245,63 @@ def migrate_v4(connection: sqlite3.Connection) -> None:
     )
 
 
+def migrate_v5(connection: sqlite3.Connection) -> None:
+    connection.execute("DROP TABLE IF EXISTS transaction_fts")
+    connection.execute("DROP INDEX IF EXISTS idx_transactions_payee")
+    _drop_column_if_exists(connection, "transactions", "payee_id")
+    _drop_column_if_exists(connection, "transactions", "payee_name_snapshot")
+    _drop_column_if_exists(connection, "transaction_templates", "payee_name")
+    _drop_column_if_exists(connection, "recurring_schedules", "payee_name")
+    _drop_column_if_exists(connection, "scheduled_occurrences", "payee_name")
+    connection.execute("DROP TABLE IF EXISTS payees")
+    connection.execute(
+        "DELETE FROM settings WHERE key IN ('startup_backup', 'last_startup_backup_date')"
+    )
+    connection.executescript(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS transaction_fts USING fts5(
+            transaction_id UNINDEXED,
+            description,
+            category,
+            account,
+            tokenize='unicode61'
+        );
+        INSERT INTO transaction_fts(transaction_id, description, category, account)
+        SELECT t.transaction_id,
+               t.description,
+               COALESCE(GROUP_CONCAT(DISTINCT c.name), '') || ' ' ||
+               COALESCE(GROUP_CONCAT(DISTINCT pc.name), '') AS category_names,
+               COALESCE(GROUP_CONCAT(DISTINCT a.name), '') AS account_names
+        FROM transactions t
+        LEFT JOIN category_allocations ca ON ca.transaction_id = t.transaction_id
+        LEFT JOIN categories c ON c.category_id = ca.category_id
+        LEFT JOIN categories pc ON pc.category_id = c.parent_id
+        LEFT JOIN account_postings p ON p.transaction_id = t.transaction_id
+        LEFT JOIN accounts a ON a.account_id = p.account_id
+        GROUP BY t.transaction_id;
+        """
+    )
+
+
+def _drop_column_if_exists(
+    connection: sqlite3.Connection,
+    table: str,
+    column: str,
+) -> None:
+    columns = {
+        str(row["name"])
+        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column in columns:
+        connection.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+
+
 MIGRATIONS: dict[int, Migration] = {
     1: migrate_v1,
     2: migrate_v2,
     3: migrate_v3,
     4: migrate_v4,
+    5: migrate_v5,
 }
 
 

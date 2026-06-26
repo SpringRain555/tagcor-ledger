@@ -8,6 +8,8 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
+from tagcor_ledger.app.path_settings import PathSettingsService, default_settings_path
+
 
 APP_NAME = "TagCorLedger"
 APP_AUTHOR = "TagCor"
@@ -48,6 +50,19 @@ def default_data_dir() -> Path:
 
 
 def resolve_app_paths(data_dir: str | Path | None = None) -> AppPaths:
+    env_value = os.environ.get(DATA_DIR_ENV)
+    if data_dir is None and not env_value:
+        system_settings = PathSettingsService().load()
+        root = system_settings.ledger_dir.parent
+        return AppPaths(
+            data_dir=root,
+            config_dir=default_settings_path().parent,
+            ledger_dir=system_settings.ledger_dir,
+            backup_dir=system_settings.backup_dir,
+            export_dir=root / "exports",
+            log_dir=root / "logs",
+            tmp_dir=root / "tmp",
+        )
     root = Path(data_dir).expanduser().resolve() if data_dir is not None else default_data_dir()
     return AppPaths(
         data_dir=root,

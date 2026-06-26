@@ -24,7 +24,6 @@ class AddTransactionRequest:
     currency: str = "TWD"
     account_id: str = "acct_cash"
     category_id: str = "cat_food_711"
-    payee_name: str = ""
     source: str = "manual"
 
 
@@ -35,7 +34,6 @@ class AddTransferRequest:
     source_account_id: str
     destination_account_id: str
     description: str = ""
-    payee_name: str = ""
     currency: str = "TWD"
 
 
@@ -47,7 +45,6 @@ class UpdateTransactionRequest:
     amount: str
     account_id: str
     category_id: str
-    payee_name: str = ""
     description: str = ""
     currency: str = "TWD"
 
@@ -59,7 +56,6 @@ class ReplaceTransferRequest:
     amount: str
     source_account_id: str
     destination_account_id: str
-    payee_name: str = ""
     description: str = ""
     currency: str = "TWD"
 
@@ -106,7 +102,6 @@ class AddTransaction:
                 money=money,
                 account_id=request.account_id,
                 category_id=request.category_id,
-                payee_name=request.payee_name,
                 description=request.description,
                 source=request.source,
                 correlation_id=correlation_id,
@@ -147,7 +142,6 @@ class AddTransfer:
                 money=money,
                 source_account_id=request.source_account_id,
                 destination_account_id=request.destination_account_id,
-                payee_name=request.payee_name,
                 description=request.description,
                 correlation_id=correlation_id,
             )
@@ -188,7 +182,6 @@ class UpdateTransaction:
                 money=money,
                 account_id=request.account_id,
                 category_id=request.category_id,
-                payee_name=request.payee_name,
                 description=request.description,
                 correlation_id=correlation_id,
             )
@@ -229,7 +222,6 @@ class ReplaceTransfer:
                 money=money,
                 source_account_id=request.source_account_id,
                 destination_account_id=request.destination_account_id,
-                payee_name=request.payee_name,
                 description=request.description,
                 correlation_id=correlation_id,
             )
@@ -371,7 +363,6 @@ def transaction_to_dict(transaction: TransactionRecord) -> dict[str, Any]:
         "category_name": transaction.category_name,
         "subcategory_id": transaction.subcategory_id,
         "subcategory_name": transaction.subcategory_name,
-        "payee_name": transaction.payee_name,
         "description": transaction.description,
         "tag_path_name": path_name,
         "correlation_id": transaction.correlation_id,

@@ -178,6 +178,52 @@ class LedgerStore:
                 details={"name": clean_name},
             )
 
+    def delete_account(self, account_id: str) -> None:
+        with database_transaction(self.paths.database_path) as connection:
+            row = connection.execute(
+                "SELECT 1 FROM accounts WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("ACCOUNT_NOT_FOUND")
+            default_row = connection.execute(
+                "SELECT value FROM settings WHERE key = 'default_account_id'"
+            ).fetchone()
+            if default_row is not None and str(default_row["value"]) == account_id:
+                raise ValueError("ACCOUNT_IS_DEFAULT")
+            if _has_any_reference(
+                connection,
+                [
+                    ("account_postings", "account_id = ?", (account_id,)),
+                    ("balance_snapshots", "account_id = ?", (account_id,)),
+                    (
+                        "transaction_templates",
+                        "account_id = ? OR destination_account_id = ?",
+                        (account_id, account_id),
+                    ),
+                    (
+                        "recurring_schedules",
+                        "account_id = ? OR destination_account_id = ?",
+                        (account_id, account_id),
+                    ),
+                    (
+                        "scheduled_occurrences",
+                        "account_id = ? OR destination_account_id = ?",
+                        (account_id, account_id),
+                    ),
+                ],
+            ):
+                raise ValueError("ACCOUNT_IN_USE")
+            connection.execute("DELETE FROM accounts WHERE account_id = ?", (account_id,))
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="account.delete",
+                entity_type="account",
+                entity_id=account_id,
+                details={},
+            )
+
     def account_balance_minor(self, account_id: str) -> int:
         with connect_database(self.paths.database_path) as connection:
             row = connection.execute(
@@ -598,6 +644,40 @@ class LedgerStore:
                 details={"name": clean_name},
             )
 
+    def delete_category(self, category_id: str) -> None:
+        with database_transaction(self.paths.database_path) as connection:
+            row = connection.execute(
+                "SELECT 1 FROM categories WHERE category_id = ?",
+                (category_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("CATEGORY_NOT_FOUND")
+            children = connection.execute(
+                "SELECT 1 FROM categories WHERE parent_id = ? LIMIT 1",
+                (category_id,),
+            ).fetchone()
+            if children is not None:
+                raise ValueError("CATEGORY_HAS_CHILDREN")
+            if _has_any_reference(
+                connection,
+                [
+                    ("category_allocations", "category_id = ?", (category_id,)),
+                    ("transaction_templates", "category_id = ?", (category_id,)),
+                    ("recurring_schedules", "category_id = ?", (category_id,)),
+                    ("scheduled_occurrences", "category_id = ?", (category_id,)),
+                ],
+            ):
+                raise ValueError("CATEGORY_IN_USE")
+            connection.execute("DELETE FROM categories WHERE category_id = ?", (category_id,))
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="category.delete",
+                entity_type="category",
+                entity_id=category_id,
+                details={},
+            )
+
     def create_transaction(
         self,
         *,
@@ -607,7 +687,6 @@ class LedgerStore:
         money: Money,
         account_id: str,
         category_id: str,
-        payee_name: str,
         description: str,
         source: str,
         correlation_id: str,
@@ -617,14 +696,12 @@ class LedgerStore:
         with database_transaction(self.paths.database_path) as connection:
             self._require_active_account(connection, account_id, money.currency)
             self._require_active_category(connection, category_id)
-            payee_id = self._upsert_payee(connection, payee_name, timestamp)
             connection.execute(
                 """
                 INSERT INTO transactions(
                     transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, payee_id, payee_name_snapshot,
-                    description, source, correlation_id
-                ) VALUES (?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    recorded_at, updated_at, description, source, correlation_id
+                ) VALUES (?, 1, 'active', ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     transaction_id,
@@ -632,8 +709,6 @@ class LedgerStore:
                     occurred_at,
                     timestamp,
                     timestamp,
-                    payee_id,
-                    payee_name.strip(),
                     description.strip(),
                     source,
                     correlation_id,
@@ -674,7 +749,6 @@ class LedgerStore:
         money: Money,
         source_account_id: str,
         destination_account_id: str,
-        payee_name: str,
         description: str,
         correlation_id: str,
     ) -> TransactionRecord:
@@ -684,22 +758,18 @@ class LedgerStore:
         with database_transaction(self.paths.database_path) as connection:
             self._require_active_account(connection, source_account_id, money.currency)
             self._require_active_account(connection, destination_account_id, money.currency)
-            payee_id = self._upsert_payee(connection, payee_name, timestamp)
             connection.execute(
                 """
                 INSERT INTO transactions(
                     transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, payee_id, payee_name_snapshot,
-                    description, source, correlation_id
-                ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, ?, ?, 'manual', ?)
+                    recorded_at, updated_at, description, source, correlation_id
+                ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, 'manual', ?)
                 """,
                 (
                     transaction_id,
                     occurred_at,
                     timestamp,
                     timestamp,
-                    payee_id,
-                    payee_name.strip(),
                     description.strip(),
                     correlation_id,
                 ),
@@ -753,7 +823,6 @@ class LedgerStore:
         money: Money,
         source_account_id: str,
         destination_account_id: str,
-        payee_name: str,
         description: str,
         correlation_id: str,
     ) -> TransactionRecord:
@@ -773,22 +842,19 @@ class LedgerStore:
                 raise ValueError("TRANSFER_NOT_ACTIVE")
             self._require_active_account(connection, source_account_id, money.currency)
             self._require_active_account(connection, destination_account_id, money.currency)
-            payee_id = self._upsert_payee(connection, payee_name, timestamp)
             connection.execute(
                 """
                 INSERT INTO transactions(
                     transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, payee_id, payee_name_snapshot,
-                    description, source, correlation_id, replaces_transaction_id
-                ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, ?, ?, 'manual', ?, ?)
+                    recorded_at, updated_at, description, source, correlation_id,
+                    replaces_transaction_id
+                ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, 'manual', ?, ?)
                 """,
                 (
                     new_transaction_id,
                     occurred_at,
                     timestamp,
                     timestamp,
-                    payee_id,
-                    payee_name.strip(),
                     description.strip(),
                     correlation_id,
                     original_transaction_id,
@@ -847,7 +913,6 @@ class LedgerStore:
         money: Money,
         account_id: str,
         category_id: str,
-        payee_name: str,
         description: str,
         correlation_id: str,
     ) -> TransactionRecord:
@@ -867,19 +932,16 @@ class LedgerStore:
                 raise ValueError("TRANSACTION_REVISION_CONFLICT")
             self._require_active_account(connection, account_id, money.currency)
             self._require_active_category(connection, category_id)
-            payee_id = self._upsert_payee(connection, payee_name, timestamp)
             changed = connection.execute(
                 """
                 UPDATE transactions
                 SET revision = revision + 1, occurred_at = ?, updated_at = ?,
-                    payee_id = ?, payee_name_snapshot = ?, description = ?
+                    description = ?
                 WHERE transaction_id = ? AND revision = ?
                 """,
                 (
                     occurred_at,
                     timestamp,
-                    payee_id,
-                    payee_name.strip(),
                     description.strip(),
                     transaction_id,
                     expected_revision,
@@ -1019,23 +1081,6 @@ class LedgerStore:
             row = connection.execute("PRAGMA integrity_check").fetchone()
         return str(row[0]) if row is not None else "unknown"
 
-    def payee_suggestions(self, prefix: str = "", limit: int = 20) -> list[str]:
-        pattern = f"{prefix.strip()}%"
-        with connect_database(self.paths.database_path) as connection:
-            rows = connection.execute(
-                """
-                SELECT p.name, MAX(t.occurred_at) AS last_used
-                FROM payees p
-                LEFT JOIN transactions t ON t.payee_id = p.payee_id
-                WHERE p.status = 'active' AND p.name LIKE ? COLLATE NOCASE
-                GROUP BY p.payee_id
-                ORDER BY last_used DESC, p.name COLLATE NOCASE
-                LIMIT ?
-                """,
-                (pattern, limit),
-            ).fetchall()
-        return [str(row["name"]) for row in rows]
-
     @staticmethod
     def _transaction_select(*, joins: str = "") -> str:
         return f"""
@@ -1048,8 +1093,7 @@ class LedgerStore:
                c.category_id, c.name AS category_name,
                pc.category_id AS parent_category_id,
                pc.name AS parent_category_name,
-               t.payee_name_snapshot, t.description, t.correlation_id,
-               t.replaces_transaction_id
+               t.description, t.correlation_id, t.replaces_transaction_id
         FROM transactions t
         JOIN account_postings p1 ON p1.transaction_id = t.transaction_id AND p1.sequence = 1
         JOIN accounts a1 ON a1.account_id = p1.account_id
@@ -1194,7 +1238,6 @@ class LedgerStore:
             category_name=parent_name,
             subcategory_id=child_id,
             subcategory_name=child_name,
-            payee_name=str(row["payee_name_snapshot"]),
             description=str(row["description"]),
             correlation_id=str(row["correlation_id"]),
             replaces_transaction_id=(
@@ -1225,37 +1268,17 @@ class LedgerStore:
             raise ValueError("CATEGORY_NOT_ACTIVE")
 
     @staticmethod
-    def _upsert_payee(
-        connection: sqlite3.Connection, payee_name: str, timestamp: str
-    ) -> str | None:
-        clean_name = payee_name.strip()
-        if not clean_name:
-            return None
-        row = connection.execute(
-            "SELECT payee_id FROM payees WHERE name = ? COLLATE NOCASE", (clean_name,)
-        ).fetchone()
-        if row is not None:
-            return str(row["payee_id"])
-        payee_id = f"payee_{uuid4().hex}"
-        connection.execute(
-            """
-            INSERT INTO payees(payee_id, name, status, created_at, updated_at)
-            VALUES (?, ?, 'active', ?, ?)
-            """,
-            (payee_id, clean_name, timestamp, timestamp),
-        )
-        return payee_id
-
-    @staticmethod
     def _refresh_fts(connection: sqlite3.Connection, transaction_id: str) -> None:
         rows = connection.execute(
             """
-            SELECT t.payee_name_snapshot, t.description,
-                   COALESCE(GROUP_CONCAT(DISTINCT c.name), '') AS category_names,
+            SELECT t.description,
+                   COALESCE(GROUP_CONCAT(DISTINCT c.name), '') || ' ' ||
+                   COALESCE(GROUP_CONCAT(DISTINCT pc.name), '') AS category_names,
                    COALESCE(GROUP_CONCAT(DISTINCT a.name), '') AS account_names
             FROM transactions t
             LEFT JOIN category_allocations ca ON ca.transaction_id = t.transaction_id
             LEFT JOIN categories c ON c.category_id = ca.category_id
+            LEFT JOIN categories pc ON pc.category_id = c.parent_id
             LEFT JOIN account_postings p ON p.transaction_id = t.transaction_id
             LEFT JOIN accounts a ON a.account_id = p.account_id
             WHERE t.transaction_id = ?
@@ -1268,12 +1291,11 @@ class LedgerStore:
         connection.execute("DELETE FROM transaction_fts WHERE transaction_id = ?", (transaction_id,))
         connection.execute(
             """
-            INSERT INTO transaction_fts(transaction_id, payee, description, category, account)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO transaction_fts(transaction_id, description, category, account)
+            VALUES (?, ?, ?, ?)
             """,
             (
                 transaction_id,
-                rows["payee_name_snapshot"],
                 rows["description"],
                 rows["category_names"],
                 rows["account_names"],
@@ -1338,6 +1360,20 @@ class LedgerStore:
                 json.dumps(details, ensure_ascii=False, sort_keys=True),
             ),
         )
+
+
+def _has_any_reference(
+    connection: sqlite3.Connection,
+    checks: list[tuple[str, str, tuple[object, ...]]],
+) -> bool:
+    for table, where, parameters in checks:
+        row = connection.execute(
+            f"SELECT 1 FROM {table} WHERE {where} LIMIT 1",
+            parameters,
+        ).fetchone()
+        if row is not None:
+            return True
+    return False
 
 
 def _fts_query(value: str) -> str:

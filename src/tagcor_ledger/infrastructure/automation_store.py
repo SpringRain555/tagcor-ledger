@@ -35,7 +35,7 @@ class AutomationStore:
                 f"""
                 SELECT template_id, name, status, entry_type, account_id,
                        destination_account_id, category_id, amount_minor, currency,
-                       payee_name, description, sort_order
+                       description, sort_order
                 FROM transaction_templates {where}
                 ORDER BY sort_order, name COLLATE NOCASE
                 """
@@ -51,15 +51,15 @@ class AutomationStore:
                 INSERT INTO transaction_templates(
                     template_id, name, status, entry_type, account_id,
                     destination_account_id, category_id, amount_minor, currency,
-                    payee_name, description, sort_order, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    description, sort_order, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(template_id) DO UPDATE SET
                     name = excluded.name, status = excluded.status,
                     entry_type = excluded.entry_type, account_id = excluded.account_id,
                     destination_account_id = excluded.destination_account_id,
                     category_id = excluded.category_id, amount_minor = excluded.amount_minor,
-                    currency = excluded.currency, payee_name = excluded.payee_name,
-                    description = excluded.description, sort_order = excluded.sort_order,
+                    currency = excluded.currency, description = excluded.description,
+                    sort_order = excluded.sort_order,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -72,7 +72,6 @@ class AutomationStore:
                     template.category_id,
                     template.amount_minor,
                     template.currency,
-                    template.payee_name.strip(),
                     template.description.strip(),
                     template.sort_order,
                     timestamp,
@@ -108,7 +107,7 @@ class AutomationStore:
                 f"""
                 SELECT schedule_id, name, status, entry_type, account_id,
                        destination_account_id, category_id, amount_minor, currency,
-                       payee_name, description, frequency, interval_count,
+                       description, frequency, interval_count,
                        start_date, next_due_date, end_date
                 FROM recurring_schedules {where}
                 ORDER BY next_due_date, name COLLATE NOCASE
@@ -133,16 +132,16 @@ class AutomationStore:
                 INSERT INTO recurring_schedules(
                     schedule_id, name, status, entry_type, account_id,
                     destination_account_id, category_id, amount_minor, currency,
-                    payee_name, description, frequency, interval_count,
+                    description, frequency, interval_count,
                     start_date, next_due_date, end_date, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(schedule_id) DO UPDATE SET
                     name = excluded.name, status = excluded.status,
                     entry_type = excluded.entry_type, account_id = excluded.account_id,
                     destination_account_id = excluded.destination_account_id,
                     category_id = excluded.category_id, amount_minor = excluded.amount_minor,
-                    currency = excluded.currency, payee_name = excluded.payee_name,
-                    description = excluded.description, frequency = excluded.frequency,
+                    currency = excluded.currency, description = excluded.description,
+                    frequency = excluded.frequency,
                     interval_count = excluded.interval_count, start_date = excluded.start_date,
                     next_due_date = excluded.next_due_date, end_date = excluded.end_date,
                     updated_at = excluded.updated_at
@@ -157,7 +156,6 @@ class AutomationStore:
                     schedule.category_id,
                     schedule.amount_minor,
                     schedule.currency,
-                    schedule.payee_name.strip(),
                     schedule.description.strip(),
                     schedule.frequency,
                     schedule.interval_count,
@@ -221,8 +219,8 @@ class AutomationStore:
                         INSERT OR IGNORE INTO scheduled_occurrences(
                             occurrence_id, schedule_id, due_date, status, entry_type,
                             account_id, destination_account_id, category_id, amount_minor,
-                            currency, payee_name, description, created_at, updated_at
-                        ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            currency, description, created_at, updated_at
+                        ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             f"occ_{uuid4().hex}",
@@ -234,7 +232,6 @@ class AutomationStore:
                             row["category_id"],
                             row["amount_minor"],
                             row["currency"],
-                            row["payee_name"],
                             row["description"],
                             timestamp,
                             timestamp,
@@ -297,7 +294,6 @@ class AutomationStore:
         account_id: str,
         destination_account_id: str | None,
         category_id: str | None,
-        payee_name: str,
         description: str,
     ) -> None:
         with database_transaction(self.paths.database_path) as connection:
@@ -305,7 +301,7 @@ class AutomationStore:
                 """
                 UPDATE scheduled_occurrences
                 SET amount_minor = ?, account_id = ?, destination_account_id = ?,
-                    category_id = ?, payee_name = ?, description = ?, updated_at = ?
+                    category_id = ?, description = ?, updated_at = ?
                 WHERE occurrence_id = ? AND status = 'pending'
                 """,
                 (
@@ -313,7 +309,6 @@ class AutomationStore:
                     account_id,
                     destination_account_id,
                     category_id,
-                    payee_name.strip(),
                     description.strip(),
                     now_iso(),
                     occurrence_id,
@@ -345,14 +340,12 @@ class AutomationStore:
             transaction_id = f"txn_{uuid4().hex}"
             correlation_id = f"corr_{uuid4().hex}"
             timestamp = now_iso()
-            payee_id = _upsert_payee(connection, str(row["payee_name"]), timestamp)
             connection.execute(
                 """
                 INSERT INTO transactions(
                     transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, payee_id, payee_name_snapshot,
-                    description, source, correlation_id
-                ) VALUES (?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, 'schedule', ?)
+                    recorded_at, updated_at, description, source, correlation_id
+                ) VALUES (?, 1, 'active', ?, ?, ?, ?, ?, 'schedule', ?)
                 """,
                 (
                     transaction_id,
@@ -360,8 +353,6 @@ class AutomationStore:
                     f"{row['due_date']}T12:00:00+08:00",
                     timestamp,
                     timestamp,
-                    payee_id,
-                    row["payee_name"],
                     row["description"],
                     correlation_id,
                 ),
@@ -492,7 +483,7 @@ def _row_to_occurrence(row: sqlite3.Row) -> ScheduledOccurrence:
     elif row["entry_type"] == "transfer" and row["destination_status"] != "active":
         invalid = "轉入帳戶已封存"
     elif row["entry_type"] != "transfer" and row["category_status"] != "active":
-        invalid = "分類已封存"
+        invalid = "類別已封存"
     elif row["amount_minor"] is None:
         invalid = "尚未填寫金額"
     return ScheduledOccurrence(
@@ -511,7 +502,6 @@ def _row_to_occurrence(row: sqlite3.Row) -> ScheduledOccurrence:
         category_id=str(row["category_id"]) if row["category_id"] is not None else None,
         amount_minor=int(row["amount_minor"]) if row["amount_minor"] is not None else None,
         currency=str(row["currency"]),
-        payee_name=str(row["payee_name"]),
         description=str(row["description"]),
         invalid_reason=invalid,
     )
@@ -539,37 +529,17 @@ def _occurrence_invalid_reason(connection: sqlite3.Connection, row: sqlite3.Row)
     return None
 
 
-def _upsert_payee(
-    connection: sqlite3.Connection, payee_name: str, timestamp: str
-) -> str | None:
-    clean = payee_name.strip()
-    if not clean:
-        return None
-    row = connection.execute(
-        "SELECT payee_id FROM payees WHERE name = ? COLLATE NOCASE", (clean,)
-    ).fetchone()
-    if row is not None:
-        return str(row["payee_id"])
-    payee_id = f"payee_{uuid4().hex}"
-    connection.execute(
-        """
-        INSERT INTO payees(payee_id, name, status, created_at, updated_at)
-        VALUES (?, ?, 'active', ?, ?)
-        """,
-        (payee_id, clean, timestamp, timestamp),
-    )
-    return payee_id
-
-
 def _refresh_fts(connection: sqlite3.Connection, transaction_id: str) -> None:
     row = connection.execute(
         """
-        SELECT t.payee_name_snapshot, t.description,
-               COALESCE(GROUP_CONCAT(DISTINCT c.name), '') AS category_names,
+        SELECT t.description,
+               COALESCE(GROUP_CONCAT(DISTINCT c.name), '') || ' ' ||
+               COALESCE(GROUP_CONCAT(DISTINCT pc.name), '') AS category_names,
                COALESCE(GROUP_CONCAT(DISTINCT a.name), '') AS account_names
         FROM transactions t
         LEFT JOIN category_allocations ca ON ca.transaction_id = t.transaction_id
         LEFT JOIN categories c ON c.category_id = ca.category_id
+        LEFT JOIN categories pc ON pc.category_id = c.parent_id
         LEFT JOIN account_postings p ON p.transaction_id = t.transaction_id
         LEFT JOIN accounts a ON a.account_id = p.account_id
         WHERE t.transaction_id = ?
@@ -581,12 +551,11 @@ def _refresh_fts(connection: sqlite3.Connection, transaction_id: str) -> None:
         return
     connection.execute(
         """
-        INSERT INTO transaction_fts(transaction_id, payee, description, category, account)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO transaction_fts(transaction_id, description, category, account)
+        VALUES (?, ?, ?, ?)
         """,
         (
             transaction_id,
-            row["payee_name_snapshot"],
             row["description"],
             row["category_names"],
             row["account_names"],

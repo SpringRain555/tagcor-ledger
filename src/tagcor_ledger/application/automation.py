@@ -51,7 +51,6 @@ class AutomationService:
         destination_account_id: str | None,
         category_id: str | None,
         amount_minor: int | None,
-        payee_name: str,
         description: str,
     ) -> TransactionTemplate:
         return TransactionTemplate(
@@ -64,7 +63,6 @@ class AutomationService:
             category_id=category_id,
             amount_minor=amount_minor,
             currency="TWD",
-            payee_name=payee_name,
             description=description,
             sort_order=100,
         )
@@ -109,7 +107,6 @@ class AutomationService:
         destination_account_id: str | None,
         category_id: str | None,
         amount_minor: int | None,
-        payee_name: str,
         description: str,
         frequency: str,
         interval_count: int,
@@ -126,7 +123,6 @@ class AutomationService:
             category_id=category_id,
             amount_minor=amount_minor,
             currency="TWD",
-            payee_name=payee_name,
             description=description,
             frequency=frequency,
             interval_count=interval_count,
@@ -176,7 +172,6 @@ class AutomationService:
         account_id: str,
         destination_account_id: str | None,
         category_id: str | None,
-        payee_name: str,
         description: str,
     ) -> Result:
         try:
@@ -186,7 +181,6 @@ class AutomationService:
                 account_id=account_id,
                 destination_account_id=destination_account_id,
                 category_id=category_id,
-                payee_name=payee_name,
                 description=description,
             )
             return Result.ok("待確認項目已更新。")

@@ -58,8 +58,7 @@ def test_keyset_pagination_search_and_void(tmp_path: Path) -> None:
                 occurred_at=f"2026-06-2{index + 1}T10:00:00+08:00",
                 entry_type="expense",
                 amount=str(index + 1),
-                payee_name="測試商家",
-                description=f"第 {index + 1} 筆",
+                description=f"便利商店第 {index + 1} 筆",
             )
         )
         assert result.success
@@ -67,7 +66,7 @@ def test_keyset_pagination_search_and_void(tmp_path: Path) -> None:
     first = ListTransactions(paths, store).execute(
         TransactionQuery(
             limit=2,
-            transaction_filter=TransactionFilter(search="測試"),
+            transaction_filter=TransactionFilter(search="便利商店"),
         )
     )
     assert len(first.details["transactions"]) == 2
@@ -78,7 +77,7 @@ def test_keyset_pagination_search_and_void(tmp_path: Path) -> None:
             limit=2,
             cursor_occurred_at=cursor["occurred_at"],
             cursor_transaction_id=cursor["transaction_id"],
-            transaction_filter=TransactionFilter(search="測試"),
+            transaction_filter=TransactionFilter(search="便利商店"),
         )
     )
     assert len(second.details["transactions"]) == 1
@@ -95,7 +94,7 @@ def test_backup_and_csv_export(tmp_path: Path) -> None:
             occurred_at="2026-06-24T10:00:00+08:00",
             entry_type="expense",
             amount="85",
-            payee_name="便利商店",
+            description="早餐",
         )
     )
     service = MaintenanceService(paths)
@@ -105,7 +104,7 @@ def test_backup_and_csv_export(tmp_path: Path) -> None:
 
     assert (backup / "ledger.sqlite3").is_file()
     assert (backup / "backup_manifest.json").is_file()
-    assert exported.read_text(encoding="utf-8-sig").startswith("交易時間,類型,帳戶")
+    assert exported.read_text(encoding="utf-8-sig").startswith("交易時間,流向,帳戶")
 
 
 def test_update_uses_revision_and_restore_reverts_later_data(tmp_path: Path) -> None:
@@ -116,7 +115,7 @@ def test_update_uses_revision_and_restore_reverts_later_data(tmp_path: Path) -> 
             occurred_at="2026-06-24T10:00:00+08:00",
             entry_type="expense",
             amount="85",
-            payee_name="原商家",
+            description="原備註",
         )
     )
     transaction = created.details["transaction"]
@@ -128,7 +127,7 @@ def test_update_uses_revision_and_restore_reverts_later_data(tmp_path: Path) -> 
             amount="100",
             account_id="acct_cash",
             category_id="cat_food_711",
-            payee_name="新商家",
+            description="新備註",
         )
     )
     assert updated.success

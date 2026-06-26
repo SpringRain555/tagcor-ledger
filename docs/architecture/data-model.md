@@ -1,64 +1,55 @@
-# 資料模型
+# Data Model
 
-## SQLite
+## SQLite 主資料庫
 
-資料庫位於 `data/ledger.sqlite3`。啟動時套用明確 migration，並啟用 `foreign_keys`、WAL、`busy_timeout` 與短交易。
+主資料庫為 `ledger.sqlite3`。所有帳務變更都透過 SQLite transaction 完成，啟用 foreign keys、WAL 與 busy timeout。
 
-## 核心資料表
+## 主要表
 
-- `accounts`：帳戶名稱、類型、幣別、期初餘額與封存狀態。
-- `categories`：兩層父子分類。
-- `payees`：對象／商家主檔。
-- `transactions`：交易時間、類型、狀態、revision、對象 snapshot、備註與 correlation ID。
-- `account_postings`：每筆交易對帳戶餘額的影響。
-- `category_allocations`：交易金額分配；首輪一筆，未來可支援拆分。
-- `audit_events`：與帳務寫入同 transaction 的操作紀錄。
-- `transaction_fts`：對象、備註、分類與帳戶全文搜尋。
-- `schema_migrations`、`settings`：資料版本與執行設定。
-- `transaction_templates`：收入、支出與轉帳表單模板，金額可為空。
-- `recurring_schedules`：日、週、月、年排程、間隔、結束日與下一個到期日。
-- `scheduled_occurrences`：排程產生的 snapshot，狀態為 pending、confirmed 或 skipped。
-- `balance_snapshots`：單一帳戶在指定時間的實際盤點金額、備註與狀態。
+- `accounts`：帳戶主檔，含幣別、期初餘額、狀態。
+- `categories`：兩層類別/項目；第一層為類別，第二層為項目。
+- `transactions`：交易主檔，含類型、狀態、revision、時間、備註、source、correlation ID。
+- `account_postings`：帳戶異動。收入/支出一筆 posting；轉帳一正一負兩筆 posting。
+- `category_allocations`：類別/項目配置。目前 UI 只建立一筆 allocation，schema 保留未來拆分交易能力。
+- `audit_events`：帳務與設定變更 audit。
+- `transaction_fts`：FTS5 搜尋備註、類別/項目與帳戶。
+- `settings`：ledger 內的一般偏好，例如預設帳戶、預設流向、每頁筆數、盤點提醒。
+- `schema_migrations`：migration registry。
+- `transaction_templates`：交易模板。
+- `recurring_schedules`：週期排程。
+- `scheduled_occurrences`：待確認項目 snapshot。
+- `balance_snapshots`：餘額盤點。
 
-## 金額與 posting
+Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snapshot`。
 
-- TWD 使用整數元，`Money.amount_minor` 不含浮點數。
-- 支出：來源帳戶 posting 為負值。
-- 收入：來源帳戶 posting 為正值。
-- 轉帳：來源為負、目的為正，幣別與金額相同。
-- 帳戶餘額為期初餘額加上所有有效交易 posting。
+## 金額規則
 
-## 餘額盤點與差額
+- 金額使用 minor unit 整數：`Money(amount_minor: int, currency: str)`。
+- 目前固定 TWD。
+- 支出 posting 為負，收入 posting 為正。
+- 轉帳在同一 transaction 內建立來源帳戶負 posting 與目的帳戶正 posting。
 
-- 盤點只保存實際看到的帳戶金額，不建立交易或 posting。
-- 第一筆有效盤點以前，以帳戶期初餘額作為基準。
-- 後續盤點以上一筆同帳戶有效盤點作為基準。
-- 預期金額 = 上次盤點實際金額 + 期間內該帳戶有效 posting 加總。
+## 餘額盤點
+
+盤點不建立交易、不建立 posting。差額計算：
+
+- 第一筆盤點前，以帳戶期初餘額作為基準。
+- 後續盤點以前一筆有效盤點作為基準。
+- 預期金額 = 上次盤點實際金額 + 期間有效 posting 加總。
 - 未解釋差額 = 本次盤點實際金額 - 預期金額。
-- 補記、修改或作廢期間交易後，差額依查詢時資料重新計算，不儲存衍生結果。
-- 作廢盤點保留紀錄與 audit，但不參與後續差額計算。
-
-## 交易修改、替換與作廢
-
-- 一般交易以 optimistic revision 更新。
-- 轉帳修改使用原子替換：建立新轉帳、設定 `replaces_transaction_id`、作廢舊轉帳及寫入 audit 必須同時成功。
-- 作廢只更新狀態與 revision，不刪除 posting 或 audit。
 
 ## Migration registry
 
-- Schema v1：核心帳務、FTS5、settings 與 audit。
-- Schema v2：`transactions.replaces_transaction_id`。
-- Schema v3：模板、週期排程與待確認項目。
-- Schema v4：餘額盤點 `balance_snapshots`。
-- 每個版本只記錄一次於 `schema_migrations`，初始化可安全重跑。
+- v1：核心帳務表、舊 payee schema、FTS、settings、audit。
+- v2：`transactions.replaces_transaction_id`。
+- v3：模板、週期排程、待確認項目。
+- v4：`balance_snapshots`。
+- v5：移除 payee schema、重建 FTS、移除啟動備份設定。
 
-## 排程規則
+系統若偵測到資料庫 schema 比程式支援版本更新，必須拒絕啟動或還原。
 
-- 排程只建立待確認 snapshot，不直接建立交易。
-- 修改排程不更新既有 occurrence。
-- 月排程以開始日為 anchor；目標月份不存在該日時使用月末。
-- 每次最多產生 366 期，`next_due_date` 保留下一個尚未生成日期。
+## 索引與效能
 
-## 索引
-
-交易日期、狀態、帳戶、分類、payee、audit entity 與餘額盤點帳戶時間均有索引。交易頁依 `(occurred_at DESC, transaction_id DESC)` 使用 keyset cursor；盤點頁依 `(account_id, observed_at DESC, snapshot_id DESC)` 顯示最近盤點。
+- 交易依 `(occurred_at DESC, transaction_id DESC)` keyset pagination。
+- 帳戶、類別、狀態、日期與盤點查詢有索引。
+- 文字搜尋走 FTS5，不一次載入所有交易。

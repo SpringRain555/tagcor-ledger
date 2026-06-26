@@ -1,26 +1,33 @@
 # Release Checklist
 
-## 自動基準
+## 功能
 
-- Ruff、mypy、pytest 全部通過。
-- migration、backup、CSV export 與 headless UI smoke 通過。
-- 200,000 筆效能測試符合文件門檻。
+- 快速記帳、交易列表、餘額盤點、待確認、操作設定、系統設定可啟動。
+- 帳戶、類別、項目可新增、重新命名、封存、恢復、刪除未使用。
+- 手動備份、驗證、還原、重製與 CSV 匯出可用。
+- 資料路徑與備份路徑可分開設定，危險路徑會被拒絕。
+- UI 不出現「對象／商家」「分類」「細項」。
 
-## 乾淨 Windows
+## Schema
 
-- 從空資料目錄啟動並建立 SQLite。
-- 可新增支出、收入與兩個帳戶間轉帳。
-- 可新增餘額盤點，補記期間交易後未解釋差額會重新計算。
-- 盤點不會直接改變帳戶餘額；可更新、作廢與匯出盤點 CSV。
-- 關閉重開後餘額與交易仍正確。
-- 組合篩選、上一頁、下一頁、編輯、轉帳替換與作廢可用。
-- 帳戶與分類可封存及恢復。
-- 設定可保存預設帳戶、流向、頁面筆數、啟動備份與餘額盤點提醒。
-- 建立、驗證及還原內建／外部備份成功。
-- 模板預填、複製交易、排程與待確認流程可用。
-- CSV 匯出成功。
+- migration 可從 v1 跑到最新版本。
+- 較新 schema 會被拒絕。
+- v5 後沒有 payees table 與 payee 欄位。
 
-## 舊資料邊界
+## 驗證
 
-- 確認目前版本不會自動讀取 CSV/JSON。
-- 需要舊資料時，先以 0.2.0 轉成 SQLite，再用目前版本升級 schema。
+```powershell
+python -m ruff check --no-cache .
+python -m mypy --no-incremental src
+$env:QT_QPA_PLATFORM = "offscreen"
+python -m pytest -q
+```
+
+## 效能
+
+```powershell
+$env:TAGCOR_RUN_PERFORMANCE = "1"
+python -m pytest -q tests\performance\test_large_ledger.py
+```
+
+目標：新增交易 < 200ms、最近交易頁 < 300ms、常用篩選 < 500ms。

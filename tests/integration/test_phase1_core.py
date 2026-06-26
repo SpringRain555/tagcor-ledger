@@ -25,7 +25,7 @@ from tagcor_ledger.infrastructure.migrations import migrate_v1
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
-def test_schema_v1_migrates_to_v4_and_reruns_safely(tmp_path: Path) -> None:
+def test_schema_v1_migrates_to_v5_and_reruns_safely(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "ledger")
     paths.ledger_dir.mkdir(parents=True)
     with sqlite3.connect(paths.database_path) as connection:
@@ -54,9 +54,20 @@ def test_schema_v1_migrates_to_v4_and_reruns_safely(tmp_path: Path) -> None:
             str(row["name"])
             for row in connection.execute("PRAGMA table_info(balance_snapshots)")
         }
-    assert versions == [1, 2, 3, 4]
+        payees_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'payees'"
+        ).fetchone()
+        fts_columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(transaction_fts)")
+        }
+    assert versions == [1, 2, 3, 4, 5]
     assert "replaces_transaction_id" in transaction_columns
     assert "actual_balance_minor" in balance_columns
+    assert "payee_id" not in transaction_columns
+    assert "payee_name_snapshot" not in transaction_columns
+    assert payees_table is None
+    assert "payee" not in fts_columns
 
 
 def test_replace_transfer_is_atomic_and_links_old_transaction(tmp_path: Path) -> None:
@@ -113,13 +124,13 @@ def test_combined_filters_and_bidirectional_keyset_paging(tmp_path: Path) -> Non
                 occurred_at=f"2026-06-0{day}T10:00:00+08:00",
                 entry_type="expense",
                 amount=str(day),
-                payee_name="篩選商家",
+                description="通勤捷運",
             )
         )
         assert result.success
 
     filters = TransactionFilter(
-        search="篩選",
+        search="通勤",
         date_from="2026-06-01T00:00:00+08:00",
         date_to="2026-06-05T23:59:59+08:00",
         account_id="acct_cash",
@@ -171,7 +182,7 @@ def test_archived_accounts_and_categories_can_be_restored_with_clear_rules(
     assert categories.restore(child).success
 
 
-def test_settings_and_startup_backup_rules(tmp_path: Path) -> None:
+def test_settings_no_longer_contains_startup_backup(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "ledger")
     LedgerStore(paths)
     service = SettingsService(paths)
@@ -180,21 +191,15 @@ def test_settings_and_startup_backup_rules(tmp_path: Path) -> None:
             default_account_id="acct_cash",
             default_entry_type="income",
             transactions_page_size=100,
-            startup_backup="daily",
+            balance_snapshot_reminder=False,
         )
     )
     assert result.success
-    assert service.get().transactions_page_size == 100
-    assert service.startup_backup_due()
-    service.mark_startup_backup()
-    assert not service.startup_backup_due()
-
-    always = replace_settings(service.get(), startup_backup="always")
-    assert service.update(always).success
-    assert service.startup_backup_due()
-    never = replace_settings(service.get(), startup_backup="never")
-    assert service.update(never).success
-    assert not service.startup_backup_due()
+    settings = service.get()
+    assert settings.transactions_page_size == 100
+    assert settings.default_entry_type == "income"
+    assert settings.balance_snapshot_reminder is False
+    assert not hasattr(service, "startup_backup_due")
 
 
 def test_backup_validation_restore_and_newer_schema_rejection(tmp_path: Path) -> None:
@@ -220,7 +225,17 @@ def test_backup_validation_restore_and_newer_schema_rejection(tmp_path: Path) ->
     ).success
     maintenance.restore_backup(backup)
     assert LedgerStore(paths).account_balance_minor("acct_cash") == -10
-    assert len(maintenance.list_backups()) >= 2
+    assert len(maintenance.list_backups()) == 1
+
+    assert add.execute(
+        AddTransactionRequest(
+            occurred_at="2026-06-03T10:00:00+08:00",
+            entry_type="expense",
+            amount="30",
+        )
+    ).success
+    maintenance.restore_backup(backup, create_backup_first=True)
+    assert len(maintenance.list_backups()) == 2
 
     corrupted = maintenance.create_backup()
     with (corrupted / "ledger.sqlite3").open("ab") as handle:
@@ -247,16 +262,3 @@ def test_backup_validation_restore_and_newer_schema_rejection(tmp_path: Path) ->
     assert maintenance.validate_backup(newer)["error_code"] == "BACKUP_SCHEMA_TOO_NEW"
     with pytest.raises(ValueError, match="BACKUP_SCHEMA_TOO_NEW"):
         maintenance.restore_backup(newer)
-
-
-def replace_settings(
-    settings: ApplicationSettings,
-    *,
-    startup_backup: str,
-) -> ApplicationSettings:
-    return ApplicationSettings(
-        default_account_id=settings.default_account_id,
-        default_entry_type=settings.default_entry_type,
-        transactions_page_size=settings.transactions_page_size,
-        startup_backup=startup_backup,
-    )

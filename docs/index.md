@@ -1,37 +1,31 @@
-# TagCor Ledger 文件入口
+# TagCor Ledger 文件索引
 
-本目錄是專案需求、架構、決策、實作進度與維護資訊的單一入口。
+目前規格以本索引列出的文件為準；`docs/archive/phase-0-2/` 僅保留歷史紀錄。
 
-## 使用者文件
+## 快速入口
 
-- [環境設定](environment.md)
-- [發布與手動驗收](release_checklist.md)
-- [改動歷史](changelog.md)
-- [根目錄 README](../README.md)
+- [README](../README.md)：安裝、啟動與使用者操作方式。
+- [CODEX](../CODEX.md)：給維護者與 Codex 的專案規則。
+- [Roadmap](roadmap.md)：已完成與後續 Phase。
+- [Changelog](changelog.md)：階段性變更紀錄。
+- [Release checklist](release_checklist.md)：發版前檢查。
 
-## 維護者文件
+## Requirements
 
-- [穩固核心版需求](requirements/REQ-0001-stable-core.md)
-- [Phase 1–2 需求](requirements/REQ-0002-phase-1-2.md)
-- [Phase 3 餘額盤點需求](requirements/REQ-0003-balance-snapshots.md)
-- [架構總覽](architecture/overview.md)
-- [資料模型](architecture/data-model.md)
-- [儲存配置](architecture/storage-layout.md)
-- [UI 操作流程](architecture/ui-workflows.md)
-- [SQLite 決策](decisions/ADR-0002-sqlite-canonical-store.md)
-- [PySide6 決策](decisions/ADR-0003-pyside6.md)
-- [Roadmap](roadmap.md)
-- [維護者筆記](maintainer_notes.md)
-- [Codex 上下文](../CODEX.md)
+- [REQ-0001 Stable Core](requirements/REQ-0001-stable-core.md)
+- [REQ-0002 Phase 1–2](requirements/REQ-0002-phase-1-2.md)
+- [REQ-0003 Balance Snapshots](requirements/REQ-0003-balance-snapshots.md)
+- [REQ-0004 Phase 4 Settings, Paths, Terms](requirements/REQ-0004-phase-4-settings-paths-terms.md)
 
-## 歷史文件
+## Architecture
 
-Phase 0–2 的原始計劃、CSV 規格、模組規劃與舊 README/CODEX 保存在 `archive/phase-0-2/`，僅供追溯，不再作為現行規格。
+- [Overview](architecture/overview.md)
+- [Data model](architecture/data-model.md)
+- [Storage layout](architecture/storage-layout.md)
+- [UI workflows](architecture/ui-workflows.md)
 
-## 文件放置規則
+## Decisions
 
-- 新需求放在 `requirements/`。
-- 長期架構與資料規格放在 `architecture/`。
-- 重要取捨放在 `decisions/ADR-*.md`。
-- 使用者可理解的改動記錄在 `changelog.md`。
-- 已被取代但仍需追溯的文件移至 `archive/`。
+- [ADR-0001 Documentation history](decisions/ADR-0001-documentation-history.md)
+- [ADR-0002 SQLite canonical store](decisions/ADR-0002-sqlite-canonical-store.md)
+- [ADR-0003 PySide6](decisions/ADR-0003-pyside6.md)

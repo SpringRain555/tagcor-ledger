@@ -1,4 +1,4 @@
-"""Consistent SQLite backup, restore, and human-readable CSV export."""
+"""Consistent SQLite backup, restore, reset, and human-readable CSV export."""
 
 from __future__ import annotations
 
@@ -53,15 +53,30 @@ class MaintenanceService:
         )
         return backup_dir
 
-    def restore_backup(self, backup_dir: Path) -> None:
+    def restore_backup(self, backup_dir: Path, *, create_backup_first: bool = False) -> None:
         validation = self.validate_backup(backup_dir)
         if not validation["valid"]:
             raise ValueError(str(validation["error_code"]))
         database_copy = backup_dir / "ledger.sqlite3"
-        self.create_backup(reason="before_restore")
+        if create_backup_first:
+            self.create_backup(reason="before_restore")
         with sqlite3.connect(database_copy) as source:
             with sqlite3.connect(self.paths.database_path) as destination:
                 source.backup(destination)
+        initialize_database(self.paths)
+
+    def reset_ledger(self, *, create_backup_first: bool = False) -> None:
+        if create_backup_first and self.paths.database_path.exists():
+            self.create_backup(reason="before_reset")
+        for path in (
+            self.paths.database_path,
+            self.paths.database_path.with_name(f"{self.paths.database_path.name}-wal"),
+            self.paths.database_path.with_name(f"{self.paths.database_path.name}-shm"),
+        ):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
         initialize_database(self.paths)
 
     def list_backups(self) -> list[dict[str, Any]]:
@@ -125,17 +140,16 @@ class MaintenanceService:
             rows.extend(
                 {
                     "交易時間": item.occurred_at,
-                    "類型": _entry_type_name(item.entry_type),
+                    "流向": _entry_type_name(item.entry_type),
                     "帳戶": item.account_name,
                     "轉入帳戶": item.destination_account_name or "",
-                    "分類": item.category_name or "",
-                    "細項": item.subcategory_name or "",
-                    "對象／商家": item.payee_name,
+                    "類別": item.category_name or "",
+                    "項目": item.subcategory_name or "",
                     "金額": item.money.to_decimal_string(),
                     "幣別": item.money.currency,
                     "備註": item.description,
-                    "狀態": "有效" if item.status == "active" else "已作廢",
-                    "交易編號": item.transaction_id,
+                    "狀態": "有效" if item.status == "active" else "作廢",
+                    "交易 ID": item.transaction_id,
                 }
                 for item in page
             )
@@ -143,17 +157,16 @@ class MaintenanceService:
                 break
         fieldnames = [
             "交易時間",
-            "類型",
+            "流向",
             "帳戶",
             "轉入帳戶",
-            "分類",
-            "細項",
-            "對象／商家",
+            "類別",
+            "項目",
             "金額",
             "幣別",
             "備註",
             "狀態",
-            "交易編號",
+            "交易 ID",
         ]
         with target.open("w", encoding="utf-8-sig", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)

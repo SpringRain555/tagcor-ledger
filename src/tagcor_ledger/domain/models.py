@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from tagcor_ledger.domain.money import Money
 
@@ -60,7 +61,6 @@ class TransactionRecord:
     category_name: str | None
     subcategory_id: str | None
     subcategory_name: str | None
-    payee_name: str
     description: str
     correlation_id: str
     replaces_transaction_id: str | None = None
@@ -81,7 +81,6 @@ class ApplicationSettings:
     default_account_id: str
     default_entry_type: str
     transactions_page_size: int
-    startup_backup: str
     balance_snapshot_reminder: bool = True
     timezone: str = "Asia/Taipei"
     default_currency: str = "TWD"
@@ -98,7 +97,6 @@ class TransactionTemplate:
     category_id: str | None
     amount_minor: int | None
     currency: str
-    payee_name: str
     description: str
     sort_order: int
 
@@ -114,7 +112,6 @@ class RecurringSchedule:
     category_id: str | None
     amount_minor: int | None
     currency: str
-    payee_name: str
     description: str
     frequency: str
     interval_count: int
@@ -136,9 +133,14 @@ class ScheduledOccurrence:
     category_id: str | None
     amount_minor: int | None
     currency: str
-    payee_name: str
     description: str
     invalid_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SystemPathSettings:
+    ledger_dir: Path
+    backup_dir: Path
 
 
 @dataclass(frozen=True, slots=True)

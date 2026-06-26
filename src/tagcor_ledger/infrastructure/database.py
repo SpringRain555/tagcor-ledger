@@ -5,7 +5,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
-from typing import Iterator
+from types import TracebackType
+from typing import Iterator, Literal
 
 from tagcor_ledger.app.paths import AppPaths, ensure_directories
 from tagcor_ledger.infrastructure.clock import now_iso
@@ -15,9 +16,22 @@ from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION, apply
 SCHEMA_VERSION = LATEST_SCHEMA_VERSION
 
 
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> Literal[False]:
+        try:
+            return super().__exit__(exc_type, exc, tb)
+        finally:
+            self.close()
+
+
 def connect_database(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path, timeout=10.0)
+    connection = sqlite3.connect(path, timeout=10.0, factory=ClosingConnection)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA journal_mode = WAL")
@@ -82,9 +96,7 @@ def _seed_defaults(connection: sqlite3.Connection, version: int) -> None:
         "default_account_id": "acct_cash",
         "default_entry_type": "expense",
         "transactions_page_size": "50",
-        "startup_backup": "daily",
         "balance_snapshot_reminder": "true",
-        "last_startup_backup_date": "",
     }
     for key, value in defaults.items():
         connection.execute(

@@ -25,27 +25,24 @@ def test_templates_support_all_transaction_types_and_optional_amount(
             destination_account_id=None,
             category_id="cat_food_711",
             amount_minor=None,
-            payee_name="早餐店",
             description="",
         ),
         service.new_template(
-            name="薪資",
+            name="薪水",
             entry_type="income",
             account_id=bank_id,
             destination_account_id=None,
             category_id="cat_food_711",
             amount_minor=50_000,
-            payee_name="公司",
             description="",
         ),
         service.new_template(
-            name="提款",
+            name="轉現金",
             entry_type="transfer",
             account_id=bank_id,
             destination_account_id="acct_cash",
             category_id=None,
             amount_minor=3_000,
-            payee_name="",
             description="",
         ),
     ]
@@ -74,14 +71,13 @@ def test_due_generation_is_idempotent_capped_and_preserves_snapshots(
     paths = resolve_app_paths(tmp_path / "ledger")
     service = AutomationService(paths)
     schedule = service.new_schedule(
-        name="每日記帳",
+        name="每日餐費",
         entry_type="expense",
         account_id="acct_cash",
         destination_account_id=None,
         category_id="cat_food_711",
         amount_minor=100,
-        payee_name="舊商家",
-        description="原備註",
+        description="原排程",
         frequency="daily",
         interval_count=1,
         start_date="2020-01-01",
@@ -97,13 +93,12 @@ def test_due_generation_is_idempotent_capped_and_preserves_snapshots(
     edited = RecurringSchedule(
         **{
             **loaded,
-            "payee_name": "新商家",
-            "description": "新備註",
+            "description": "新排程",
         }
     )
     assert service.save_schedule(edited).success
     pending = service.list_pending().details["occurrences"]
-    assert pending[0]["payee_name"] == "舊商家"
+    assert pending[0]["description"] == "原排程"
 
     second = service.generate_due(through_date="2022-01-01")
     assert second.success
@@ -133,7 +128,6 @@ def test_pending_occurrences_can_be_updated_confirmed_skipped_and_batch_confirme
             destination_account_id=None,
             category_id="cat_food_711",
             amount_minor=amount,
-            payee_name=name,
             description="",
             frequency="yearly",
             interval_count=1,
@@ -153,7 +147,6 @@ def test_pending_occurrences_can_be_updated_confirmed_skipped_and_batch_confirme
         account_id="acct_cash",
         destination_account_id=None,
         category_id="cat_food_711",
-        payee_name="修改商家",
         description="修改備註",
     ).success
     assert service.confirm(confirm_item["occurrence_id"]).success
@@ -164,5 +157,5 @@ def test_pending_occurrences_can_be_updated_confirmed_skipped_and_batch_confirme
 
     store = LedgerStore(paths)
     transactions, _ = store.list_transactions(limit=10)
-    updated = next(item for item in transactions if item.payee_name == "修改商家")
+    updated = next(item for item in transactions if item.description == "修改備註")
     assert updated.money.amount_minor == 12345
