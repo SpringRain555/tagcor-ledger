@@ -23,3 +23,9 @@
 - 不建立背景程序或 Windows 工作排程。
 - 產生 occurrence 時必須遵守 366 期上限與唯一 `(schedule_id, due_date)`。
 - 確認 occurrence 與帳務寫入必須在同一 SQLite transaction。
+
+## 餘額盤點
+
+- 盤點是實際金額 snapshot，不是交易、調整或對帳完成狀態。
+- 不得讓盤點寫入 `account_postings`；差額必須依查詢時的有效交易重新計算。
+- 若未來加入「轉成調整交易」，必須作為獨立使用者動作並保留 audit。

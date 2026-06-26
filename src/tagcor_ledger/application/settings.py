@@ -24,6 +24,10 @@ class SettingsService:
             default_entry_type=values.get("default_entry_type", "expense"),
             transactions_page_size=int(values.get("transactions_page_size", "50")),
             startup_backup=values.get("startup_backup", "daily"),
+            balance_snapshot_reminder=values.get(
+                "balance_snapshot_reminder", "true"
+            ).lower()
+            == "true",
         )
 
     def update(self, settings: ApplicationSettings) -> Result:
@@ -47,6 +51,9 @@ class SettingsService:
                     "default_entry_type": settings.default_entry_type,
                     "transactions_page_size": str(settings.transactions_page_size),
                     "startup_backup": settings.startup_backup,
+                    "balance_snapshot_reminder": (
+                        "true" if settings.balance_snapshot_reminder else "false"
+                    ),
                 }
                 for key, value in values.items():
                     connection.execute(

@@ -1,6 +1,14 @@
 # 改動歷史
 
-## Unreleased — 0.4.0
+## Unreleased — 0.5.0
+
+- Schema v4 新增 `balance_snapshots`，支援單一帳戶多次餘額盤點。
+- 新增餘額盤點差額計算：上一筆盤點或期初餘額加期間 posting，對比本次實際金額。
+- 新增餘額盤點頁，可新增、更新、作廢、查看差額期間交易與匯出 CSV。
+- 設定新增啟動後每日盤點提醒開關。
+- README、requirements、architecture、Roadmap 與 release checklist 加入 Phase 3 說明。
+
+## 0.4.0 — Phase 1–2
 
 - Schema v2 新增轉帳替換關聯，轉帳編輯改為原子建立新交易並作廢舊交易。
 - 交易列表新增日期、帳戶、分類、狀態組合篩選及雙向 keyset pagination。

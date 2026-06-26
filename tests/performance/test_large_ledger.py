@@ -6,8 +6,9 @@ from time import perf_counter
 import pytest
 
 from tagcor_ledger.app.paths import resolve_app_paths
+from tagcor_ledger.application.balance import BalanceSnapshotService
 from tagcor_ledger.application.transaction_service import AddTransaction, AddTransactionRequest
-from tagcor_ledger.domain.models import TransactionFilter
+from tagcor_ledger.domain.models import CreateBalanceSnapshotRequest, TransactionFilter
 from tagcor_ledger.infrastructure.database import database_transaction
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -47,18 +48,40 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     )
     filter_elapsed = perf_counter() - started
 
+    balance = BalanceSnapshotService(paths, store)
+    started = perf_counter()
+    snapshot = balance.create(
+        CreateBalanceSnapshotRequest(
+            account_id="acct_cash",
+            observed_at="2026-06-24T21:00:00+08:00",
+            actual_balance="0",
+            note="效能測試",
+        )
+    )
+    snapshot_elapsed = perf_counter() - started
+
+    started = perf_counter()
+    latest_gap = balance.latest_gap("acct_cash")
+    gap_elapsed = perf_counter() - started
+
     print(
         "performance:",
         f"add={add_elapsed * 1000:.2f}ms",
         f"recent={recent_elapsed * 1000:.2f}ms",
         f"filter={filter_elapsed * 1000:.2f}ms",
+        f"snapshot={snapshot_elapsed * 1000:.2f}ms",
+        f"gap={gap_elapsed * 1000:.2f}ms",
     )
     assert result.success
+    assert snapshot.success
+    assert latest_gap.success
     assert len(recent) == 50
     assert len(filtered) == 50
     assert add_elapsed < 0.2
     assert recent_elapsed < 0.3
     assert filter_elapsed < 0.5
+    assert snapshot_elapsed < 0.5
+    assert gap_elapsed < 0.5
 
 
 def _seed_transactions(paths, count: int) -> None:

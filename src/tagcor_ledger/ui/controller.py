@@ -7,6 +7,10 @@ from typing import Any
 
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.application.automation import AutomationService
+from tagcor_ledger.application.balance import (
+    BalanceSnapshotService,
+    UpdateBalanceSnapshotRequest,
+)
 from tagcor_ledger.application.catalogs import AccountService, CategoryService
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.application.settings import SettingsService
@@ -28,6 +32,7 @@ from tagcor_ledger.domain.models import (
     RecurringSchedule,
     TransactionFilter,
     TransactionTemplate,
+    CreateBalanceSnapshotRequest,
 )
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
@@ -45,6 +50,7 @@ class LedgerController:
         self.categories = CategoryService(self.paths, self.store)
         self.settings = SettingsService(self.paths)
         self.automation = AutomationService(self.paths)
+        self.balance = BalanceSnapshotService(self.paths, self.store)
         self.maintenance = MaintenanceService(self.paths)
         self.add_transaction = AddTransaction(self.paths, self.store)
         self.add_transfer = AddTransfer(self.paths, self.store)
@@ -58,6 +64,15 @@ class LedgerController:
             self.maintenance.create_backup(reason="startup")
             self.settings.mark_startup_backup()
         self.startup_generation = self.automation.generate_due()
+        self.refresh_balance_snapshot_reminder_due()
+
+    def refresh_balance_snapshot_reminder_due(self) -> bool:
+        settings = self.settings.get()
+        self.balance_snapshot_reminder_due = (
+            settings.balance_snapshot_reminder
+            and self.balance.reminder_due(settings.default_account_id)
+        )
+        return self.balance_snapshot_reminder_due
 
     def account_options(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
         result = self.accounts.list(include_archived=include_archived)
@@ -247,3 +262,74 @@ class LedgerController:
 
     def batch_confirm_valid(self) -> Result:
         return self.automation.batch_confirm_valid()
+
+    def create_balance_snapshot(
+        self,
+        *,
+        account_id: str,
+        observed_at: str,
+        actual_balance: str,
+        note: str,
+    ) -> Result:
+        return self.balance.create(
+            CreateBalanceSnapshotRequest(
+                account_id=account_id,
+                observed_at=observed_at,
+                actual_balance=actual_balance,
+                note=note,
+            )
+        )
+
+    def update_balance_snapshot(
+        self,
+        snapshot_id: str,
+        *,
+        account_id: str,
+        observed_at: str,
+        actual_balance: str,
+        note: str,
+    ) -> Result:
+        return self.balance.update(
+            snapshot_id,
+            UpdateBalanceSnapshotRequest(
+                account_id=account_id,
+                observed_at=observed_at,
+                actual_balance=actual_balance,
+                note=note,
+            ),
+        )
+
+    def void_balance_snapshot(self, snapshot_id: str) -> Result:
+        return self.balance.void(snapshot_id)
+
+    def list_balance_snapshots(
+        self,
+        *,
+        account_id: str | None = None,
+        status: str = "active",
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        result = self.balance.list(account_id=account_id, status=status, limit=limit)
+        return list(result.details.get("gaps", [])) if result.success else []
+
+    def latest_balance_gap(self, account_id: str) -> dict[str, Any] | None:
+        result = self.balance.latest_gap(account_id)
+        gap = result.details.get("gap") if result.success else None
+        return dict(gap) if isinstance(gap, dict) else None
+
+    def list_balance_gap_transactions(
+        self,
+        *,
+        account_id: str,
+        period_start: str | None,
+        period_end: str,
+    ) -> list[dict[str, Any]]:
+        result = self.balance.list_gap_transactions(
+            account_id=account_id,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        return list(result.details.get("transactions", [])) if result.success else []
+
+    def export_balance_snapshots_csv(self) -> Result:
+        return self.balance.export_csv()

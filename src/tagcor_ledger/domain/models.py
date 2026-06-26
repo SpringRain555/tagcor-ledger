@@ -82,6 +82,7 @@ class ApplicationSettings:
     default_entry_type: str
     transactions_page_size: int
     startup_backup: str
+    balance_snapshot_reminder: bool = True
     timezone: str = "Asia/Taipei"
     default_currency: str = "TWD"
 
@@ -138,3 +139,46 @@ class ScheduledOccurrence:
     payee_name: str
     description: str
     invalid_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class BalanceSnapshot:
+    snapshot_id: str
+    account_id: str
+    account_name: str
+    observed_at: str
+    actual_balance_minor: int
+    currency: str
+    status: str
+    note: str
+    created_at: str
+    updated_at: str
+    correlation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class BalanceGap:
+    snapshot: BalanceSnapshot
+    previous_snapshot_id: str | None
+    previous_observed_at: str | None
+    previous_actual_balance_minor: int | None
+    period_start: str | None
+    period_end: str
+    posting_sum_minor: int
+    expected_balance_minor: int
+    difference_minor: int
+
+
+@dataclass(frozen=True, slots=True)
+class CreateBalanceSnapshotRequest:
+    account_id: str
+    observed_at: str
+    actual_balance: str
+    note: str = ""
+    currency: str = "TWD"
+
+
+@dataclass(frozen=True, slots=True)
+class BalanceSnapshotFilter:
+    account_id: str | None = None
+    status: str = "active"

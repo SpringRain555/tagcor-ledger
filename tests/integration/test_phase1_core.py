@@ -25,7 +25,7 @@ from tagcor_ledger.infrastructure.migrations import migrate_v1
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
-def test_schema_v1_migrates_to_v3_and_reruns_safely(tmp_path: Path) -> None:
+def test_schema_v1_migrates_to_v4_and_reruns_safely(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "ledger")
     paths.ledger_dir.mkdir(parents=True)
     with sqlite3.connect(paths.database_path) as connection:
@@ -46,12 +46,17 @@ def test_schema_v1_migrates_to_v3_and_reruns_safely(tmp_path: Path) -> None:
                 "SELECT version FROM schema_migrations ORDER BY version"
             )
         ]
-        columns = {
+        transaction_columns = {
             str(row["name"])
             for row in connection.execute("PRAGMA table_info(transactions)")
         }
-    assert versions == [1, 2, 3]
-    assert "replaces_transaction_id" in columns
+        balance_columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(balance_snapshots)")
+        }
+    assert versions == [1, 2, 3, 4]
+    assert "replaces_transaction_id" in transaction_columns
+    assert "actual_balance_minor" in balance_columns
 
 
 def test_replace_transfer_is_atomic_and_links_old_transaction(tmp_path: Path) -> None:

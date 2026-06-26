@@ -8,7 +8,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 3
+LATEST_SCHEMA_VERSION = 4
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -222,10 +222,34 @@ def migrate_v3(connection: sqlite3.Connection) -> None:
     )
 
 
+def migrate_v4(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS balance_snapshots (
+            snapshot_id TEXT PRIMARY KEY,
+            account_id TEXT NOT NULL REFERENCES accounts(account_id),
+            observed_at TEXT NOT NULL,
+            actual_balance_minor INTEGER NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'TWD',
+            status TEXT NOT NULL CHECK (status IN ('active', 'voided')),
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            correlation_id TEXT NOT NULL UNIQUE
+        );
+        CREATE INDEX IF NOT EXISTS idx_balance_snapshots_account_observed
+        ON balance_snapshots(account_id, observed_at DESC, snapshot_id DESC);
+        CREATE INDEX IF NOT EXISTS idx_balance_snapshots_status_observed
+        ON balance_snapshots(status, observed_at DESC, snapshot_id DESC);
+        """
+    )
+
+
 MIGRATIONS: dict[int, Migration] = {
     1: migrate_v1,
     2: migrate_v2,
     3: migrate_v3,
+    4: migrate_v4,
 }
 
 

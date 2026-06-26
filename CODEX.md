@@ -5,11 +5,12 @@
 1. `docs/index.md`
 2. `docs/requirements/REQ-0001-stable-core.md`
 3. `docs/requirements/REQ-0002-phase-1-2.md`
-4. `docs/architecture/overview.md`
-5. `docs/architecture/data-model.md`
-6. `docs/architecture/ui-workflows.md`
-7. `docs/roadmap.md`
-8. `docs/changelog.md`
+4. `docs/requirements/REQ-0003-balance-snapshots.md`
+5. `docs/architecture/overview.md`
+6. `docs/architecture/data-model.md`
+7. `docs/architecture/ui-workflows.md`
+8. `docs/roadmap.md`
+9. `docs/changelog.md`
 
 ## 產品定位
 
@@ -32,6 +33,8 @@ TagCor Ledger 是 Windows-first、本機個人記帳工具。產品重點是快�
 - 支出 posting 為負、收入 posting 為正。
 - 轉帳必須產生同額一負一正 posting，總和為零。
 - 作廢交易保留資料並從餘額與預設查詢排除。
+- 餘額盤點只記錄實際金額，不建立交易或 posting，不直接改變帳戶餘額。
+- 盤點差額以查詢時的有效 posting 即時計算，不儲存衍生差額作為真實來源。
 - 分類為兩層；schema 可支援多筆 allocation，但首輪 UI 只建立一筆。
 - 大量交易查詢必須使用索引與 keyset pagination，不可讀取全表後在 Python 排序。
 

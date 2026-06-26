@@ -14,8 +14,8 @@ PySide6 UI
 
 ## 分層
 
-- `domain`：Money、帳戶、分類與交易模型。
-- `application`：交易、設定、模板、排程、待確認、帳戶與分類 use cases。
+- `domain`：Money、帳戶、分類、交易與餘額盤點模型。
+- `application`：交易、餘額盤點、設定、模板、排程、待確認、帳戶與分類 use cases。
 - `infrastructure`：ordered migration、SQLite repository、排程持久化、備份與匯出。
 - `ui`：側邊導覽、快速輸入、交易表格、管理及待確認頁面。
 - `app`：資料路徑、啟動與依賴組裝。
@@ -27,6 +27,7 @@ PySide6 UI
 - 寫入與 audit 同一 transaction。
 - 金額以整數 minor units 儲存。
 - 交易列表使用 keyset pagination。
+- 餘額盤點不直接入帳，差額依查詢時交易 posting 即時計算。
 - CSV 是交換格式，不是執行期資料庫。
 - 排程只在程式啟動或使用者要求時產生待確認項目，不啟動背景程序。
 

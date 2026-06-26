@@ -284,6 +284,217 @@ class QuickEntryPage(QWidget):
         _select_data(self.category, category_id)
 
 
+class BalanceSnapshotPage(QWidget):
+    changed = Signal()
+    record_transaction_requested = Signal()
+
+    def __init__(self, controller: LedgerController) -> None:
+        super().__init__()
+        self.controller = controller
+        self.account = QComboBox()
+        self.status = QComboBox()
+        self.observed_at = QDateTimeEdit(QDateTime.currentDateTime())
+        self.amount = QLineEdit()
+        self.note = QLineEdit()
+        self.result = QLabel()
+        self.summary = QLabel()
+        self.table = QTableView()
+        self.model = RowsModel(
+            ["盤點時間", "帳戶", "實際金額", "預期金額", "未解釋差額", "備註", "狀態"],
+            _balance_gap_values,
+        )
+        self.transactions = QTableView()
+        self.transactions_model = RowsModel(
+            ["時間", "類型", "帳戶", "分類", "對象／商家", "金額"],
+            _transaction_values,
+        )
+        self._build()
+        self.reload_accounts()
+
+    def _build(self) -> None:
+        title = QLabel("餘額盤點")
+        title.setObjectName("pageTitle")
+        help_text = QLabel(
+            "盤點只記錄實際看到的帳戶金額，不會直接入帳。"
+            "補記兩次盤點之間的交易後，未解釋差額會自動重新計算。"
+        )
+        help_text.setWordWrap(True)
+        self.observed_at.setCalendarPopup(True)
+        self.observed_at.setDisplayFormat("yyyy/MM/dd HH:mm")
+        self.amount.setPlaceholderText("例如：1200，可填 0")
+        self.note.setPlaceholderText("可留空，例如：開啟程式時盤點")
+        self.result.setObjectName("errorLabel")
+        self.result.setWordWrap(True)
+        self.summary.setWordWrap(True)
+        for label, value in (("有效", "active"), ("已作廢", "voided"), ("全部", "all")):
+            self.status.addItem(label, value)
+
+        create_button = QPushButton("新增盤點")
+        update_button = QPushButton("更新所選盤點")
+        void_button = QPushButton("作廢所選盤點")
+        export_button = QPushButton("匯出盤點 CSV")
+        refresh_button = QPushButton("重新整理")
+        quick_button = QPushButton("補記交易")
+
+        form = QFormLayout()
+        form.addRow("帳戶", self.account)
+        form.addRow("盤點時間", self.observed_at)
+        form.addRow("目前金額（TWD）", self.amount)
+        form.addRow("備註", self.note)
+        form.addRow("列表狀態", self.status)
+        form.addRow("", self.result)
+
+        actions = QHBoxLayout()
+        for button in (
+            create_button,
+            update_button,
+            void_button,
+            export_button,
+            refresh_button,
+            quick_button,
+        ):
+            actions.addWidget(button)
+        actions.addStretch()
+
+        _setup_table(self.table, self.model)
+        _setup_table(self.transactions, self.transactions_model)
+        layout = QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addWidget(help_text)
+        layout.addLayout(form)
+        layout.addLayout(actions)
+        layout.addWidget(self.summary)
+        layout.addWidget(QLabel("盤點紀錄"))
+        layout.addWidget(self.table)
+        layout.addWidget(QLabel("最近盤點差額期間內的交易"))
+        layout.addWidget(self.transactions)
+
+        self.account.currentIndexChanged.connect(self.refresh)
+        self.status.currentIndexChanged.connect(self.refresh)
+        create_button.clicked.connect(self.create_snapshot)
+        update_button.clicked.connect(self.update_selected)
+        void_button.clicked.connect(self.void_selected)
+        export_button.clicked.connect(self.export_csv)
+        refresh_button.clicked.connect(self.refresh)
+        quick_button.clicked.connect(lambda: self.record_transaction_requested.emit())
+        self.table.selectionModel().selectionChanged.connect(lambda *_: self.load_selected())
+
+    def reload_accounts(self) -> None:
+        _fill_combo(self.account, self.controller.account_options(), "name", "account_id")
+        self.refresh()
+
+    def refresh(self) -> None:
+        account_id = self._account_id()
+        if account_id is None:
+            self.model.replace_rows([])
+            self.transactions_model.replace_rows([])
+            self.summary.setText("尚未建立帳戶。")
+            return
+        gaps = self.controller.list_balance_snapshots(
+            account_id=account_id,
+            status=str(self.status.currentData()),
+            limit=50,
+        )
+        self.model.replace_rows(gaps)
+        latest = self.controller.latest_balance_gap(account_id)
+        if latest is None:
+            self.summary.setText("此帳戶尚未盤點。可先輸入目前金額，之後再慢慢補記交易。")
+            self.transactions_model.replace_rows([])
+            return
+        difference = int(latest["difference_minor"])
+        sign_text = "完全吻合" if difference == 0 else latest["difference"]
+        self.summary.setText(
+            "最近盤點："
+            f"{_display_datetime(str(latest['observed_at']))}；"
+            f"實際 {latest['actual_balance']} TWD，"
+            f"預期 {latest['expected_balance']} TWD，"
+            f"未解釋差額 {sign_text} TWD。"
+        )
+        self.transactions_model.replace_rows(
+            self.controller.list_balance_gap_transactions(
+                account_id=account_id,
+                period_start=cast(str | None, latest.get("period_start")),
+                period_end=str(latest["period_end"]),
+            )
+        )
+
+    def create_snapshot(self) -> None:
+        account_id = self._account_id()
+        if account_id is None:
+            self.result.setText("請先建立帳戶。")
+            return
+        result = self.controller.create_balance_snapshot(
+            account_id=account_id,
+            observed_at=_iso_datetime(self.observed_at),
+            actual_balance=self.amount.text().strip(),
+            note=self.note.text().strip(),
+        )
+        self.result.setText(_result_message(result))
+        if result.success:
+            self.amount.clear()
+            self.note.clear()
+            self.observed_at.setDateTime(QDateTime.currentDateTime())
+            self.changed.emit()
+            self.refresh()
+
+    def update_selected(self) -> None:
+        item = self.model.selected_item(self.table)
+        account_id = self._account_id()
+        if item is None or account_id is None:
+            self.result.setText("請先選擇要更新的盤點。")
+            return
+        result = self.controller.update_balance_snapshot(
+            str(item["snapshot_id"]),
+            account_id=account_id,
+            observed_at=_iso_datetime(self.observed_at),
+            actual_balance=self.amount.text().strip(),
+            note=self.note.text().strip(),
+        )
+        self.result.setText(_result_message(result))
+        if result.success:
+            self.changed.emit()
+            self.refresh()
+
+    def void_selected(self) -> None:
+        item = self.model.selected_item(self.table)
+        if item is None or item["status"] != "active":
+            return
+        answer = QMessageBox.question(self, "確認作廢", "確定要作廢所選餘額盤點嗎？")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        result = self.controller.void_balance_snapshot(str(item["snapshot_id"]))
+        self.result.setText(_result_message(result))
+        if result.success:
+            self.changed.emit()
+            self.refresh()
+
+    def load_selected(self) -> None:
+        item = self.model.selected_item(self.table)
+        if item is None:
+            return
+        _select_data(self.account, item.get("account_id"))
+        try:
+            observed = datetime.fromisoformat(str(item["observed_at"])).astimezone(TAIPEI)
+            self.observed_at.setDateTime(
+                QDateTime.fromString(observed.strftime("%Y/%m/%d %H:%M"), "yyyy/MM/dd HH:mm")
+            )
+        except ValueError:
+            pass
+        self.amount.setText(_minor_text(item["actual_balance_minor"]))
+        self.note.setText(str(item.get("note", "")))
+
+    def export_csv(self) -> None:
+        result = self.controller.export_balance_snapshots_csv()
+        if result.success:
+            self.result.setText(f"餘額盤點 CSV 已匯出：{result.details.get('path')}")
+        else:
+            self.result.setText(_result_message(result))
+
+    def _account_id(self) -> str | None:
+        value = self.account.currentData()
+        return str(value) if isinstance(value, str) else None
+
+
 class TransactionsPage(QWidget):
     duplicate_requested = Signal(dict)
 
@@ -835,6 +1046,7 @@ class SettingsPage(QWidget):
         self.flow = QComboBox()
         self.page_size = QComboBox()
         self.startup_backup = QComboBox()
+        self.balance_snapshot_reminder = QCheckBox("每日提醒記錄預設帳戶目前金額")
         self.result = QLabel()
         self._build()
         self.reload()
@@ -858,6 +1070,7 @@ class SettingsPage(QWidget):
         form.addRow("預設流向", self.flow)
         form.addRow("交易列表每頁", self.page_size)
         form.addRow("啟動備份", self.startup_backup)
+        form.addRow("餘額盤點提醒", self.balance_snapshot_reminder)
         form.addRow("固定幣別", QLabel("TWD"))
         form.addRow("固定時區", QLabel("Asia/Taipei"))
         form.addRow("資料庫", QLabel(str(self.paths.database_path)))
@@ -881,6 +1094,7 @@ class SettingsPage(QWidget):
         _select_data(self.flow, settings.default_entry_type)
         _select_data(self.page_size, settings.transactions_page_size)
         _select_data(self.startup_backup, settings.startup_backup)
+        self.balance_snapshot_reminder.setChecked(settings.balance_snapshot_reminder)
 
     def save(self) -> None:
         result = self.controller.save_settings(
@@ -889,6 +1103,7 @@ class SettingsPage(QWidget):
                 default_entry_type=str(self.flow.currentData()),
                 transactions_page_size=int(self.page_size.currentData()),
                 startup_backup=str(self.startup_backup.currentData()),
+                balance_snapshot_reminder=self.balance_snapshot_reminder.isChecked(),
             )
         )
         self.result.setText(_result_message(result))
@@ -1422,6 +1637,7 @@ class MainWindow(QMainWindow):
         self.navigation = QListWidget()
         self.pages = QStackedWidget()
         self.quick = QuickEntryPage(self.controller)
+        self.balance = BalanceSnapshotPage(self.controller)
         self.pending = PendingPage(self.controller)
         self.transactions = TransactionsPage(self.controller)
         self.accounts = CatalogPage(self.controller, "account")
@@ -1431,6 +1647,7 @@ class MainWindow(QMainWindow):
         self.settings = SettingsPage(self.controller, paths)
         self._build(paths)
         self.refresh_pending_badge()
+        self._show_balance_snapshot_reminder()
 
     def _build(self, paths: AppPaths) -> None:
         self.setWindowTitle("TagCor Ledger")
@@ -1441,6 +1658,7 @@ class MainWindow(QMainWindow):
             pass
         labels = [
             "快速記帳",
+            "餘額盤點",
             "待確認",
             "交易紀錄",
             "帳戶",
@@ -1451,6 +1669,7 @@ class MainWindow(QMainWindow):
         ]
         widgets = [
             self.quick,
+            self.balance,
             self.pending,
             self.transactions,
             self.accounts,
@@ -1474,6 +1693,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"資料庫：{paths.database_path}")
 
         self.quick.saved.connect(self._transaction_changed)
+        self.balance.changed.connect(self._balance_changed)
+        self.balance.record_transaction_requested.connect(self._focus_new)
         self.transactions.duplicate_requested.connect(self._prefill_quick)
         self.accounts.changed.connect(self._catalog_changed)
         self.categories.changed.connect(self._catalog_changed)
@@ -1506,9 +1727,14 @@ class MainWindow(QMainWindow):
 
     def _transaction_changed(self) -> None:
         self.transactions.first_page()
+        self.balance.refresh()
+
+    def _balance_changed(self) -> None:
+        self.balance.refresh()
 
     def _catalog_changed(self) -> None:
         self.quick.reload_options()
+        self.balance.reload_accounts()
         self.transactions.reload_filters()
         self.settings.reload()
         self.automation.refresh()
@@ -1521,10 +1747,13 @@ class MainWindow(QMainWindow):
     def _settings_changed(self) -> None:
         self.quick.apply_defaults()
         self.transactions.first_page()
+        self.balance.reload_accounts()
+        self._show_balance_snapshot_reminder()
 
     def _restored(self) -> None:
         self.quick.reload_options()
         self.quick.apply_defaults()
+        self.balance.reload_accounts()
         self.transactions.reload_filters()
         self.transactions.first_page()
         self.accounts.refresh()
@@ -1535,9 +1764,16 @@ class MainWindow(QMainWindow):
 
     def refresh_pending_badge(self) -> None:
         count = len(self.controller.list_pending())
-        item = self.navigation.item(1)
+        item = self.navigation.item(2)
         if item is not None:
             item.setText(f"待確認（{count}）")
+
+    def _show_balance_snapshot_reminder(self) -> None:
+        if self.controller.refresh_balance_snapshot_reminder_due():
+            self.statusBar().showMessage(
+                "提醒：今天尚未記錄預設帳戶的目前金額，可到「餘額盤點」新增盤點。",
+                10000,
+            )
 
 
 def _fill_combo(
@@ -1586,6 +1822,18 @@ def _display_datetime(value: str) -> str:
         return datetime.fromisoformat(value).strftime("%Y/%m/%d %H:%M")
     except ValueError:
         return value
+
+
+def _balance_gap_values(item: dict[str, Any]) -> list[str]:
+    return [
+        _display_datetime(str(item["observed_at"])),
+        str(item["account_name"]),
+        f"{item['actual_balance']} {item['currency']}",
+        f"{item['expected_balance']} {item['currency']}",
+        f"{item['difference']} {item['currency']}",
+        str(item["note"]),
+        STATUS_NAMES.get(str(item["status"]), str(item["status"])),
+    ]
 
 
 def _transaction_values(item: dict[str, Any]) -> list[str]:

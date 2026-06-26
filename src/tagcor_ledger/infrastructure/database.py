@@ -83,6 +83,7 @@ def _seed_defaults(connection: sqlite3.Connection, version: int) -> None:
         "default_entry_type": "expense",
         "transactions_page_size": "50",
         "startup_backup": "daily",
+        "balance_snapshot_reminder": "true",
         "last_startup_backup_date": "",
     }
     for key, value in defaults.items():

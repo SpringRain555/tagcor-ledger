@@ -18,6 +18,7 @@
 - `transaction_templates`：收入、支出與轉帳表單模板，金額可為空。
 - `recurring_schedules`：日、週、月、年排程、間隔、結束日與下一個到期日。
 - `scheduled_occurrences`：排程產生的 snapshot，狀態為 pending、confirmed 或 skipped。
+- `balance_snapshots`：單一帳戶在指定時間的實際盤點金額、備註與狀態。
 
 ## 金額與 posting
 
@@ -26,6 +27,16 @@
 - 收入：來源帳戶 posting 為正值。
 - 轉帳：來源為負、目的為正，幣別與金額相同。
 - 帳戶餘額為期初餘額加上所有有效交易 posting。
+
+## 餘額盤點與差額
+
+- 盤點只保存實際看到的帳戶金額，不建立交易或 posting。
+- 第一筆有效盤點以前，以帳戶期初餘額作為基準。
+- 後續盤點以上一筆同帳戶有效盤點作為基準。
+- 預期金額 = 上次盤點實際金額 + 期間內該帳戶有效 posting 加總。
+- 未解釋差額 = 本次盤點實際金額 - 預期金額。
+- 補記、修改或作廢期間交易後，差額依查詢時資料重新計算，不儲存衍生結果。
+- 作廢盤點保留紀錄與 audit，但不參與後續差額計算。
 
 ## 交易修改、替換與作廢
 
@@ -38,6 +49,7 @@
 - Schema v1：核心帳務、FTS5、settings 與 audit。
 - Schema v2：`transactions.replaces_transaction_id`。
 - Schema v3：模板、週期排程與待確認項目。
+- Schema v4：餘額盤點 `balance_snapshots`。
 - 每個版本只記錄一次於 `schema_migrations`，初始化可安全重跑。
 
 ## 排程規則
@@ -49,4 +61,4 @@
 
 ## 索引
 
-交易日期、狀態、帳戶、分類、payee 與 audit entity 均有索引。交易頁依 `(occurred_at DESC, transaction_id DESC)` 使用 keyset cursor。
+交易日期、狀態、帳戶、分類、payee、audit entity 與餘額盤點帳戶時間均有索引。交易頁依 `(occurred_at DESC, transaction_id DESC)` 使用 keyset cursor；盤點頁依 `(account_id, observed_at DESC, snapshot_id DESC)` 顯示最近盤點。
