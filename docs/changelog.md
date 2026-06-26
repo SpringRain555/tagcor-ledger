@@ -6,6 +6,7 @@
 - 新增餘額盤點差額計算：上一筆盤點或期初餘額加期間 posting，對比本次實際金額。
 - 新增餘額盤點頁，可新增、更新、作廢、查看差額期間交易與匯出 CSV。
 - 設定新增啟動後每日盤點提醒開關。
+- 修正 Windows/Conda 環境的 PySide6 安裝策略：PySide6 由 Conda 管理，避免 pip 覆蓋 Qt DLL 造成 `QtWidgets` 載入失敗。
 - README、requirements、architecture、Roadmap 與 release checklist 加入 Phase 3 說明。
 
 ## 0.4.0 — Phase 1–2

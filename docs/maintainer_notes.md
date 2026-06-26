@@ -2,7 +2,7 @@
 
 ## 驗證 Python
 
-優先使用 `tagcor-ledger` Conda 環境。若環境尚未同步 PySide6，可先更新 `environment.yaml`，不要以重新加入 PyQt6 解決。
+優先使用 `tagcor-ledger` Conda 環境。PySide6 由 `environment.yaml` 的 Conda dependency 管理，不能放回 `pyproject.toml` 讓 pip 安裝或升級；Windows 下混用 Conda/Pip PySide6 會造成 Qt DLL 載入失敗。若環境已混裝，直接重建環境最乾淨。
 
 ## Workspace Hygiene
 

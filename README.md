@@ -25,10 +25,22 @@ conda activate tagcor-ledger
 python -m pip install -e ".[dev]"
 ```
 
+`environment.yaml` 會安裝 Conda 版 PySide6；`pip install -e ".[dev]"` 只安裝本專案 editable package 與非 Qt Python dependency。不要在同一環境再用 pip 安裝或升級 `PySide6`，否則 Windows 可能因 Qt DLL 衝突導致 `ImportError: DLL load failed while importing QtWidgets`。
+
 既有環境更新：
 
 ```powershell
 conda env update -f environment.yaml --prune
+conda activate tagcor-ledger
+python -m pip install -e ".[dev]"
+```
+
+若既有環境曾混裝 Conda/Pip 版 PySide6，建議直接重建環境：
+
+```powershell
+conda deactivate
+conda env remove -n tagcor-ledger
+conda env create -f environment.yaml
 conda activate tagcor-ledger
 python -m pip install -e ".[dev]"
 ```
