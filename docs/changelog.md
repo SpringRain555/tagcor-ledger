@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 - Phase 4.1
+
+- 將 PySide6 UI 統一為專業深藍深色主題。
+- 新增 `apply_dark_theme(app)`，統一設定 `Fusion` style、字體、palette 與 QSS。
+- 修正 `QTabWidget/QTabBar` 未選取分頁文字與背景對比不足。
+- 側邊欄與備份清單改用不同 objectName，避免全域 `QListWidget` 樣式污染。
+- 新增主要/危險按鈕角色樣式與 UI smoke 測試。
+- README、CODEX、Roadmap、Requirements、Architecture 與 Release Checklist 依 Phase 4.1 重新整理。
+- 清理文件編碼與閱讀順序，當前規格文件維持 UTF-8 可讀內容。
+
 ## 0.6.0 - Phase 4
 
 - 側邊欄重整為 6 個主頁：快速記帳、餘額盤點、待確認、交易紀錄、操作設定、系統設定。

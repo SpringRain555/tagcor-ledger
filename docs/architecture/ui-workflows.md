@@ -13,6 +13,14 @@
 
 待確認項目在側邊欄顯示數量徽章。
 
+## 視覺主題
+
+- 介面固定使用深色主題；目前不提供主題切換。
+- 側邊欄、分頁、表格、下拉選單、清單、彈窗與狀態列都必須維持深色樣式。
+- 主要操作使用藍色視覺層級；危險操作例如作廢、刪除、還原、重製使用紅色視覺層級。
+- 新增 UI 元件時，若用途不同，需指定 objectName，避免全域 QSS 影響其他元件。
+- UI 字體採本機 fallback：`Segoe UI Variable`、`Segoe UI`、`Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`。
+
 ## 快速記帳
 
 支出/收入流程：

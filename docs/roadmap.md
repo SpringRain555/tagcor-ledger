@@ -32,6 +32,15 @@
 - UI 用詞統一為「類別／項目」。
 - 移除 payee/對象商家欄位與 FTS 依賴。
 
+### Phase 4.1：深色主題、UI 可讀性與文件重整
+
+- PySide6 介面統一為專業深藍深色主題。
+- 新增 `apply_dark_theme(app)` 作為主題入口，統一設定 `Fusion` style、字體、palette 與 QSS。
+- 補齊分頁、下拉選單、表格、清單、狀態列、訊息框、捲軸與按鈕角色樣式。
+- 側邊欄與一般清單分離：側邊欄使用 `sidebarNavigation`，備份清單使用 `backupList`，避免全域 `QListWidget` 樣式污染。
+- 字體採本機 fallback，不打包字型檔。
+- README、CODEX、Roadmap、Requirements、Architecture 與 Release Checklist 已整理成一致規格。
+
 ## 後續候選 Phase
 
 ### Phase 5：報表與洞察

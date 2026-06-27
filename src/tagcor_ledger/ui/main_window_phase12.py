@@ -19,6 +19,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -44,11 +45,11 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.app.resources import read_text_resource
 from tagcor_ledger.domain.models import ApplicationSettings
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui.controller import LedgerController
+from tagcor_ledger.ui.theme import apply_dark_theme
 
 
 ENTRY_NAMES = {"expense": "支出", "income": "收入", "transfer": "轉帳"}
@@ -123,6 +124,12 @@ def _setup_table(table: QTableView, model: RowsModel) -> None:
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.horizontalHeader().setStretchLastSection(True)
+    table.setAlternatingRowColors(True)
+
+
+def _set_button_role(button: QPushButton, role: str) -> QPushButton:
+    button.setObjectName(f"{role}Button")
+    return button
 
 
 class QuickEntryPage(QWidget):
@@ -148,6 +155,7 @@ class QuickEntryPage(QWidget):
     def _build(self) -> None:
         title = QLabel("快速記帳")
         title.setObjectName("pageTitle")
+        _set_button_role(self.save_button, "primary")
         for key in ("expense", "income", "transfer"):
             self.flow.addItem(ENTRY_NAMES[key], key)
         self.occurred_at.setCalendarPopup(True)
@@ -300,6 +308,7 @@ class BalanceSnapshotPage(QWidget):
             "盤點只記錄實際看到的帳戶金額，不會直接入帳。"
             "補記兩次盤點之間的交易後，未解釋差額會自動重新計算。"
         )
+        help_text.setObjectName("hintLabel")
         help_text.setWordWrap(True)
         self.observed_at.setCalendarPopup(True)
         self.observed_at.setDisplayFormat("yyyy/MM/dd HH:mm")
@@ -307,6 +316,7 @@ class BalanceSnapshotPage(QWidget):
         self.note.setPlaceholderText("可留空，例如：開啟程式時盤點")
         self.result.setObjectName("errorLabel")
         self.result.setWordWrap(True)
+        self.summary.setObjectName("hintLabel")
         self.summary.setWordWrap(True)
         for label, value in (("有效", "active"), ("已作廢", "voided"), ("全部", "all")):
             self.status.addItem(label, value)
@@ -317,6 +327,8 @@ class BalanceSnapshotPage(QWidget):
         export_button = QPushButton("匯出盤點 CSV")
         refresh_button = QPushButton("重新整理")
         quick_button = QPushButton("補記交易")
+        _set_button_role(create_button, "primary")
+        _set_button_role(void_button, "danger")
 
         form = QFormLayout()
         form.addRow("帳戶", self.account)
@@ -520,6 +532,7 @@ class TransactionsPage(QWidget):
         self.status.addItem("全部", "all")
         apply_button = QPushButton("套用篩選")
         clear_button = QPushButton("清除篩選")
+        _set_button_role(apply_button, "primary")
         filters = QHBoxLayout()
         for filter_widget in (
             self.search,
@@ -537,6 +550,8 @@ class TransactionsPage(QWidget):
         edit_button = QPushButton("編輯／替換")
         duplicate_button = QPushButton("複製到快速記帳")
         void_button = QPushButton("作廢")
+        _set_button_role(edit_button, "primary")
+        _set_button_role(void_button, "danger")
         actions = QHBoxLayout()
         for action_button in (edit_button, duplicate_button, void_button):
             actions.addWidget(action_button)
@@ -789,6 +804,9 @@ class CatalogPage(QWidget):
         rename = QPushButton("重新命名")
         toggle = QPushButton("封存／恢復所選項目")
         delete_button = QPushButton("刪除未使用")
+        _set_button_role(add_button, "primary")
+        _set_button_role(add_child, "primary")
+        _set_button_role(delete_button, "danger")
         row = QHBoxLayout()
         row.addWidget(add_button)
         if self.kind == "category":
@@ -945,15 +963,19 @@ class MaintenancePage(QWidget):
     def _build(self) -> None:
         title = QLabel("備份與匯出")
         title.setObjectName("pageTitle")
+        self.list.setObjectName("backupList")
         create = QPushButton("建立完整備份")
         validate = QPushButton("驗證所選備份")
         restore = QPushButton("還原所選備份")
         external = QPushButton("選擇外部備份資料夾")
         export = QPushButton("匯出交易 CSV")
+        _set_button_role(create, "primary")
+        _set_button_role(restore, "danger")
         buttons = QHBoxLayout()
         for widget in (create, validate, restore, external, export):
             buttons.addWidget(widget)
         self.result.setWordWrap(True)
+        self.result.setObjectName("hintLabel")
         layout = QVBoxLayout(self)
         layout.addWidget(title)
         layout.addLayout(buttons)
@@ -1063,6 +1085,7 @@ class SettingsPage(QWidget):
         for size in (20, 50, 100):
             self.page_size.addItem(f"{size} 筆", size)
         save = QPushButton("儲存設定")
+        _set_button_role(save, "primary")
         form = QFormLayout()
         form.addRow("預設帳戶", self.account)
         form.addRow("預設流向", self.flow)
@@ -1320,6 +1343,7 @@ class AutomationPage(QWidget):
         title = QLabel("模板與排程")
         title.setObjectName("pageTitle")
         tabs = QTabWidget()
+        tabs.setObjectName("contentTabs")
         template_tab = QWidget()
         template_buttons = QHBoxLayout()
         for label, handler in (
@@ -1329,6 +1353,10 @@ class AutomationPage(QWidget):
             ("封存模板", self.archive_template),
         ):
             button = QPushButton(label)
+            if label.startswith(("新增", "套用")):
+                _set_button_role(button, "primary")
+            if label.startswith("封存"):
+                _set_button_role(button, "danger")
             button.clicked.connect(handler)
             template_buttons.addWidget(button)
         _setup_table(self.templates, self.template_model)
@@ -1345,6 +1373,10 @@ class AutomationPage(QWidget):
             ("產生到期待確認項目", self.generate_due),
         ):
             button = QPushButton(label)
+            if label.startswith(("新增", "產生")):
+                _set_button_role(button, "primary")
+            if label.startswith("封存"):
+                _set_button_role(button, "danger")
             button.clicked.connect(handler)
             schedule_buttons.addWidget(button)
         _setup_table(self.schedules, self.schedule_model)
@@ -1559,6 +1591,9 @@ class PendingPage(QWidget):
         skip = QPushButton("略過")
         batch = QPushButton("批次確認有效項目")
         generate = QPushButton("繼續產生到期項目")
+        _set_button_role(edit_confirm, "primary")
+        _set_button_role(batch, "primary")
+        _set_button_role(generate, "primary")
         row = QHBoxLayout()
         for widget in (edit_confirm, skip, batch, generate):
             row.addWidget(widget)
@@ -1634,10 +1669,13 @@ class PathSettingsPage(QWidget):
         title = QLabel("資料路徑")
         title.setObjectName("pageTitle")
         self.result.setWordWrap(True)
+        self.result.setObjectName("hintLabel")
         browse_ledger = QPushButton("選擇記帳資料路徑")
         browse_backup = QPushButton("選擇備份路徑")
         switch_button = QPushButton("切換到既有資料")
         move_button = QPushButton("搬移目前資料")
+        _set_button_role(switch_button, "primary")
+        _set_button_role(move_button, "primary")
 
         form = QFormLayout()
         form.addRow("記帳資料路徑", self.ledger_dir)
@@ -1653,9 +1691,10 @@ class PathSettingsPage(QWidget):
         layout.addWidget(title)
         layout.addLayout(form)
         layout.addLayout(actions)
-        layout.addWidget(
-            QLabel("記帳資料會存放 ledger.sqlite3；備份會建立在獨立備份路徑下。備份路徑不可與資料路徑相同或互相包含。")
-        )
+        hint = QLabel("記帳資料會存放 ledger.sqlite3；備份會建立在獨立備份路徑下。備份路徑不可與資料路徑相同或互相包含。")
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
         layout.addWidget(self.result)
         layout.addStretch()
 
@@ -1700,12 +1739,15 @@ class ResetPage(QWidget):
         title = QLabel("重製與還原")
         title.setObjectName("pageTitle")
         reset_button = QPushButton("重製目前記帳資料")
+        _set_button_role(reset_button, "danger")
         self.result.setWordWrap(True)
+        self.result.setObjectName("hintLabel")
+        hint = QLabel("重製會移除目前記帳資料庫並重新建立預設帳戶與類別；不會刪除備份資料夾。")
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
         layout = QVBoxLayout(self)
         layout.addWidget(title)
-        layout.addWidget(
-            QLabel("重製會移除目前記帳資料庫並重新建立預設帳戶與類別；不會刪除備份資料夾。")
-        )
+        layout.addWidget(hint)
         layout.addWidget(self.backup_first)
         layout.addWidget(reset_button)
         layout.addWidget(self.result)
@@ -1743,6 +1785,7 @@ class OperationSettingsPage(QWidget):
 
     def _build(self) -> None:
         tabs = QTabWidget()
+        tabs.setObjectName("settingsTabs")
         tabs.addTab(self.accounts, "帳戶")
         tabs.addTab(self.categories, "類別")
         tabs.addTab(self.automation, "模板與週期排程")
@@ -1774,6 +1817,7 @@ class SystemSettingsPage(QWidget):
 
     def _build(self) -> None:
         tabs = QTabWidget()
+        tabs.setObjectName("settingsTabs")
         tabs.addTab(self.general, "一般設定")
         tabs.addTab(self.paths, "資料路徑")
         tabs.addTab(self.maintenance, "備份與還原")
@@ -1810,10 +1854,9 @@ class MainWindow(QMainWindow):
     def _build(self, paths: AppPaths) -> None:
         self.setWindowTitle("TagCor Ledger")
         self.resize(1280, 760)
-        try:
-            self.setStyleSheet(read_text_resource("styles.qss"))
-        except FileNotFoundError:
-            pass
+        app = QApplication.instance()
+        if app is not None:
+            apply_dark_theme(cast(QApplication, app))
         labels = [
             "快速記帳",
             "餘額盤點",
@@ -1822,7 +1865,7 @@ class MainWindow(QMainWindow):
             "操作設定",
             "系統設定",
         ]
-        widgets = [
+        widgets: list[QWidget] = [
             self.quick,
             self.balance,
             self.pending,
@@ -1830,16 +1873,22 @@ class MainWindow(QMainWindow):
             self.operation_settings,
             self.system_settings,
         ]
+        self.navigation.setObjectName("sidebarNavigation")
+        self.pages.setObjectName("contentStack")
         self.navigation.addItems(labels)
         for page in widgets:
+            page.setObjectName("pageSurface")
             self.pages.addWidget(page)
         self.navigation.setFixedWidth(180)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
         layout = QHBoxLayout()
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(16)
         layout.addWidget(self.navigation)
         layout.addWidget(self.pages, 1)
         content = QWidget()
+        content.setObjectName("appShell")
         content.setLayout(layout)
         self.setCentralWidget(content)
         self.statusBar().showMessage(f"資料庫：{paths.database_path}")

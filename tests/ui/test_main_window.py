@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from PySide6.QtWidgets import QApplication
+
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.ui.main_window_phase12 import MainWindow
 
@@ -17,6 +19,23 @@ def test_main_window_has_traditional_chinese_navigation(qtbot, tmp_path: Path) -
     assert window.navigation.item(4).text() == "操作設定"
     assert window.navigation.item(5).text() == "系統設定"
     assert window.windowTitle() == "TagCor Ledger"
+
+
+def test_main_window_applies_scoped_dark_theme(qtbot, tmp_path: Path) -> None:
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    app = QApplication.instance()
+    assert app is not None
+    styles = app.styleSheet()
+    assert window.navigation.objectName() == "sidebarNavigation"
+    assert window.pages.objectName() == "contentStack"
+    assert window.system_settings.maintenance.list.objectName() == "backupList"
+    assert "QTabBar::tab" in styles
+    assert "QListWidget#sidebarNavigation" in styles
+    assert "QListWidget#backupList" in styles
+    assert "#0F172A" in styles
 
 
 def test_quick_entry_switches_transfer_fields_and_saves(qtbot, tmp_path: Path) -> None:

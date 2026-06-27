@@ -5,7 +5,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tmp/
 .tmp-mypy/
+test-runtime/
 .uv-cache/
 
 # Virtual environments

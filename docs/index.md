@@ -16,6 +16,7 @@
 - [REQ-0002 Phase 1–2](requirements/REQ-0002-phase-1-2.md)
 - [REQ-0003 Balance Snapshots](requirements/REQ-0003-balance-snapshots.md)
 - [REQ-0004 Phase 4 Settings, Paths, Terms](requirements/REQ-0004-phase-4-settings-paths-terms.md)
+- [REQ-0005 Phase 4.1 Dark UI and Docs](requirements/REQ-0005-phase-4-1-dark-ui-docs.md)
 
 ## Architecture
 

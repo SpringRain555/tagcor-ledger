@@ -10,6 +10,19 @@
 - 不提交使用者帳務資料、備份、匯出或絕對機器路徑。
 - schema 變更必須新增 migration，不可直接假設新資料庫。
 
+## 文件與編碼
+
+- README 是使用者入口；`docs/index.md` 是完整規格入口；CODEX 是維護規則入口。
+- Markdown 一律使用 UTF-8，避免使用會造成 Big5/CP950 轉碼問題的工具覆寫文件。
+- 目前規格應放在 requirements、architecture、roadmap、changelog；`docs/archive/phase-0-2/` 只保留歷史，不再修正文案。
+- 若功能或 UI 行為改變，需同步更新 README、CODEX、Roadmap、Changelog 與相關 requirement/architecture 文件。
+
+## UI 主題
+
+- 深色主題由 `apply_dark_theme(app)` 套用，不要在個別頁面重複讀取 QSS。
+- 不同用途的 Qt 元件需用 objectName 分層；避免用全域 selector 造成側邊欄、一般清單、備份清單互相污染。
+- 新增危險操作按鈕時使用 `dangerButton`；主要提交或產生操作使用 `primaryButton`。
+
 ## 效能
 
 禁止以 Python 載入全部交易後排序或搜尋。新增常用篩選時先確認 query plan 與索引。

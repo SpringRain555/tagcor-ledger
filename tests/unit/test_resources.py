@@ -6,11 +6,15 @@ def test_styles_resource_is_packaged() -> None:
     assert "QLineEdit:focus" in read_text_resource("styles.qss")
 
 
-def test_styles_define_input_text_and_background_colors() -> None:
+def test_styles_define_dark_theme_colors_and_scoped_widgets() -> None:
     styles = read_text_resource("styles.qss")
 
     assert "QLineEdit," in styles
     assert "QComboBox," in styles
-    assert "color: #17202A;" in styles
-    assert "background-color: #FFFFFF;" in styles
-    assert "selection-background-color: #1F6FEB;" in styles
+    assert "color: #E5E7EB;" in styles
+    assert "background-color: #0F172A;" in styles
+    assert "selection-background-color: #2563EB;" in styles
+    assert "QTabBar::tab" in styles
+    assert "QListWidget#sidebarNavigation" in styles
+    assert "QListWidget#backupList" in styles
+    assert "QPushButton#dangerButton" in styles

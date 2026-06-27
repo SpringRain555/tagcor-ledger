@@ -1,5 +1,15 @@
 # CODEX Project Context
 
+## UI 樣式規範（Phase 4.1）
+
+- 專案固定使用深色主題，由 `tagcor_ledger.ui.theme.apply_dark_theme(app)` 套用 `Fusion` style、字體、palette 與 `styles.qss`。
+- 新增 PySide6 UI 元件時，不要用過寬的全域 QSS selector 污染不同用途元件；共用元件若用途不同，需指定 objectName。
+- 側邊欄 `QListWidget` 必須使用 `sidebarNavigation`；備份清單使用 `backupList`；內容堆疊使用 `contentStack`。
+- 主要操作按鈕使用 `primaryButton`；刪除、作廢、重製、還原等高風險操作使用 `dangerButton`。
+- 分頁必須由 QSS 覆蓋 `QTabWidget/QTabBar` 的 selected、unselected、hover、disabled 狀態，避免回到 Qt/Windows 預設顏色。
+- 字體不打包進專案，使用本機 fallback：`Segoe UI Variable`、`Segoe UI`、`Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、sans-serif。
+- UI 變更至少跑 `tests/ui` smoke；樣式資源變更需同步更新 `tests/unit/test_resources.py`。
+
 請先閱讀：
 
 1. `README.md`
@@ -8,12 +18,13 @@
 4. `docs/requirements/REQ-0002-phase-1-2.md`
 5. `docs/requirements/REQ-0003-balance-snapshots.md`
 6. `docs/requirements/REQ-0004-phase-4-settings-paths-terms.md`
-7. `docs/architecture/overview.md`
-8. `docs/architecture/data-model.md`
-9. `docs/architecture/ui-workflows.md`
-10. `docs/architecture/storage-layout.md`
-11. `docs/roadmap.md`
-12. `docs/changelog.md`
+7. `docs/requirements/REQ-0005-phase-4-1-dark-ui-docs.md`
+8. `docs/architecture/overview.md`
+9. `docs/architecture/data-model.md`
+10. `docs/architecture/ui-workflows.md`
+11. `docs/architecture/storage-layout.md`
+12. `docs/roadmap.md`
+13. `docs/changelog.md`
 
 ## 專案定位
 
@@ -62,4 +73,4 @@ python -m pytest -q tests\performance\test_large_ledger.py
 
 ## 文件維護
 
-任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog；舊 Phase 0–2 文件只保留於 archive。
+任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog。Markdown 一律使用 UTF-8；舊 Phase 0–2 文件只保留於 archive，不作為目前規格來源。

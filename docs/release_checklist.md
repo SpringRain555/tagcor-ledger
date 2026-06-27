@@ -7,6 +7,8 @@
 - 手動備份、驗證、還原、重製與 CSV 匯出可用。
 - 資料路徑與備份路徑可分開設定，危險路徑會被拒絕。
 - UI 不出現「對象／商家」「分類」「細項」。
+- UI 固定深色主題可讀；分頁、下拉選單、表格、備份清單、彈窗與狀態列不出現文字/背景同色。
+- 側邊欄與備份清單使用不同 objectName，避免 `QListWidget` 樣式污染。
 
 ## Schema
 
@@ -22,6 +24,12 @@ python -m mypy --no-incremental src
 $env:QT_QPA_PLATFORM = "offscreen"
 python -m pytest -q
 ```
+
+## 文件
+
+- README、CODEX、Roadmap、Changelog、Requirements、Architecture 互相一致。
+- Markdown 以 UTF-8 儲存；當前規格文件不得出現 mojibake 或替換字元。
+- `docs/archive/phase-0-2/` 僅供追溯，不作為目前規格來源。
 
 ## 效能
 
