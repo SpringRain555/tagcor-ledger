@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# D:\Projects 共用 pre-commit 守門
+#
+# 用途：.gitignore 負責讓 git status 乾淨，這個 hook 負責讓大檔進不了歷史。
+#       兩者分工不同 —— .gitignore 可能被改壞、可能漏掉新出現的目錄，
+#       但一旦大檔進了 git 歷史，就得重寫歷史才拿得掉。
+#
+# 來源：沿用 D:\Obsidian\Certs\.githooks\pre-commit 與
+#       ai-artist-webui-aki\scripts\Test-RepositoryPolicy.ps1 的既有做法。
+#
+# 啟用：git config core.hooksPath .githooks
+#
+# 例外：確定要提交大檔時用 git commit --no-verify
+
+LIMIT_MB=5
+LIMIT=$((LIMIT_MB * 1024 * 1024))
+FAILED=0
+
+while IFS= read -r file; do
+	[ -n "$file" ] || continue
+	size=$(git cat-file -s ":$file" 2>/dev/null) || continue
+	if [ "$size" -gt "$LIMIT" ]; then
+		if [ "$FAILED" -eq 0 ]; then
+			echo ""
+			echo "✗ 提交被擋下：以下檔案超過 ${LIMIT_MB} MB"
+			echo ""
+			FAILED=1
+		fi
+		printf '    %6s MB  %s\n' "$((size / 1048576))" "$file"
+	fi
+done <<EOF
+$(git diff --cached --name-only --diff-filter=AM)
+EOF
+
+if [ "$FAILED" -ne 0 ]; then
+	cat <<'MSG'
+
+  這裡的 git 只追蹤「自己寫的東西」。
+  素材與產物（影片／照片／模型權重／資料集／封存 zip）留在磁碟上，由備份保護。
+
+  處理方式：
+    1. 若是素材或產物 → git restore --staged <檔案>，並把它加進 .gitignore
+    2. 確定要提交      → git commit --no-verify
+
+  規範見 D:\Projects\_meta\CONVENTIONS.md 第 6 節。
+
+MSG
+	exit 1
+fi
+
+exit 0

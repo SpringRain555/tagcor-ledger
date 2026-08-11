@@ -22,3 +22,33 @@ env/
 # Build outputs
 build/
 dist/
+
+# ============================================================
+#  以下由 D:\Projects\_meta 於 2026-08-11 統一補上
+#  補的是共用 base 的安全網，原有規則完全保留
+#  規範見 D:\Projects\_meta\CONVENTIONS.md 第 6 節
+# ============================================================
+
+# SQLite 是本專案的主要儲存，資料庫檔一律不追蹤
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+.agents/
+.claude/settings.local.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+*.mp4
+*.zip
+*.7z
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
