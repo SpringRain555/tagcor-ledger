@@ -107,8 +107,10 @@ PySide6 由 `environment.yaml` 的 conda dependency 管理，**不能**放回 `p
 .\Verify.ps1 -Performance    # 加跑 20 萬筆效能測試
 ```
 
-## 編碼
+## 語言與編碼
 
+- **中文一律繁體。** 不得混入簡體字。`tests/unit/test_traditional_chinese.py` 是自動守門，`Verify.ps1` 每次都會跑。它只收「簡體專用」字，繁簡同形的字（量、常、伙、台…）不列入，所以零誤報。
+- 介面文字、錯誤訊息、註解、文件全部繁體中文；程式識別字用英文。
 - `.md` / `.json`：UTF-8 **無 BOM**。
 - `.ps1` / `.psm1`：UTF-8 **必須有 BOM**（PowerShell 5.1 沒有 BOM 會退回 Big5 而整份亂碼）。
 
