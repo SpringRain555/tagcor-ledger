@@ -55,7 +55,10 @@ class QuickEntryPage(QWidget):
         self.error.setObjectName("errorLabel")
         self.error.setWordWrap(True)
 
-        form = QFormLayout()
+        # 留著這個參考是為了 _sync_flow 能用 setRowVisible 一起收掉標籤，
+        # 只對欄位 setVisible 會留下一個沒有內容的「轉入帳戶」標籤。
+        self.form = QFormLayout()
+        form = self.form
         form.addRow("流向", self.flow)
         form.addRow("帳戶", self.account)
         form.addRow("轉入帳戶", self.destination)
@@ -136,10 +139,15 @@ class QuickEntryPage(QWidget):
         self.error.setText(result_message(result))
 
     def _sync_flow(self) -> None:
+        """轉帳沒有類別／項目，非轉帳沒有轉入帳戶 —— 用不到的整列收起來。
+
+        必須用 `setRowVisible` 而不是對欄位 `setVisible`：QFormLayout 的標籤是獨立的
+        widget，只藏欄位會留下一個沒有內容的標籤浮在畫面上。
+        """
         transfer = self.flow.currentData() == "transfer"
-        self.destination.setVisible(transfer)
-        self.category.setVisible(not transfer)
-        self.detail.setVisible(not transfer)
+        self.form.setRowVisible(self.destination, transfer)
+        self.form.setRowVisible(self.category, not transfer)
+        self.form.setRowVisible(self.detail, not transfer)
 
     def _reload_details(self) -> None:
         parent_id = self.category.currentData()

@@ -77,3 +77,21 @@ def test_balance_snapshot_page_creates_snapshot_and_setting(qtbot, tmp_path: Pat
     window.system_settings.general.balance_snapshot_reminder.setChecked(False)
     window.system_settings.general.save()
     assert not window.controller.get_settings().balance_snapshot_reminder
+
+
+def test_quick_entry_hides_the_label_together_with_the_field(qtbot, tmp_path: Path) -> None:
+    """QFormLayout 的標籤是獨立 widget，只藏欄位會留下孤兒標籤（2026-08-18 實機發現）。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    page = window.quick
+
+    page.flow.setCurrentIndex(page.flow.findData("expense"))
+    assert page.form.labelForField(page.destination).isHidden() is True
+    assert page.form.labelForField(page.category).isHidden() is False
+    assert page.form.labelForField(page.detail).isHidden() is False
+
+    page.flow.setCurrentIndex(page.flow.findData("transfer"))
+    assert page.form.labelForField(page.destination).isHidden() is False
+    assert page.form.labelForField(page.category).isHidden() is True
+    assert page.form.labelForField(page.detail).isHidden() is True

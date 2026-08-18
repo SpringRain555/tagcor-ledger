@@ -1,6 +1,11 @@
 # Changelog
 
-## 未發布 - 一鍵啟動
+## 未發布 - 一鍵啟動與快速記帳欄位修正
+
+- **修正快速記帳與模板／排程對話框的孤兒標籤**：流向不是轉帳時仍會顯示「轉入帳戶」標籤。
+  成因是 `QFormLayout` 的標籤是獨立 widget，舊寫法只對欄位 `setVisible`，改用 `setRowVisible`
+  一起收掉整列。這是 Phase 1–2 就存在的缺陷，2026-08-18 實機試用時發現。
+  `tests/ui/test_main_window.py` 已加測試鎖住，並實際退回舊寫法確認測試會失敗。
 
 - 新增 `啟動 TagCor Ledger.cmd` 與 `Launch.ps1`：雙擊即可開程式，不需要先開終端機或
   `conda activate`。用絕對路徑呼叫環境直譯器，並清掉繼承來的 `VIRTUAL_ENV`／`PYTHONPATH`。

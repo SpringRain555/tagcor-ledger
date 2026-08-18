@@ -223,7 +223,9 @@ class DraftDialog(QDialog):
         self.has_end.toggled.connect(self.end_date.setEnabled)
         self.end_date.setEnabled(False)
         self.error.setObjectName("errorLabel")
-        form = QFormLayout()
+        # 同 QuickEntryPage：留參考給 _sync_flow 用 setRowVisible 一起收掉標籤。
+        self.form = QFormLayout()
+        form = self.form
         form.addRow("名稱", self.name)
         form.addRow("流向", self.flow)
         form.addRow("帳戶", self.account)
@@ -344,9 +346,9 @@ class DraftDialog(QDialog):
 
     def _sync_flow(self) -> None:
         transfer = self.flow.currentData() == "transfer"
-        self.destination.setVisible(transfer)
-        self.category.setVisible(not transfer)
-        self.detail.setVisible(not transfer)
+        self.form.setRowVisible(self.destination, transfer)
+        self.form.setRowVisible(self.category, not transfer)
+        self.form.setRowVisible(self.detail, not transfer)
 
     def _reload_details(self) -> None:
         parent_id = self.category.currentData()
