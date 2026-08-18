@@ -139,8 +139,13 @@ function Test-PathDrift {
         Write-Pass "<私人資料樹> 底下沒有未列入 deny 的資料夾"
     } else {
         Add-Failure "以下資料夾在保護範圍內但沒有 deny 規則，agent 可能讀得到："
-        foreach ($item in $unlisted) { Write-Note $item }
-        Write-Note '把它們加進 .claude\settings.json 的 permissions.deny。'
+        foreach ($item in $unlisted) {
+            $rule = ConvertTo-RulePath $item
+            Write-Note "$item"
+            # 一定要用 /** 結尾。單一 * 在 glob 裡只 match 一層，
+            # 會涵蓋資料夾本身卻涵蓋不到裡面的檔案。
+            Write-Note "    加進 permissions.deny：`"Read($rule/**)`", `"Glob($rule/**)`", `"Grep($rule/**)`""
+        }
     }
 }
 

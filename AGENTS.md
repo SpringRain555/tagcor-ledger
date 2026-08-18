@@ -26,7 +26,23 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 - **不可讀、不可寫**：`<私人資料樹>\` 底下**其他任何**資料夾。
 - 即使在允許範圍內，**不要主動把實際交易金額與備註貼進對話**，除非使用者要求。談論資料時用筆數、日期範圍、schema 這類不外洩內容的描述。
 
-`.claude\settings.json` 有對應的 deny 規則。**但要理解它的極限**：deny 攔得住 Read／Glob／Grep／Edit／Write，**攔不住 shell** —— `Get-Content`、`cat`、`type`、`Select-String` 都能讀檔，而任意 shell 指令無法可靠地用 pattern 比對。deny 防的是手滑，真正的依據是這一節的成文規則。
+### `.claude\settings.json` 怎麼設、以及它的三個極限
+
+deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做不到「deny 整個 `<私人資料樹>\**` 但 allow 其中一個子樹」—— 那樣寫會連允許的資料夾一起擋掉。因此是三層：
+
+| 層 | 規則 | 作用 |
+|---|---|---|
+| `deny` | `Edit`／`Write` on `<私人資料樹>/**` | **寫入絕對禁止，無例外。** 資料只由 App 自己寫，agent 永遠不需要寫 |
+| `ask` | `Read`／`Glob`／`Grep` on `<私人資料樹>/**` | 讀取一律先問過使用者 |
+| `allow` | 同三項 on `<資料根目錄>/**` | 指定資料夾免問 |
+
+新增 deny 條目時**一定要用 `/**` 結尾**。單一 `*` 在 glob 裡只 match 一層，`Read(<私人資料樹>/X/*)` 會涵蓋 `X` 這個資料夾本身卻涵蓋不到 `X\secret.txt`。
+
+**三個極限，不要當成滴水不漏：**
+
+1. **攔不住 shell。** `Get-Content`、`cat`、`type`、`Select-String` 都能讀檔，任意 shell 指令無法可靠地用 pattern 比對。用 shell 時靠的是這一節的成文規則。
+2. **改了要重啟才生效。** Claude Code 的設定監看只涵蓋 session 啟動時就存在的設定檔。新建或改動 `.claude\settings.json` 之後，要重開 session（或開一次 `/config`）才會載入。
+3. **新資料夾不會自動被擋。** `<私人資料樹>\` 底下新增的資料夾不在 deny 清單裡，只會被 `ask` 攔下來問。`Verify.ps1` 的漂移檢查會列出它們並印出該加的規則字串。
 
 ### 改資料路徑是三步，不是一步
 
