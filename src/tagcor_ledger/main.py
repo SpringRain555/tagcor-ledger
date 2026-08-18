@@ -39,6 +39,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def main_gui(argv: Sequence[str] | None = None) -> int:
+    """`gui-scripts` 與 Windows 捷徑的進入點：預設就是開視窗。
+
+    不能讓 `gui-scripts` 直接指向 `main` —— `gui-scripts` 產生的 exe 是用 pythonw 建的、
+    **沒有主控台**，而 `main()` 少了 `--gui` 只會把資訊印到不存在的 stdout 然後結束。
+    使用者雙擊看到的是「什麼都沒發生」。
+    """
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if "--gui" not in arguments:
+        arguments.append("--gui")
+    return main(arguments)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     context = bootstrap(data_dir=args.data_dir, ensure_dirs=args.init_data)

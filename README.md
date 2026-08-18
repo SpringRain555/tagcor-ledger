@@ -50,11 +50,38 @@ python -m pip install -e ".[dev]"
 
 ## 啟動
 
-一般使用：
+### 一鍵啟動（建議）
+
+**雙擊專案根目錄的 `啟動 TagCor Ledger.cmd`。** 不用先開終端機、不用 `conda activate`。
+
+它會自己找到 conda 環境的直譯器（絕對路徑）、清掉繼承來的 `VIRTUAL_ENV`／`PYTHONPATH`、
+跑一次前置檢查確認套件與資料路徑可用，然後開視窗。出問題時會停在畫面上說明原因與修法，
+不是一閃而過。
+
+想在桌面放捷徑：
 
 ```powershell
+.\Launch.ps1 -CreateShortcut
+```
+
+conda 裝在非標準位置時，設一次環境變數即可：
+
+```powershell
+setx TAGCOR_PYTHON "X:\path\to\envs\tagcor-ledger\python.exe"
+```
+
+### 從終端機啟動
+
+```powershell
+conda activate tagcor-ledger
 python -m tagcor_ledger --gui
 ```
+
+> **注意：終端機裡若已經啟動了別的專案的 venv，這個做法會失敗。**
+> venv 的 `Scripts` 排在 PATH 最前面，`conda activate` 之後它仍然排在前面 ——
+> 兩個環境的名字都會出現在提示字元上（`(.venv) (tagcor-ledger)`），但 `python` 解析到的
+> 是 venv 那一個，症狀是 `No module named tagcor_ledger`。
+> 用 `(Get-Command python).Source` 可以確認實際跑的是哪一個；先 `deactivate` 或改用一鍵啟動。
 
 開發或測試時指定資料根目錄：
 

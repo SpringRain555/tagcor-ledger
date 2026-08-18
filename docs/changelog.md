@@ -1,5 +1,16 @@
 # Changelog
 
+## 未發布 - 一鍵啟動
+
+- 新增 `啟動 TagCor Ledger.cmd` 與 `Launch.ps1`：雙擊即可開程式，不需要先開終端機或
+  `conda activate`。用絕對路徑呼叫環境直譯器，並清掉繼承來的 `VIRTUAL_ENV`／`PYTHONPATH`。
+  已在乾淨環境與刻意重現的 venv 污染環境下各實測通過。
+- `Launch.ps1 -CreateShortcut` 可在桌面建立捷徑；`TAGCOR_PYTHON` 可覆寫直譯器位置。
+- **修正 `[project.gui-scripts]` 指向錯誤的函式。** 它原本指向 `main:main`，而 `main()`
+  少了 `--gui` 只會印文字然後結束 —— `gui-scripts` 產生的 exe 沒有主控台，所以雙擊
+  `tagcor-ledger.exe` 的實際效果是「什麼都沒發生」。改指向新的 `main_gui()`。
+- 新增 `tests/unit/test_entrypoints.py` 守住上述兩者，以及 `.ps1` 的 BOM 與 `.cmd` 的純 ASCII。
+
 ## 0.7.0 - 徹底重構（行為零改變）
 
 **這一版沒有任何功能變更。** 50 個既有測試斷言一個字都沒改，全部通過 —— 那是「純搬移」的證明。

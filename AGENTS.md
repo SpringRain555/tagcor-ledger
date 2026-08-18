@@ -98,12 +98,16 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 環境是 **conda**（`environment.yaml` 的 `tagcor-ledger`），專案裡沒有 `.venv`。
 PySide6 由 conda dependency 管理，**不能**放回 `pyproject.toml` 讓 pip 安裝 —— Windows 下混用 conda/pip 的 PySide6 會造成 Qt DLL 載入失敗。
 
+**人要開程式：雙擊 `啟動 TagCor Ledger.cmd`。** 它用絕對路徑呼叫環境直譯器，不碰 PATH。
+
 **人在互動式 PowerShell 裡：先啟動環境。**
 
 ```powershell
 conda activate tagcor-ledger
 python -m tagcor_ledger --gui
 ```
+
+但**終端機裡若已經啟動了別的專案的 venv，這樣會失敗** —— venv 的 `Scripts` 排在 PATH 最前面，`conda activate` 之後仍然是它贏，兩個環境名稱都出現在提示字元上卻跑到錯的直譯器。先 `deactivate`，或直接用一鍵啟動。
 
 **agent 在工具 shell 裡：一律用完整路徑，不要用 `conda activate`。**
 

@@ -34,7 +34,7 @@ SKIP_DIRS = {
     ".venv",
 }
 
-SCANNED_SUFFIXES = {".md", ".py", ".json", ".ps1", ".toml", ".yaml", ".yml", ".qss"}
+SCANNED_SUFFIXES = {".md", ".py", ".json", ".ps1", ".cmd", ".toml", ".yaml", ".yml", ".qss"}
 
 SIMPLIFIED_ONLY = set(
     "个们为这说关边现时从会单实义检测计认证记录数据库备简体转换类项资设误处"

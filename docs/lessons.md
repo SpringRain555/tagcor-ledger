@@ -16,6 +16,36 @@
 
 ---
 
+## 2026-08-18 兩個環境都「啟動成功」，`python` 卻是第三個
+
+**情境**：照 README 開程式 —— `conda activate tagcor-ledger` 之後 `python -m tagcor_ledger --gui`，得到 `No module named tagcor_ledger`。
+
+**做了什麼**：那個終端機裡本來就開著另一個專案的 venv，提示字元是 `(.venv) (base)`。`conda activate` 之後變成 `(.venv) (tagcor-ledger)`。
+
+**為什麼失敗**：venv 啟動時把自己的 `Scripts` 放在 PATH **最前面**，`conda activate` 之後它仍然排在前面。**兩個都回報成功、提示字元也都顯示著，但 `python` 解析到的是 venv 那一個。** 錯誤訊息說「沒有這個模組」，指向的方向完全是錯的 —— 模組裝得好好的，只是裝在另一個直譯器裡。
+
+同一個根因還有第二種形態：agent 的工具 shell 以 `-NonInteractive` 啟動、不載入 `profile.ps1`，`conda init powershell` 的 hook 因此沒生效，`conda activate` 會跑在子 process 裡改不到父層環境 —— **回報成功、退出碼 0、實際上什麼都沒換**。
+
+**結論**：新增 `Launch.ps1` 與 `啟動 TagCor Ledger.cmd`，一律用**絕對路徑**呼叫 conda 環境的直譯器，啟動前把繼承來的 `VIRTUAL_ENV`／`PYTHONHOME`／`PYTHONPATH` 清掉，並在啟動前跑一次 `--json` 當前置檢查。已在乾淨環境與刻意重現的 venv 污染環境下各實測通過。
+
+**不要再做**：不要用「`conda activate` 沒報錯」當作環境切換成功的證據。要確認就看 `(Get-Command python).Source`，或者根本不要依賴 PATH。
+
+---
+
+## 2026-08-18 PowerShell 5.1 把原生程式的 stderr 包成例外，錯誤處理因此輪不到
+
+**情境**：寫 `Launch.ps1` 的前置檢查，要在套件沒裝時顯示一句人看得懂的繁中說明。
+
+**做了什麼**：`$ErrorActionPreference = 'Stop'` 之下寫 `$stdout = & $python @jsonArgs 2>&1`，然後 `if ($LASTEXITCODE -ne 0) { 顯示訊息 }`。
+
+**為什麼失敗**：PowerShell 5.1 把**原生程式**被導向的 stderr 每一行包成 `ErrorRecord`（`NativeCommandError`）。在 `Stop` 之下那等於直接丟例外，**底下的 `if` 根本沒執行到**。使用者看到的是 PowerShell 的堆疊與 `At Launch.ps1:127 char:11`，不是我寫的說明。測到這個純粹是因為刻意跑了一次失敗情境 —— 只測成功路徑的話這段程式碼會一直是壞的，而且只在真的出事時才現形。
+
+**結論**：呼叫前後把 `$ErrorActionPreference` 暫時降成 `Continue`，並用 `ConvertTo-PlainText` 只取 `ErrorRecord` 的 `.Exception.Message`，濾掉位置資訊那些雜訊。
+
+**不要再做**：不要在 `$ErrorActionPreference = 'Stop'` 之下對原生程式用 `2>&1`。**錯誤處理路徑沒有實際跑過就等於沒寫**。
+
+---
+
 ## 2026-08-18 守門字表的誤報，不拿真的語料跑過就找不到
 
 **情境**：Stage 3 拆檔時在 `sqlite_store.py` 的 docstring 寫了「繼承」，`test_no_simplified_chinese_in_project` 立刻失敗。

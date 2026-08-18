@@ -22,7 +22,9 @@ dev = [
 ]
 
 [project.gui-scripts]
-tagcor-ledger = "tagcor_ledger.main:main"
+# 必須指向 main_gui 而不是 main：gui-scripts 產生的 exe 沒有主控台，
+# 而 main() 少了 --gui 只會印文字然後結束，使用者看到的是「什麼都沒發生」。
+tagcor-ledger = "tagcor_ledger.main:main_gui"
 
 [tool.setuptools.packages.find]
 where = ["src"]
