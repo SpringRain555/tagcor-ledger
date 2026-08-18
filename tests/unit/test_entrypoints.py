@@ -56,6 +56,26 @@ def test_packaging_points_the_gui_script_at_main_gui() -> None:
     }
 
 
+def test_version_is_the_same_number_everywhere() -> None:
+    """版本寫在兩個地方，只改一個是無聲的。
+
+    `pyproject.toml` 決定安裝出來的 metadata，`__init__.py` 決定 `--json`、日誌起始行與
+    診斷資訊匯出檔印出來的數字。只改前者的話，程式**照樣跑、照樣全綠**，只是每一份
+    交出去的診斷檔上面都寫著舊版號 —— 而那正是要拿來判斷「你跑的是哪一版」的東西。
+
+    2026-08-18 Stage 7 真的發生過：`pyproject.toml` 已經是 0.11.0，`--json` 還印 0.10.0。
+    """
+    from tagcor_ledger import __version__
+
+    config = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["project"]["version"] == __version__
+
+    changelog = (PROJECT_ROOT / "docs" / "changelog.md").read_text(encoding="utf-8")
+    assert f"\n## {__version__} " in changelog, (
+        f"changelog.md 沒有 {__version__} 這一節 —— 版本升了就要寫它改了什麼"
+    )
+
+
 def test_one_click_launcher_files_exist_and_are_encoded_correctly() -> None:
     launcher = PROJECT_ROOT / "啟動 TagCor Ledger.cmd"
     script = PROJECT_ROOT / "Launch.ps1"
