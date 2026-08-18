@@ -1,0 +1,13 @@
+# 批次 2：台灣產品（P6 繁中用詞 / P8 電子票證 / P1 分類層級的台灣實作）
+# 官方站優先；部落格教學文只作 C 級佐證，用來補官方站沒寫的介面用詞。
+
+# 官方（A 級）
+https://money.cmoney.tw/cwmoney
+https://www.andromoney.com/
+
+# 反面對照：自動同步型（本專案明確拒絕的方向）
+https://www.moneybook.com.tw/
+
+# C 級佐證：介面用詞與操作流程
+https://www.pkstep.com/andromoney-app/
+https://www.pkstep.com/cwmoney-app/

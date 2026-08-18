@@ -11,6 +11,13 @@
 - [Release checklist](release_checklist.md)：發版前檢查。
 - [Lessons](lessons.md)：**失敗紀錄（append-only）**。踩過的坑與明確的「不要再做」清單。
 
+## Research
+
+證據，不是規格。每個判讀都附抓取日期，**過期的結論要重查而不是沿用**。
+
+- [市面產品對照](research/market-scan.md)：借什麼、不借什麼、為什麼。
+- [問題拆解與來源地圖](research/questions.md)｜[查詢紀錄](research/query-log.md)｜[未解決清單](research/open-questions.md)
+
 ## Requirements
 
 - [REQ-0001 Stable Core](requirements/REQ-0001-stable-core.md)

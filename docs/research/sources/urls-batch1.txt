@@ -1,0 +1,22 @@
+# 批次 1：開源專案官方文件（A 級來源）。每網域 <= 8 個請求。
+# P1 分類層級 / P3 對帳 / P4 週期交易 / P5 初次設定 / P7 帳戶類型
+
+# Firefly III —— P1 P4 P7
+https://docs.firefly-iii.org/explanation/financial-concepts/accounts/
+https://docs.firefly-iii.org/references/firefly-iii/account-types/
+https://docs.firefly-iii.org/explanation/financial-concepts/recurring/
+https://docs.firefly-iii.org/explanation/data-classification/best-practices/
+
+# Actual Budget —— P3 P5 P1 P7
+https://actualbudget.org/docs/accounts/reconciliation/
+https://actualbudget.org/docs/getting-started/starting-fresh/
+https://actualbudget.org/docs/budgeting/
+https://actualbudget.org/docs/accounts/
+
+# GnuCash —— P3 對帳（支柱）
+https://www.gnucash.org/docs/v5/C/gnucash-guide/cbook-reconacct1.html
+https://www.gnucash.org/docs/v5/C/gnucash-manual/acct-reconcile.html
+
+# 純文字記帳 —— P1 帳戶階層的另一個極端
+https://beancount.github.io/docs/beancount_language_syntax/
+https://plaintextaccounting.org/Choosing-accounts

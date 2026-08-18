@@ -19,6 +19,13 @@ env/
 .local-data/
 .local-data-*/
 
+# 研究抓取的第三方內容：可用 tools/fetch.py 依 manifest 重抓，不進版控。
+# 追蹤的是「出處」而不是「內容」—— manifest.jsonl 有 URL、抓取時間與 SHA-256，
+# 重抓後雜湊對得上就證明來源沒變、對不上就代表該來源已改版、結論需重新確認。
+# 這樣既保有可重驗性，也不把別人的網頁內容轉載進本專案。
+docs/research/sources/raw/
+docs/research/sources/text/
+
 # Build outputs
 build/
 dist/
