@@ -1,5 +1,18 @@
 # Changelog
 
+## 未發布 - 文件骨架
+
+- 新增 `docs/architecture/state-machines.md`：八個狀態機的完整轉移表，含刻意不做的推論。
+  記錄了 `EntryType.ADJUSTMENT` 自 v1 起空置至今，作為「先加著以後再說」的實例。
+- 新增 `docs/architecture/error-codes.md`：**83 個錯誤碼**全部有成因與「使用者該怎麼做」。
+  由 `tests/unit/test_error_codes.py` 用 AST 掃描比對，程式與文件不同步會讓測試失敗。
+- 新增 `docs/architecture/glossary.md`：用詞對照表，含「不要叫成什麼」與「刻意不存在的詞」。
+- 新增 `docs/operations/go-live-2026-09.md`：九月上線操作清單，不需寫任何程式。
+- 新增 REQ-0006～REQ-0010 與 ADR-0004～ADR-0009。
+- `docs/index.md` 改寫：加入人類與 LLM 兩條閱讀路線，以及每份文件的權威範圍。
+- 新增 `docs/research/`：市面產品調查（Stage 1），17 個來源含 SHA-256 與抓取時間。
+- 新增 `tools/fetch.py`：有節奏紀律與出處紀錄的擷取器，Stage 6 法規庫沿用。
+
 ## 0.6.2 - 資料與程式位置分離
 
 - 帳務資料移出程式所在位置，改到 `<資料根目錄>`；專案資料夾之後若推上 remote 只會公開程式。

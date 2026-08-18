@@ -116,12 +116,17 @@ PySide6 由 `environment.yaml` 的 conda dependency 管理，**不能**放回 `p
 
 ## 閱讀順序
 
-1. `README.md`
-2. `docs/index.md`
-3. `docs/requirements/REQ-0001` … `REQ-0005`
-4. `docs/architecture/overview.md`、`data-model.md`、`ui-workflows.md`、`storage-layout.md`
-5. `docs/roadmap.md`、`docs/changelog.md`
+**要動程式的話照這個順序，不要跳：**
 
+1. 這一份（`AGENTS.md`）—— 硬規則與邊界
+2. `docs/architecture/state-machines.md` —— 有哪些狀態、哪些轉移合法、哪裡刻意不推論
+3. `docs/architecture/data-model.md` —— 表與欄位
+4. `docs/architecture/error-codes.md` —— 每個錯誤的成因與使用者該怎麼做
+5. `docs/architecture/glossary.md` —— 什麼該叫什麼，以及**不該叫什麼**
+6. `docs/lessons.md` —— 踩過的坑。**動 migration 或路徑之前必讀**
+7. 才是相關的 `docs/requirements/REQ-XXXX` 與 `docs/decisions/ADR-XXXX`
+
+`docs/index.md` 有完整索引與每份文件的權威範圍。
 `docs/archive/phase-0-2/` 只是歷史紀錄，**不是**現行規格。
 
 ## 文件維護
