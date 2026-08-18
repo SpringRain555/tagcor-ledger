@@ -1,0 +1,90 @@
+{
+  "_readme": [
+    "法規參考庫的權威來源清單。這個檔案是手寫的，corpus 與 reference.sqlite3 是產生物。",
+    "格式用 JSON 而不是計畫裡寫的 YAML —— research runtime 沒有 pyyaml，而為了一個",
+    "設定檔多裝一個依賴不划算。專案本來就用 JSON 當設定格式（system_paths.json）。",
+    "",
+    "pcode 是全國法規資料庫的法規代碼。**它們查不到關鍵字搜尋**（該站的",
+    "LawSearchResult.aspx 回傳頁面沒有 pcode 連結），一律用 WebSearch 加",
+    "allowed_domains 找出來，見 D:\\Obsidian\\Competitions\\資料蒐集與爬蟲注意事項.md。",
+    "",
+    "articles 是「這個專案真的會查的條文」。不收整部法規全文 —— 全文的人工複查幾乎",
+    "不可行，而且全文搜尋會被大量不相干條文淹沒。"
+  ],
+  "fetched_via": "tools/law_sync/fetch_laws.py",
+  "law_full_text_url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode={pcode}",
+  "law_article_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode={pcode}&flno={flno}",
+  "topics": [
+    {
+      "topic": "income-tax",
+      "title": "綜合所得稅",
+      "laws": [
+        {
+          "pcode": "G0340003",
+          "name": "所得稅法",
+          "agency": "財政部",
+          "articles": ["4", "5", "14", "17", "88"],
+          "why": "免稅所得、免稅額與稅率級距、各類所得分類、扣除額（含儲蓄投資特別扣除額）、扣繳"
+        }
+      ]
+    },
+    {
+      "topic": "postal-savings",
+      "title": "郵政儲金與存款",
+      "laws": [
+        {
+          "pcode": "K0050015",
+          "name": "郵政儲金匯兌法",
+          "agency": "交通部／金管會",
+          "articles": ["3", "12", "19", "20"],
+          "why": "存簿／定期／劃撥儲金的定義、計息與存款保障相關規定"
+        }
+      ]
+    },
+    {
+      "topic": "e-payment",
+      "title": "電子票證與電子支付",
+      "laws": [
+        {
+          "pcode": "G0380237",
+          "name": "電子支付機構管理條例",
+          "agency": "金管會",
+          "articles": ["3", "4", "14"],
+          "why": "儲值卡定義、業務範圍、儲值款項的保管。電子票證發行管理條例已於 2021 併入本條例"
+        }
+      ]
+    },
+    {
+      "topic": "insurance-and-gift-tax",
+      "title": "勞健保與贈與稅",
+      "laws": [
+        {
+          "pcode": "L0060001",
+          "name": "全民健康保險法",
+          "agency": "衛福部健保署",
+          "articles": ["31"],
+          "why": "二代健保補充保險費的所得類別與費率授權"
+        },
+        {
+          "pcode": "L0060027",
+          "name": "全民健康保險扣取及繳納補充保險費辦法",
+          "agency": "衛福部健保署",
+          "articles": ["3", "6"],
+          "why": "補充保險費的扣取門檻與計算方式"
+        },
+        {
+          "pcode": "G0340072",
+          "name": "遺產及贈與稅法",
+          "agency": "財政部",
+          "articles": ["22", "19"],
+          "why": "贈與稅免稅額與稅率"
+        }
+      ]
+    }
+  ],
+  "known_limits": [
+    "免稅額、扣除額、課稅級距的**金額**多半不寫在法律條文裡，而是由財政部每年公告。",
+    "本庫收的是法律條文；實際數字每年要另行查證財政部稅務入口網的公告。",
+    "郵局牌告利率是浮動的，不屬於法規，不收進本庫。"
+  ]
+}

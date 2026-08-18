@@ -59,3 +59,8 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# 法規參考庫的產生物 —— 隨時可以從 reference/corpus/ 重建。
+# corpus 是手寫＋抓取的文字，**要進版控**；下面這些不進。
+reference/reference.sqlite3
+reference/raw/

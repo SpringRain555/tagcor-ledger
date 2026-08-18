@@ -264,7 +264,7 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 
 ---
 
-## 8. 法規條目（Stage 6，尚未實作）
+## 8. 法規條目
 
 規格寫在 `docs/requirements/REQ-0008-reference-db.md`。**兩個獨立的狀態軸，不要混在一起。**
 

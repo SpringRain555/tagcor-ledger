@@ -45,6 +45,7 @@ from tagcor_ledger.domain.models import (
 from tagcor_ledger.infrastructure.database import connect_database
 from tagcor_ledger.application.deposits import DepositService
 from tagcor_ledger.application.diagnostics import DiagnosticsService
+from tagcor_ledger.application.reference import ReferenceEntry, ReferenceLibrary
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -66,6 +67,8 @@ class LedgerController:
         self.maintenance = MaintenanceService(self.paths)
         self.diagnostics = DiagnosticsService(self.paths)
         self.deposits = DepositService(self.paths, self.store)
+        # 法規庫在專案底下、與帳務資料無關，所以不隨資料路徑重新接線。
+        self.reference = ReferenceLibrary()
         self.add_transaction = AddTransaction(self.paths, self.store)
         self.add_transfer = AddTransfer(self.paths, self.store)
         self.list_transaction_records = ListTransactions(self.paths, self.store)
@@ -325,6 +328,19 @@ class LedgerController:
 
     def export_csv(self) -> Path:
         return self.maintenance.export_transactions_csv()
+
+    def reference_status(self) -> Result:
+        return self.reference.status()
+
+    def reference_topics(self) -> list[dict[str, Any]]:
+        return self.reference.topics()
+
+    def reference_entries(
+        self, *, topic: object = None, keyword: str = ""
+    ) -> list[ReferenceEntry]:
+        return self.reference.list_entries(
+            topic=str(topic) if isinstance(topic, str) else None, keyword=keyword
+        )
 
     def export_diagnostics(self) -> Result:
         return self.diagnostics.export()

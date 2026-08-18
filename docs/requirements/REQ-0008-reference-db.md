@@ -1,6 +1,10 @@
 # REQ-0008 稅務與金融法規參考庫
 
-狀態：**規劃中**（Stage 6）
+狀態：**已實作**（Stage 6，v0.10.0）
+
+實作位置：`reference/`（來源清單、手寫摘要、corpus、manifest）、`tools/law_sync/`（抓取與兩支建置腳本）、`application/reference.py`（唯讀查詢）、`ui/pages/reference.py`（法規參考頁）。
+
+**第一版收 6 部法規、17 條**，涵蓋計畫的四個主題。實際涵蓋範圍與已知缺口寫在 `reference/README.md`。
 
 ## 目標
 

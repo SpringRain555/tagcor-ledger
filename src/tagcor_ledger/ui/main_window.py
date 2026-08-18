@@ -25,6 +25,7 @@ from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
 from tagcor_ledger.ui.pages.pending import PendingPage
 from tagcor_ledger.ui.pages.quick_entry import QuickEntryPage
+from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
 from tagcor_ledger.ui.pages.transactions import TransactionsPage
 from tagcor_ledger.ui.theme import apply_dark_theme
@@ -41,6 +42,7 @@ class MainWindow(QMainWindow):
         self.pending = PendingPage(self.controller)
         self.transactions = TransactionsPage(self.controller)
         self.operation_settings = OperationSettingsPage(self.controller)
+        self.reference = ReferencePage(self.controller)
         self.system_settings = SystemSettingsPage(self.controller, paths)
         self._build(paths)
         self.refresh_pending_badge()
@@ -58,6 +60,7 @@ class MainWindow(QMainWindow):
             "待確認",
             "交易紀錄",
             "操作設定",
+            "法規參考",
             "系統設定",
         ]
         widgets: list[QWidget] = [
@@ -66,6 +69,7 @@ class MainWindow(QMainWindow):
             self.pending,
             self.transactions,
             self.operation_settings,
+            self.reference,
             self.system_settings,
         ]
         self.navigation.setObjectName("sidebarNavigation")

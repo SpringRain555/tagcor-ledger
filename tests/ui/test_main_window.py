@@ -11,13 +11,14 @@ def test_main_window_has_traditional_chinese_navigation(qtbot, tmp_path: Path) -
     qtbot.addWidget(window)
     window.show()
 
-    assert window.navigation.count() == 6
+    assert window.navigation.count() == 7
     assert window.navigation.item(0).text() == "快速記帳"
     assert window.navigation.item(1).text() == "餘額盤點"
     assert window.navigation.item(2).text() == "待確認（0）"
     assert window.navigation.item(3).text() == "交易紀錄"
     assert window.navigation.item(4).text() == "操作設定"
-    assert window.navigation.item(5).text() == "系統設定"
+    assert window.navigation.item(5).text() == "法規參考"
+    assert window.navigation.item(6).text() == "系統設定"
     assert window.windowTitle() == "TagCor Ledger"
 
 

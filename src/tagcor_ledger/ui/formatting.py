@@ -209,3 +209,13 @@ def deposit_event_values(item: dict[str, Any]) -> list[str]:
         ),
         minor_text(suggested) if suggested is not None else "需照存摺填寫",
     ]
+
+
+def reference_entry_values(item: dict[str, Any]) -> list[str]:
+    return [
+        str(item["law_name"]),
+        f"第 {item['article']} 條",
+        str(item["title"]),
+        str(item["amended_date"]),
+        "需複查" if item.get("stale") else "已複查",
+    ]

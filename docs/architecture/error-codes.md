@@ -157,6 +157,15 @@
 | `DEPOSIT_TERM_NOT_EDITABLE` | 想修改已續約或已結清的期 | 只有「存續中」的期能改。已經產生過交易的改了會對不起帳 |
 | `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` | 對應操作在寫入層失敗 | 看 `details.reason` |
 
+## 法規參考庫
+
+法規庫是**選用的**。沒有它記帳完全不受影響，所以這兩個錯誤都不會擋住程式啟動。
+
+| 錯誤碼 | 成因 | 使用者該怎麼做 |
+|---|---|---|
+| `REFERENCE_LIBRARY_MISSING` | `reference/reference.sqlite3` 不存在 | 依畫面指示跑 `tools/law_sync/` 的三支腳本建立。**不建也可以**，只是法規頁沒東西 |
+| `REFERENCE_LIBRARY_UNREADABLE` | 檔案在但讀不開（損毀、權限不足） | 刪掉它重新產生 —— 它是產生物，沒有任何不可重建的內容 |
+
 ## 診斷資訊
 
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
