@@ -10,6 +10,13 @@
 - UI 固定深色主題可讀；分頁、下拉選單、表格、備份清單、彈窗與狀態列不出現文字/背景同色。
 - 側邊欄與備份清單使用不同 objectName，避免 `QListWidget` 樣式污染。
 
+## 架構
+
+- `tests/unit/test_architecture.py` 全過：分層邊界（domain 的依賴、PySide6 只在 `ui/`、
+  依賴方向、`ui/` 無 SQL）與 700 行模組上限。
+- 新增頁面放在 `ui/pages/`，跨頁連動只寫在 `ui/main_window.py`。
+- 新增 store 方法放在對應的 `infrastructure/stores/<聚合>.py`，不要塞回 `sqlite_store.py`。
+
 ## Schema
 
 - migration 可從 v1 跑到最新版本。

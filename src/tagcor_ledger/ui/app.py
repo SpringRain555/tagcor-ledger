@@ -8,7 +8,7 @@ from typing import cast
 from PySide6.QtWidgets import QApplication
 
 from tagcor_ledger.app.bootstrap import StartupContext
-from tagcor_ledger.ui.main_window_phase12 import MainWindow
+from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.theme import apply_dark_theme
 
 

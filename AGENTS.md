@@ -54,11 +54,13 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 
 ## 架構邊界
 
-- `domain/`：Money、帳戶、類別、交易、模板、排程、餘額盤點模型；**不得依賴 Qt 或 SQLite**。
+- `domain/`：Money、帳戶、類別、交易、模板、排程、餘額盤點模型；**不得依賴 Qt 或 SQLite**，也不得 import 其他任何一層。
 - `application/`：use case、Result、設定、備份/還原/重製協調；**不得直接寫 UI**。
-- `infrastructure/`：SQLite migration、store、backup、CSV export。
-- `ui/`：PySide6 視圖與 controller；**不得直接撰寫 SQL**。
+- `infrastructure/`：SQLite migration、store、backup、CSV export。store 依聚合切在 `infrastructure/stores/`，`LedgerStore` 在 `sqlite_store.py` 把它們組起來。
+- `ui/`：PySide6 視圖與 controller；**不得直接撰寫 SQL**。一個檔案一個畫面放在 `ui/pages/`，頁面之間不互相 import，跨頁連動一律集中在 `ui/main_window.py`。
 - 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔（資料庫路徑本身不能可靠地存在資料庫裡）。
+
+**這幾條由 `tests/unit/test_architecture.py` 用 AST 守著**，不是只寫在文件上。同一份測試還會擋單一模組超過 700 行。完整的檔案地圖見 `docs/architecture/overview.md`。
 
 ## 重要規則
 

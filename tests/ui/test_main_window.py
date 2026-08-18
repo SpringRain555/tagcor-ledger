@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 from tagcor_ledger.app.paths import resolve_app_paths
-from tagcor_ledger.ui.main_window_phase12 import MainWindow
+from tagcor_ledger.ui.main_window import MainWindow
 
 
 def test_main_window_has_traditional_chinese_navigation(qtbot, tmp_path: Path) -> None:

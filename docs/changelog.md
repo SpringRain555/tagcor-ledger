@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0 - 徹底重構（行為零改變）
+
+**這一版沒有任何功能變更。** 50 個既有測試斷言一個字都沒改，全部通過 —— 那是「純搬移」的證明。
+
+- `ui/main_window_phase12.py`（2,114 行、13 個畫面類）拆成 `ui/pages/` 底下 12 個檔案，
+  一個檔案一個畫面；共用的表格與表單 helper 移到 `ui/widgets/`，顯示字串集中到 `ui/formatting.py`。
+  `MainWindow` 移到 `ui/main_window.py`，檔名不再帶 `phase12` 這種歷史痕跡。
+- `infrastructure/sqlite_store.py`（1,381 行）依聚合拆成 `infrastructure/stores/` 底下的
+  `base`／`accounts`／`categories`／`transactions`／`balance`。`LedgerStore` 對外的方法一個沒少。
+- 新增 `tests/unit/test_architecture.py`：用 AST 守住分層邊界（domain 不得認得 Qt／SQLite／其他層、
+  只有 `ui/` 可以 import PySide6、依賴方向只能由外往內、`ui/` 不得出現 SQL），
+  以及單一模組 700 行上限。四個守門都實際注入違規驗證過會失敗。
+- mypy 的 PySide6 放寬範圍縮小：從整個 `main_window_phase12` 改成只放寬真的碰 Qt 的模組，
+  且改用 `disallow_subclassing_any = false` 取代整組 `misc`。`ui/controller.py` 與
+  `ui/formatting.py` 現在維持完整 `--strict`。
+- 移除 `package-data` 指向不存在的 `resources/icons/`。
+- 繁體中文守門字表改用專案外的 204 個繁體 Markdown 驗證，移除三個誤報：`承`、`殖`、`璃`。
+
 ## 未發布 - 文件骨架
 
 - 新增 `docs/architecture/state-machines.md`：八個狀態機的完整轉移表，含刻意不做的推論。

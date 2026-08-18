@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tagcor-ledger"
-version = "0.6.2"
+version = "0.7.0"
 description = "Windows-first local personal ledger with SQLite and PySide6."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -28,7 +28,7 @@ tagcor-ledger = "tagcor_ledger.main:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"tagcor_ledger.resources" = ["*.qss", "icons/*"]
+"tagcor_ledger.resources" = ["*.qss"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -46,10 +46,16 @@ target-version = "py312"
 python_version = "3.12"
 strict = true
 
+# PySide6 沒有 py.typed，所以匯入它的模組會噴 import-untyped，繼承 Qt 類別會噴
+# 「Class cannot subclass X (has type Any)」。只放寬到真的碰 Qt 的模組：
+# ui/controller.py 與 ui/formatting.py 不在清單裡，維持完整 strict。
 [[tool.mypy.overrides]]
 module = [
     "tagcor_ledger.ui.app",
-    "tagcor_ledger.ui.main_window_phase12",
+    "tagcor_ledger.ui.main_window",
+    "tagcor_ledger.ui.pages.*",
     "tagcor_ledger.ui.theme",
+    "tagcor_ledger.ui.widgets.*",
 ]
-disable_error_code = ["import-untyped", "misc"]
+disable_error_code = ["import-untyped"]
+disallow_subclassing_any = false
