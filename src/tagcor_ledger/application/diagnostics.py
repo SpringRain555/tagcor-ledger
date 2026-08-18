@@ -55,7 +55,11 @@ class DiagnosticsService:
             target = self.paths.export_dir / f"diagnostics_{stamp}.txt"
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(report, encoding="utf-8")
+            # **這一份刻意帶 BOM（`utf-8-sig`），是專案「寫檔一律無 BOM」的例外。**
+            # 那條規則的對象是給程式讀的 `.md`／`.json`；這份是給人雙擊打開看的 `.txt`，
+            # Windows 上沒有 BOM 的中文純文字很容易被編輯器猜成 cp950 而整份亂碼
+            # （2026-08-18 實際發生過）。BOM 換來的是「打開就看得懂」。
+            target.write_text(report, encoding="utf-8-sig")
         except OSError as exc:
             return Result.fail(
                 "DIAGNOSTICS_WRITE_FAILED",

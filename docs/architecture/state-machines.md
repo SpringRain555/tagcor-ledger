@@ -193,7 +193,7 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 | 路徑越界 | `ledger_dir`／`backup_dir` 不在 `data_root` 底下（`PATH_OUTSIDE_DATA_ROOT`） | 繁中對話框：三個路徑的實際值 |
 | 資料夾不可用 | 磁碟未接、權限不足（`OSError`／`sqlite3.OperationalError`） | 繁中對話框：路徑 ＋ 檢查磁碟是否連接 |
 | **schema 太新** | 資料庫版本 > 程式支援版本（`DATABASE_SCHEMA_TOO_NEW`） | 繁中對話框：**不要繼續，去更新程式** |
-| 已有實例在跑 | 單一實例守門偵測到 | 繁中對話框：已經開著一個視窗 |
+| 已有實例在跑 | 單一實例守門偵測到 | **把既有視窗叫到最前面**，第二個行程安靜結束（exit 0）。叫不動才退回繁中對話框 |
 
 **六種分支都已實作**（Stage 4，v0.8.0）。分類在 `app/startup.py::classify_startup_error`，
 訊息與錯誤碼在 `docs/architecture/error-codes.md` 的「啟動失敗」一節，

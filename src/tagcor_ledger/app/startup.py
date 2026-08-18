@@ -27,11 +27,16 @@ class StartupFailure:
     message: str
     detail: str = ""
 
-    def as_text(self) -> str:
-        parts = [self.title, "", self.message]
+    def body_text(self) -> str:
+        """不含標題的內文。對話框會另外把標題放在自己的標題欄，重複貼一次很蠢。"""
+        parts = [self.message]
         if self.detail:
             parts += ["", "技術細節：", self.detail]
         return "\n".join(parts)
+
+    def as_text(self) -> str:
+        """含標題的完整文字，給 stderr 用 —— 那裡沒有別的地方可以放標題。"""
+        return "\n".join([self.title, "", self.body_text()])
 
 
 def classify_startup_error(exc: BaseException) -> StartupFailure:

@@ -94,7 +94,11 @@ def test_diagnostics_report_contains_no_amounts(
 
     result = controller.export_diagnostics()
     assert result.success, result.message
-    report = Path(str(result.details["path"])).read_text(encoding="utf-8")
+    report_path = Path(str(result.details["path"]))
+
+    # 這份是給人雙擊打開的，Windows 上沒 BOM 會被猜成 cp950 而亂碼。
+    assert report_path.read_bytes()[:3] == b"\xef\xbb\xbf", "診斷檔必須帶 UTF-8 BOM"
+    report = report_path.read_text(encoding="utf-8-sig")
 
     assert SECRET_NOTE not in report, "備註洩漏到診斷檔裡了"
     assert SECRET_AMOUNT not in report, "金額洩漏到診斷檔裡了"

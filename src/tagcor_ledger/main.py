@@ -11,7 +11,7 @@ from typing import Sequence
 from tagcor_ledger import __version__
 from tagcor_ledger.app.bootstrap import bootstrap
 from tagcor_ledger.app.logging_setup import configure_logging, current_log_path, get_logger
-from tagcor_ledger.app.single_instance import SingleInstanceGuard
+from tagcor_ledger.app.single_instance import AlreadyRunningError, SingleInstanceGuard
 from tagcor_ledger.app.startup import classify_startup_error, resolve_log_dir
 from tagcor_ledger.infrastructure.database import initialize_database
 
@@ -78,7 +78,15 @@ def _run(args: argparse.Namespace) -> int:
     if args.gui:
         # 單一實例守門要在開資料庫之前 —— 拿不到鎖就不要再去動別人正在用的檔案。
         guard = SingleInstanceGuard(context.paths.ledger_dir)
-        guard.acquire()
+        try:
+            guard.acquire()
+        except AlreadyRunningError:
+            # 使用者按捷徑的意思是「我要用這個程式」。既然它已經開著，正確的回應是
+            # 把那個視窗給他，不是告訴他狀態。叫不動才退回錯誤對話框。
+            if _activate_existing_instance(context.paths.ledger_dir):
+                logger.info("existing instance activated")
+                return 0
+            raise
         try:
             initialize_database(context.paths)
             try:
@@ -149,14 +157,26 @@ def _report_startup_failure(exc: BaseException, *, gui: bool) -> int:
     except Exception:  # noqa: BLE001 —— 記不了日誌不該蓋掉原本的錯誤
         log_path = None
 
-    body = failure.as_text()
-    if log_path is not None:
-        body += f"\n\n日誌：{log_path}"
+    suffix = f"\n\n日誌：{log_path}" if log_path is not None else ""
 
-    if gui and _show_startup_dialog(failure.title, body):
+    # 對話框有自己的標題欄，內文再貼一次標題只會變成同一句話出現兩遍。
+    if gui and _show_startup_dialog(failure.title, failure.body_text() + suffix):
         return 1
-    print(body, file=sys.stderr)
+    print(failure.as_text() + suffix, file=sys.stderr)
     return 1
+
+
+def _activate_existing_instance(ledger_dir: Path) -> bool:
+    """請已經在跑的實例把視窗叫到最前面。做不到就回 False，讓呼叫端顯示對話框。
+
+    import 包在 try 裡，`main.py` 因此不需要自己認得 Qt。
+    """
+    try:
+        from tagcor_ledger.ui.instance_channel import request_activation
+
+        return request_activation(ledger_dir)
+    except Exception:  # noqa: BLE001 —— 叫不動視窗不該把啟動變成崩潰
+        return False
 
 
 def _show_startup_dialog(title: str, body: str) -> bool:

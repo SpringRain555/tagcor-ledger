@@ -56,6 +56,7 @@ module = [
     "tagcor_ledger.ui.app",
     "tagcor_ledger.ui.main_window",
     "tagcor_ledger.ui.error_handler",
+    "tagcor_ledger.ui.instance_channel",
     "tagcor_ledger.ui.pages.*",
     "tagcor_ledger.ui.startup_dialog",
     "tagcor_ledger.ui.theme",
