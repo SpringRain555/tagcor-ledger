@@ -1,15 +1,18 @@
 # REQ-0009 例外處理與可觀測性
 
-狀態：**規劃中**（Stage 4）
+狀態：**已實作**（Stage 4，v0.8.0）
 
 ## 目標
 
 出錯時看得到訊息，也留得下紀錄。
 
-現況是**全專案零日誌、零 crash 處理**：`log_dir` 有被建立但從來沒有被寫入過，
+實作前的現況是**全專案零日誌、零 crash 處理**：`log_dir` 有被建立但從來沒有被寫入過，
 整個 `src/` 找不到 `logging`、`sys.excepthook` 或任何 traceback 捕捉。
 `main.py` 的 `initialize_database` 在任何 try 之外，所以從捷徑啟動遇到問題時，
 使用者看到的是「視窗沒出現、沒有訊息、沒有紀錄」。
+
+**實作位置**：`app/logging_setup.py`、`app/startup.py`、`app/single_instance.py`、
+`ui/error_handler.py`、`ui/startup_dialog.py`、`application/diagnostics.py`。
 
 ## 功能需求
 

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.ui.controller import LedgerController
+from tagcor_ledger.ui.formatting import result_message
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 
@@ -46,10 +47,14 @@ class MaintenancePage(QWidget):
         restore = QPushButton("還原所選備份")
         external = QPushButton("選擇外部備份資料夾")
         export = QPushButton("匯出交易 CSV")
+        self.diagnostics_button = QPushButton("匯出診斷資訊")
+        self.diagnostics_button.setToolTip(
+            "產生一份不含金額與備註的環境報告，出問題時可以直接提供給他人。"
+        )
         set_button_role(create, "primary")
         set_button_role(restore, "danger")
         buttons = QHBoxLayout()
-        for widget in (create, validate, restore, external, export):
+        for widget in (create, validate, restore, external, export, self.diagnostics_button):
             buttons.addWidget(widget)
         self.result.setWordWrap(True)
         self.result.setObjectName("hintLabel")
@@ -64,6 +69,7 @@ class MaintenancePage(QWidget):
         restore.clicked.connect(self.restore_selected)
         external.clicked.connect(self.restore_external)
         export.clicked.connect(self.export_csv)
+        self.diagnostics_button.clicked.connect(self.export_diagnostics)
 
     def refresh(self) -> None:
         self.list.clear()
@@ -133,6 +139,15 @@ class MaintenancePage(QWidget):
             self.result.setText(f"CSV 已匯出：{self.controller.export_csv()}")
         except Exception as exc:
             QMessageBox.warning(self, "匯出失敗", str(exc))
+
+    def export_diagnostics(self) -> None:
+        result = self.controller.export_diagnostics()
+        if result.success:
+            self.result.setText(
+                f"診斷資訊已匯出：{result.details.get('path')}（不含金額與備註，可直接提供給他人）"
+            )
+            return
+        QMessageBox.warning(self, "診斷資訊匯出失敗", result_message(result))
 
     def _selected_path(self) -> Path | None:
         item = self.list.currentItem()

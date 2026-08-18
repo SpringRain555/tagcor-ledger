@@ -23,6 +23,17 @@
 - 較新 schema 會被拒絕。
 - v5 後沒有 payees table 與 payee 欄位。
 
+## 例外處理與可觀測性
+
+- 五種故障各跑一次，每種都要有繁中訊息、日誌有紀錄、程式不無聲死掉：
+  改壞 `system_paths.json`、`ledger_dir` 指到不存在的磁碟、schema 版本改成 99、
+  開兩個實例、備份目錄設成唯讀。
+- `logs/app.log` 內**不得出現任何金額或備註**；診斷資訊匯出檔同理（測試會擋）。
+- 新增熱查詢時，`tests/integration/test_query_plans.py` 要跟著加一條 —— 並且
+  **實際拿掉索引驗證它會紅**，否則那條守門可能什麼都沒檢查。
+- 新的啟動失敗分支要同時更新 `app/startup.py`、`error-codes.md`、
+  `state-machines.md` §6 與 `tests/integration/test_startup_failures.py`。
+
 ## 驗證
 
 ```powershell

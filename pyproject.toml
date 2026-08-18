@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tagcor-ledger"
-version = "0.7.0"
+version = "0.8.0"
 description = "Windows-first local personal ledger with SQLite and PySide6."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -55,7 +55,9 @@ strict = true
 module = [
     "tagcor_ledger.ui.app",
     "tagcor_ledger.ui.main_window",
+    "tagcor_ledger.ui.error_handler",
     "tagcor_ledger.ui.pages.*",
+    "tagcor_ledger.ui.startup_dialog",
     "tagcor_ledger.ui.theme",
     "tagcor_ledger.ui.widgets.*",
 ]

@@ -100,8 +100,16 @@ def test_domain_depends_on_nothing_but_itself() -> None:
 
 
 def test_only_the_ui_layer_knows_about_qt() -> None:
+    """涵蓋 `ui/` 以外的**全部**模組，包含根目錄的 `main.py`。
+
+    最初這個測試只掃四個子套件，`main.py` 因此漏掉 —— Stage 4 加啟動失敗對話框時就真的
+    在那裡 import 了 PySide6。範圍寫成「除了 ui 以外都要檢查」才不會再有這種縫。
+    """
     offenders: list[str] = []
-    for path in _modules("app", "application", "domain", "infrastructure"):
+    for path in _modules(""):
+        relative = path.relative_to(SOURCE_ROOT)
+        if relative.parts and relative.parts[0] == "ui":
+            continue
         if "PySide6" in _imported_roots(path):
             offenders.append(f"  {path.relative_to(PROJECT_ROOT)}")
     if offenders:

@@ -43,6 +43,7 @@ from tagcor_ledger.domain.models import (
     TransactionTemplate,
 )
 from tagcor_ledger.infrastructure.database import connect_database
+from tagcor_ledger.application.diagnostics import DiagnosticsService
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -62,6 +63,7 @@ class LedgerController:
         self.automation = AutomationService(self.paths)
         self.balance = BalanceSnapshotService(self.paths, self.store)
         self.maintenance = MaintenanceService(self.paths)
+        self.diagnostics = DiagnosticsService(self.paths)
         self.add_transaction = AddTransaction(self.paths, self.store)
         self.add_transfer = AddTransfer(self.paths, self.store)
         self.list_transaction_records = ListTransactions(self.paths, self.store)
@@ -320,6 +322,9 @@ class LedgerController:
 
     def export_csv(self) -> Path:
         return self.maintenance.export_transactions_csv()
+
+    def export_diagnostics(self) -> Result:
+        return self.diagnostics.export()
 
     def list_templates(self) -> list[dict[str, Any]]:
         result = self.automation.list_templates()

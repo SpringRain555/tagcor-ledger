@@ -21,8 +21,13 @@ CATALOGUE = PROJECT_ROOT / "docs" / "architecture" / "error-codes.md"
 # 錯誤碼長這樣：大寫開頭、只有大寫英數與底線、至少 4 個字元。
 CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{3,}$")
 
-# 產生錯誤碼的三種呼叫形式。
-RAISING_CALLS = {"fail", "_error_code"}
+# 產生錯誤碼的呼叫形式。`StartupFailure` 的第一個位置參數就是錯誤碼 ——
+# 加新的攜帶型別到這裡時，記得它的錯誤碼必須用**位置參數**傳，否則掃不到。
+RAISING_CALLS = {"fail", "_error_code", "StartupFailure"}
+
+# 有些呼叫用關鍵字傳，例如 `SomeThing(error_code="X")`。這個名字帶著意圖，
+# 不會誤抓到別的字串，所以任何呼叫上出現它都算數。
+CODE_KEYWORDS = {"error_code"}
 
 
 def _string_code(node: ast.AST) -> str | None:
@@ -54,6 +59,12 @@ def codes_in_source() -> dict[str, set[str]]:
                         code = _string_code(argument)
                         if code:
                             break
+                if code is None:
+                    for keyword in node.keywords:
+                        if keyword.arg in CODE_KEYWORDS:
+                            code = _string_code(keyword.value)
+                            if code:
+                                break
             if code:
                 found.setdefault(code, set()).add(relative)
     return found

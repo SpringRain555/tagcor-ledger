@@ -195,9 +195,12 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 | **schema 太新** | 資料庫版本 > 程式支援版本（`DATABASE_SCHEMA_TOO_NEW`） | 繁中對話框：**不要繼續，去更新程式** |
 | 已有實例在跑 | 單一實例守門偵測到 | 繁中對話框：已經開著一個視窗 |
 
-> **目前只有「正常啟動」被實作。** 其餘五種在 `main.py:49` 全部未攔截，會直接丟 traceback 到
-> console —— 從捷徑啟動時等於「視窗沒出現、沒有訊息、沒有紀錄」。這是 Stage 4 要補的，
-> 需求寫在 `REQ-0009`。
+**六種分支都已實作**（Stage 4，v0.8.0）。分類在 `app/startup.py::classify_startup_error`，
+訊息與錯誤碼在 `docs/architecture/error-codes.md` 的「啟動失敗」一節，
+驗收在 `tests/integration/test_startup_failures.py`。
+
+> 認不出來的例外會落到 `STARTUP_FAILED`。**那個碼出現就代表這張表漏了一種情形** ——
+> 它是待補的訊號，不是正常的終點。
 
 ---
 
