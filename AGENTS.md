@@ -95,13 +95,23 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 
 ## 環境與驗證
 
-**用專案自己的 conda 環境，不要用 PATH 上的 python。**
+環境是 **conda**（`environment.yaml` 的 `tagcor-ledger`），專案裡沒有 `.venv`。
+PySide6 由 conda dependency 管理，**不能**放回 `pyproject.toml` 讓 pip 安裝 —— Windows 下混用 conda/pip 的 PySide6 會造成 Qt DLL 載入失敗。
+
+**人在互動式 PowerShell 裡：先啟動環境。**
 
 ```powershell
-<conda-root>\envs\tagcor-ledger\python.exe
+conda activate tagcor-ledger
+python -m tagcor_ledger --gui
 ```
 
-PySide6 由 `environment.yaml` 的 conda dependency 管理，**不能**放回 `pyproject.toml` 讓 pip 安裝 —— Windows 下混用 conda/pip 的 PySide6 會造成 Qt DLL 載入失敗。
+**agent 在工具 shell 裡：一律用完整路徑，不要用 `conda activate`。**
+
+```powershell
+<conda-root>\envs\tagcor-ledger\python.exe -m tagcor_ledger --json
+```
+
+理由是工具 shell 以 `-NonInteractive` 啟動、**不載入 `profile.ps1`**，所以 `conda init powershell` 裝的 hook 沒生效。此時 `conda activate` 會跑在子 process 裡改不到父層環境，**回報成功、退出碼 0、實際上什麼都沒換**（2026-08-18 實測）。接著跑到的會是 PATH 上碰巧排在前面的別的直譯器 —— 那個直譯器多半沒有 PySide6，於是失敗訊息會指向完全無關的方向。
 
 ```powershell
 .\Verify.ps1                 # 路徑漂移檢查 + ruff + mypy --strict + pytest
