@@ -5,10 +5,11 @@
 ## 快速入口
 
 - [README](../README.md)：安裝、啟動與使用者操作方式。
-- [CODEX](../CODEX.md)：給維護者與 Codex 的專案規則。
+- [AGENTS](../AGENTS.md)：給維護者與所有 agent 的專案規則（唯一正本）。`CLAUDE.md` 只是指向它。
 - [Roadmap](roadmap.md)：已完成與後續 Phase。
 - [Changelog](changelog.md)：階段性變更紀錄。
 - [Release checklist](release_checklist.md)：發版前檢查。
+- [Lessons](lessons.md)：**失敗紀錄（append-only）**。踩過的坑與明確的「不要再做」清單。
 
 ## Requirements
 

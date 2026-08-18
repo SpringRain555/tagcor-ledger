@@ -139,8 +139,16 @@ class ScheduledOccurrence:
 
 @dataclass(frozen=True, slots=True)
 class SystemPathSettings:
+    """所有帳務資料的位置。
+
+    `data_root` 是唯一的資料根目錄，`ledger_dir` 與 `backup_dir` 都必須在它底下，
+    `exports` / `logs` / `tmp` 也由它推導。留空時退回 `ledger_dir.parent`，
+    以相容於還沒有這個欄位的舊設定檔。
+    """
+
     ledger_dir: Path
     backup_dir: Path
+    data_root: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

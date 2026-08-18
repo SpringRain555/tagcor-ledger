@@ -1,0 +1,111 @@
+# AGENTS — TagCor Ledger
+
+**這份是給所有 agent（Codex、Claude Code 等）的唯一正本。** `CLAUDE.md` 只是指向這裡的一行。
+
+## 專案定位
+
+Windows-first、**純本機、完全不連網**的個人記帳工具。主資料庫是 SQLite，CSV 只作交換格式。介面固定使用繁體中文與 PySide6。
+
+每一筆帳都由使用者手動輸入 —— 這是刻意的設計，不是還沒做的功能。手動輸入才讓使用者感受得到花費的程度。
+
+## 資料位置與讀取邊界
+
+**「運作的地方」與「儲存的地方」是分開的**，這樣專案日後若推上 remote，只會公開程式，不會公開任何個人財務資料。
+
+| | 位置 |
+|---|---|
+| 程式（可公開） | `D:\Projects\tagcor-ledger\` |
+| 資料（絕不公開） | `<資料根目錄>\` |
+| 指標檔 | `%LOCALAPPDATA%\TagCor\TagCorLedger\system_paths.json` |
+
+資料根目錄底下固定五個平輩資料夾：`ledger\`、`backups\`、`exports\`、`logs\`、`tmp\`。
+
+### agent 的讀取規則
+
+- **可讀**：本專案全部 ＋ `<資料根目錄>\**` 底下所有檔案。
+- **不可讀、不可寫**：`<私人資料樹>\` 底下**其他任何**資料夾。
+- 即使在允許範圍內，**不要主動把實際交易金額與備註貼進對話**，除非使用者要求。談論資料時用筆數、日期範圍、schema 這類不外洩內容的描述。
+
+`.claude\settings.json` 有對應的 deny 規則。**但要理解它的極限**：deny 攔得住 Read／Glob／Grep／Edit／Write，**攔不住 shell** —— `Get-Content`、`cat`、`type`、`Select-String` 都能讀檔，而任意 shell 指令無法可靠地用 pattern 比對。deny 防的是手滑，真正的依據是這一節的成文規則。
+
+### 改資料路徑是三步，不是一步
+
+路徑寫死在兩個地方，改一個而不改另一個會造成漂移（agent 讀不到真資料夾，或舊路徑仍掛在允許清單上而該位置日後被別的東西佔用）：
+
+1. App「系統設定 → 記帳資料路徑」改路徑。
+2. `.claude\settings.json` 的 deny／allow 清單同步改。
+3. 跑 `.\Verify.ps1` 確認漂移檢查通過。
+
+## 架構邊界
+
+- `domain/`：Money、帳戶、類別、交易、模板、排程、餘額盤點模型；**不得依賴 Qt 或 SQLite**。
+- `application/`：use case、Result、設定、備份/還原/重製協調；**不得直接寫 UI**。
+- `infrastructure/`：SQLite migration、store、backup、CSV export。
+- `ui/`：PySide6 視圖與 controller；**不得直接撰寫 SQL**。
+- 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔（資料庫路徑本身不能可靠地存在資料庫裡）。
+
+## 重要規則
+
+- 金額一律使用 `Money(amount_minor: int, currency: str)`，**禁止 float**。
+- 目前固定 TWD 與 Asia/Taipei。
+- UI 用詞：`類別` 表示第一層，`項目` 表示第二層；不要再用「分類／細項」。
+- Phase 4 已移除「對象／商家」欄位，**不得**新增 payee model、payees table 或 payee UI。
+- 備份只能由使用者手動建立；啟動流程不得自動備份。
+- 還原/重製前的保護備份必須由使用者明確勾選。
+- 刪除設定項只允許未被任何歷史資料引用；否則使用封存。
+- 盤點不建立交易、不建立 posting、不改變帳戶餘額。
+- **`ledger_dir`、`backup_dir` 必須都在 `data_root` 底下**，且彼此不得相同或互相包含。違反時丟 `PATH_OUTSIDE_DATA_ROOT` / `LEDGER_BACKUP_PATH_SAME` / `LEDGER_BACKUP_PATH_NESTED`。
+- **搬移資料的順序不可調換**：先複製到新位置 → 確認成功 → 寫指標檔 → 才刪舊檔。反過來會在搬移失敗時留下「指標指向新位置、資料還在舊位置」，下次啟動就在新位置建一個空資料庫，看起來像資料全部消失。
+- 「從外部檔案還原」會讀取使用者從對話框挑選的任意路徑。這是**刻意保留**的例外（否則無法從外接硬碟還原），由使用者主動觸發。
+
+## 不做的事（非目標，不是待辦）
+
+- 不做銀行同步、不串接電子發票載具、不做任何自動匯入。
+- 不連網。App 永遠不發出網路請求。
+- 不做多幣別與匯率、不做預算、不做雲端同步。
+- 不重新加入 PyQt6、TagPath、CSV/JSON runtime store 或 importer。
+
+## UI 樣式規範
+
+- 固定深色主題，由 `tagcor_ledger.ui.theme.apply_dark_theme(app)` 套用 `Fusion` style、字體、palette 與 `styles.qss`。
+- 不要用過寬的全域 QSS selector 污染不同用途元件；共用元件若用途不同，需指定 objectName。
+- 側邊欄 `QListWidget` 用 `sidebarNavigation`；備份清單用 `backupList`；內容堆疊用 `contentStack`。
+- 主要操作按鈕用 `primaryButton`；刪除、作廢、重製、還原等高風險操作用 `dangerButton`。
+- 分頁必須由 QSS 覆蓋 `QTabWidget/QTabBar` 的 selected、unselected、hover、disabled 狀態。
+- 字體不打包，使用本機 fallback：`Segoe UI Variable`、`Segoe UI`、`Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、sans-serif。
+- UI 變更至少跑 `tests/ui` smoke；樣式資源變更需同步更新 `tests/unit/test_resources.py`。
+
+## 環境與驗證
+
+**用專案自己的 conda 環境，不要用 PATH 上的 python。**
+
+```powershell
+<conda-root>\envs\tagcor-ledger\python.exe
+```
+
+PySide6 由 `environment.yaml` 的 conda dependency 管理，**不能**放回 `pyproject.toml` 讓 pip 安裝 —— Windows 下混用 conda/pip 的 PySide6 會造成 Qt DLL 載入失敗。
+
+```powershell
+.\Verify.ps1                 # 路徑漂移檢查 + ruff + mypy --strict + pytest
+.\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
+.\Verify.ps1 -Performance    # 加跑 20 萬筆效能測試
+```
+
+## 編碼
+
+- `.md` / `.json`：UTF-8 **無 BOM**。
+- `.ps1` / `.psm1`：UTF-8 **必須有 BOM**（PowerShell 5.1 沒有 BOM 會退回 Big5 而整份亂碼）。
+
+## 閱讀順序
+
+1. `README.md`
+2. `docs/index.md`
+3. `docs/requirements/REQ-0001` … `REQ-0005`
+4. `docs/architecture/overview.md`、`data-model.md`、`ui-workflows.md`、`storage-layout.md`
+5. `docs/roadmap.md`、`docs/changelog.md`
+
+`docs/archive/phase-0-2/` 只是歷史紀錄，**不是**現行規格。
+
+## 文件維護
+
+任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog。踩到坑要在 `docs/lessons.md` 追加一筆 —— 那是 append-only 的失敗紀錄，目的是不要重蹈覆轍。

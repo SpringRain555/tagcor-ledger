@@ -6,7 +6,12 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from tagcor_ledger.app.path_settings import PathSettingsError, PathSettingsService
+from tagcor_ledger.app.path_settings import (
+    PathSettingsError,
+    PathSettingsService,
+    data_root_of,
+    validate_path_settings,
+)
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.application.automation import AutomationService
 from tagcor_ledger.application.balance import (
@@ -215,27 +220,47 @@ class LedgerController:
         *,
         ledger_dir: Path,
         backup_dir: Path,
+        data_root: Path | None = None,
         move_current: bool = False,
     ) -> Result:
+        """更新資料路徑。
+
+        順序是刻意的：先把資料庫複製到新位置並確認成功，**才**寫指標檔，最後才刪掉
+        舊檔。任何一步失敗都不會留下「指標指向新位置、資料還在舊位置」的狀態 ——
+        那會讓下次啟動在新位置建一個空資料庫，看起來像資料消失。
+        """
+        copied: Path | None = None
         try:
-            settings = self.path_settings.save(
-                SystemPathSettings(ledger_dir=ledger_dir, backup_dir=backup_dir)
+            settings = validate_path_settings(
+                SystemPathSettings(
+                    ledger_dir=ledger_dir,
+                    backup_dir=backup_dir,
+                    data_root=data_root,
+                ),
+                create=True,
             )
             next_paths = self._paths_for_settings(settings)
             if move_current:
-                self._move_current_database(next_paths.database_path)
+                copied = self._copy_current_database(next_paths.database_path)
+            self.path_settings.write(settings)
+            if copied is not None:
+                self._discard_previous_database()
             self.paths = next_paths
             self._wire_services()
             return Result.ok("資料路徑設定已更新。")
         except (PathSettingsError, OSError, sqlite3.Error, ValueError) as exc:
+            if copied is not None:
+                # 指標檔還沒寫成功，新位置那份複本必須清掉，否則下次搬移會撞上
+                # TARGET_LEDGER_ALREADY_EXISTS。舊資料原封不動。
+                copied.unlink(missing_ok=True)
             return Result.fail(
                 "PATH_SETTINGS_SAVE_FAILED",
-                "資料路徑設定無法儲存，請確認兩個路徑分開且可寫入。",
+                "資料路徑設定無法儲存，請確認兩個路徑分開、都在資料根目錄底下且可寫入。",
                 details={"reason": str(exc)},
             )
 
     def _paths_for_settings(self, settings: SystemPathSettings) -> AppPaths:
-        root = settings.ledger_dir.parent
+        root = data_root_of(settings)
         return AppPaths(
             data_dir=root,
             config_dir=self.paths.config_dir,
@@ -246,29 +271,35 @@ class LedgerController:
             tmp_dir=root / "tmp",
         )
 
-    def _move_current_database(self, target_database: Path) -> None:
+    def _copy_current_database(self, target_database: Path) -> Path | None:
+        """把現有資料庫複製到新位置，回傳複本路徑；沒有東西要複製時回傳 None。
+
+        只複製、不刪除。刪除由 `_discard_previous_database` 在指標檔寫入成功後才做。
+        """
         source_database = self.paths.database_path
         if source_database.resolve() == target_database.resolve():
-            return
+            return None
         if target_database.exists():
             raise ValueError("TARGET_LEDGER_ALREADY_EXISTS")
+        if not source_database.exists():
+            return None
         target_database.parent.mkdir(parents=True, exist_ok=True)
-        if source_database.exists():
-            with connect_database(source_database) as source:
-                destination = sqlite3.connect(target_database)
-                try:
-                    source.backup(destination)
-                finally:
-                    destination.close()
-            for path in (
-                source_database,
-                source_database.with_name(f"{source_database.name}-wal"),
-                source_database.with_name(f"{source_database.name}-shm"),
-            ):
-                try:
-                    path.unlink()
-                except FileNotFoundError:
-                    continue
+        with connect_database(source_database) as source:
+            destination = sqlite3.connect(target_database)
+            try:
+                source.backup(destination)
+            finally:
+                destination.close()
+        return target_database
+
+    def _discard_previous_database(self) -> None:
+        source_database = self.paths.database_path
+        for path in (
+            source_database,
+            source_database.with_name(f"{source_database.name}-wal"),
+            source_database.with_name(f"{source_database.name}-shm"),
+        ):
+            path.unlink(missing_ok=True)
 
     def create_backup(self) -> Path:
         return self.maintenance.create_backup()

@@ -12,10 +12,10 @@
 
 ## 文件與編碼
 
-- README 是使用者入口；`docs/index.md` 是完整規格入口；CODEX 是維護規則入口。
+- README 是使用者入口；`docs/index.md` 是完整規格入口；`AGENTS.md` 是維護規則入口（正本）。
 - Markdown 一律使用 UTF-8，避免使用會造成 Big5/CP950 轉碼問題的工具覆寫文件。
 - 目前規格應放在 requirements、architecture、roadmap、changelog；`docs/archive/phase-0-2/` 只保留歷史，不再修正文案。
-- 若功能或 UI 行為改變，需同步更新 README、CODEX、Roadmap、Changelog 與相關 requirement/architecture 文件。
+- 若功能或 UI 行為改變，需同步更新 README、AGENTS、Roadmap、Changelog 與相關 requirement/architecture 文件。
 
 ## UI 主題
 

@@ -27,7 +27,8 @@ python -m pytest -q
 
 ## 文件
 
-- README、CODEX、Roadmap、Changelog、Requirements、Architecture 互相一致。
+- README、AGENTS、Roadmap、Changelog、Requirements、Architecture 互相一致。
+- `.\Verify.ps1` 全過（含路徑漂移檢查）。
 - Markdown 以 UTF-8 儲存；當前規格文件不得出現 mojibake 或替換字元。
 - `docs/archive/phase-0-2/` 僅供追溯，不作為目前規格來源。
 

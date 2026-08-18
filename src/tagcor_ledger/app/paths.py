@@ -8,7 +8,11 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-from tagcor_ledger.app.path_settings import PathSettingsService, default_settings_path
+from tagcor_ledger.app.path_settings import (
+    PathSettingsService,
+    data_root_of,
+    default_settings_path,
+)
 
 
 APP_NAME = "TagCorLedger"
@@ -53,7 +57,7 @@ def resolve_app_paths(data_dir: str | Path | None = None) -> AppPaths:
     env_value = os.environ.get(DATA_DIR_ENV)
     if data_dir is None and not env_value:
         system_settings = PathSettingsService().load()
-        root = system_settings.ledger_dir.parent
+        root = data_root_of(system_settings)
         return AppPaths(
             data_dir=root,
             config_dir=default_settings_path().parent,

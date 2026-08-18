@@ -2,7 +2,9 @@
 
 TagCor Ledger 是 Windows-first、本機優先的個人記帳工具。核心資料使用 SQLite，介面使用 PySide6，目標是快速記錄收支、轉帳、餘額盤點與待確認週期項目，同時保持資料可備份、可還原、可長期維護。
 
-目前版本：0.6.1（Phase 4.1：深色主題、UI 可讀性與文件重整）。
+目前版本：0.6.2（資料與程式位置分離）。
+
+**帳務資料不在專案資料夾裡。** 程式在 `D:\Projects\tagcor-ledger`，資料在 `<資料根目錄>`，兩者分開，資料永遠不進版控。完整說明見 [Storage layout](docs/architecture/storage-layout.md)。
 
 ## 目前功能
 
