@@ -229,15 +229,29 @@ try {
 $process = Start-Process @startArgs
 
 # 等一小段時間：啟動當下就死掉的話，這裡還來得及把原因顯示出來。
-if ($process.WaitForExit(5000) -and $process.ExitCode -ne 0) {
+#
+# **正常結束（0）也會走到這裡。** 第二次啟動時程式會把既有視窗叫到最前面然後以 0 結束，
+# 那是成功不是失敗。而 `Start-Process -PassThru` 的 `ExitCode` 有時候是 $null，
+# 而 PowerShell 裡 `$null -ne 0` 為真 —— 2026-08-18 的誤報就是這樣來的：
+# 畫面上印出「程式啟動後隨即結束（exit code ）」，括號裡是空的。
+$exited = $process.WaitForExit(5000)
+$processExitCode = 0
+if ($exited -and $null -ne $process.ExitCode) { $processExitCode = [int]$process.ExitCode }
+
+if ($exited -and $processExitCode -ne 0) {
     $detail = @()
     if ($errorLog -and (Test-Path -LiteralPath $errorLog)) {
         $detail = Get-Content -LiteralPath $errorLog -Tail 20 -Encoding UTF8
     }
-    Stop-WithMessage "程式啟動後隨即結束（exit code $($process.ExitCode)）" (
+    Stop-WithMessage "程式啟動後隨即結束（exit code $processExitCode）" (
         $detail + @('', "完整訊息：$errorLog")
     )
 }
 
-Write-Ok '視窗已開啟，可以關閉這個畫面。'
+if ($exited) {
+    # 以 0 結束代表既有視窗已經被叫到最前面，這是第二次啟動的正常路徑。
+    Write-Ok '既有視窗已切換到最前面。'
+} else {
+    Write-Ok '視窗已開啟，可以關閉這個畫面。'
+}
 exit 0

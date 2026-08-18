@@ -34,6 +34,7 @@ class DepositStore(StoreBase):
         maturity_action: str,
         interest_destination_account_id: str | None,
         term_months: int,
+        rate_type: str = "fixed",
         note: str = "",
     ) -> DepositContract:
         clean_name = name.strip()
@@ -51,6 +52,7 @@ class DepositStore(StoreBase):
             term_months=term_months,
             status="active",
             note=note.strip(),
+            rate_type=rate_type,
         )
         timestamp = now_iso()
         with database_transaction(self.paths.database_path) as connection:
@@ -60,8 +62,8 @@ class DepositStore(StoreBase):
                 INSERT INTO deposit_contracts(
                     contract_id, account_id, name, interest_method, maturity_action,
                     interest_destination_account_id, term_months, status, note,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    rate_type, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     contract.contract_id,
@@ -73,6 +75,7 @@ class DepositStore(StoreBase):
                     contract.term_months,
                     contract.status,
                     contract.note,
+                    contract.rate_type,
                     timestamp,
                     timestamp,
                 ),
@@ -93,7 +96,7 @@ class DepositStore(StoreBase):
             rows = connection.execute(
                 f"""
                 SELECT contract_id, account_id, name, interest_method, maturity_action,
-                       interest_destination_account_id, term_months, status, note
+                       interest_destination_account_id, term_months, status, note, rate_type
                 FROM deposit_contracts
                 {where}
                 ORDER BY name COLLATE NOCASE
@@ -106,7 +109,7 @@ class DepositStore(StoreBase):
             row = connection.execute(
                 """
                 SELECT contract_id, account_id, name, interest_method, maturity_action,
-                       interest_destination_account_id, term_months, status, note
+                       interest_destination_account_id, term_months, status, note, rate_type
                 FROM deposit_contracts WHERE contract_id = ?
                 """,
                 (contract_id,),
@@ -135,7 +138,171 @@ class DepositStore(StoreBase):
                 details={},
             )
 
+    def update_contract(
+        self,
+        contract_id: str,
+        *,
+        name: str,
+        maturity_action: str,
+        interest_destination_account_id: str | None,
+        note: str = "",
+    ) -> None:
+        """只改名稱、到期轉存方式、利息轉入帳戶。
+
+        **計息方式與期長刻意不能改。** 它們決定了已經產生出來的事件長什麼樣子，
+        事後改會讓歷史難以解讀 —— 要換就結束這個合約、開一個新的。
+        """
+        clean_name = name.strip()
+        if not clean_name:
+            raise ValueError("DEPOSIT_NAME_REQUIRED")
+        with database_transaction(self.paths.database_path) as connection:
+            changed = connection.execute(
+                """
+                UPDATE deposit_contracts
+                SET name = ?, maturity_action = ?, interest_destination_account_id = ?,
+                    note = ?, updated_at = ?
+                WHERE contract_id = ? AND status = 'active'
+                """,
+                (
+                    clean_name,
+                    maturity_action,
+                    interest_destination_account_id,
+                    note.strip(),
+                    now_iso(),
+                    contract_id,
+                ),
+            ).rowcount
+            if changed == 0:
+                raise NotFoundError("DEPOSIT_CONTRACT_NOT_FOUND")
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="deposit_contract.update",
+                entity_type="deposit_contract",
+                entity_id=contract_id,
+                details={"maturity_action": maturity_action},
+            )
+
+    def delete_contract(self, contract_id: str) -> None:
+        """刪除從未入帳過的合約，連同它的期與待確認事件。
+
+        **只要有任何一件事件已經確認入帳就不得刪除** —— 那代表帳本裡有交易指向它，
+        刪掉會讓那些交易失去來歷。這種情形請改用「結束合約」。
+        """
+        with database_transaction(self.paths.database_path) as connection:
+            row = connection.execute(
+                "SELECT 1 FROM deposit_contracts WHERE contract_id = ?", (contract_id,)
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("DEPOSIT_CONTRACT_NOT_FOUND")
+            confirmed = connection.execute(
+                """
+                SELECT 1 FROM deposit_events e
+                JOIN deposit_terms t ON t.term_id = e.term_id
+                WHERE t.contract_id = ? AND e.status = 'confirmed'
+                LIMIT 1
+                """,
+                (contract_id,),
+            ).fetchone()
+            if confirmed is not None:
+                raise ValueError("DEPOSIT_CONTRACT_IN_USE")
+            connection.execute(
+                """
+                DELETE FROM deposit_events
+                WHERE term_id IN (SELECT term_id FROM deposit_terms WHERE contract_id = ?)
+                """,
+                (contract_id,),
+            )
+            connection.execute("DELETE FROM deposit_terms WHERE contract_id = ?", (contract_id,))
+            connection.execute(
+                "DELETE FROM deposit_contracts WHERE contract_id = ?", (contract_id,)
+            )
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="deposit_contract.delete",
+                entity_type="deposit_contract",
+                entity_id=contract_id,
+                details={},
+            )
+
     # --- 期 -----------------------------------------------------------------
+
+    def update_term(
+        self,
+        term_id: str,
+        *,
+        start_date: str,
+        maturity_date: str,
+        principal_minor: int,
+        annual_rate_ppm: int | None,
+        monthly_deposit_minor: int | None,
+        note: str = "",
+    ) -> None:
+        """修改一期。**只有存續中的期能改。**
+
+        這是「查到牌告利率再回來補」的實作路徑 —— 沒有這個方法，
+        go-live runbook 裡那句話就是做不到的。
+
+        已續約／已結清的期不能改，因為它們已經產生過交易，改了會讓帳與紀錄對不起來。
+        """
+        if principal_minor < 0:
+            raise ValueError("DEPOSIT_PRINCIPAL_INVALID")
+        if maturity_date <= start_date:
+            raise ValueError("DEPOSIT_MATURITY_BEFORE_START")
+        with database_transaction(self.paths.database_path) as connection:
+            changed = connection.execute(
+                """
+                UPDATE deposit_terms
+                SET start_date = ?, maturity_date = ?, principal_minor = ?,
+                    annual_rate_ppm = ?, monthly_deposit_minor = ?, note = ?, updated_at = ?
+                WHERE term_id = ? AND status = 'active'
+                """,
+                (
+                    start_date,
+                    maturity_date,
+                    principal_minor,
+                    annual_rate_ppm,
+                    monthly_deposit_minor,
+                    note.strip(),
+                    now_iso(),
+                    term_id,
+                ),
+            ).rowcount
+            if changed == 0:
+                raise NotFoundError("DEPOSIT_TERM_NOT_EDITABLE")
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="deposit_term.update",
+                entity_type="deposit_term",
+                entity_id=term_id,
+                details={"annual_rate_ppm": annual_rate_ppm},
+            )
+
+    def update_event_suggestion(self, event_id: str, suggested_amount_minor: int | None) -> None:
+        """就地更新建議金額。
+
+        **不用「刪掉再重生」**：重生要依賴「今天」，而使用者補利率的時候，那一期的到期日
+        通常還在未來 —— 刪掉之後就再也生不回來，待確認會整列消失。
+        """
+        with database_transaction(self.paths.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE deposit_events
+                SET suggested_amount_minor = ?, updated_at = ?
+                WHERE event_id = ? AND status = 'pending'
+                """,
+                (suggested_amount_minor, now_iso(), event_id),
+            )
+
+    def list_pending_events_for_term(self, term_id: str) -> list[DepositEvent]:
+        with connect_database(self.paths.database_path) as connection:
+            rows = connection.execute(
+                _EVENT_SELECT + " WHERE e.status = 'pending' AND e.term_id = ?",
+                (term_id,),
+            ).fetchall()
+        return [_row_to_event(row) for row in rows]
 
     def create_term(
         self,
@@ -226,7 +393,12 @@ class DepositStore(StoreBase):
         return [_row_to_term(row) for row in rows]
 
     def set_term_status(
-        self, term_id: str, status: str, *, actual_interest_minor: int | None = None
+        self,
+        term_id: str,
+        status: str,
+        *,
+        actual_interest_minor: int | None = None,
+        effective_rate_ppm: int | None = None,
     ) -> None:
         with database_transaction(self.paths.database_path) as connection:
             changed = connection.execute(
@@ -234,10 +406,11 @@ class DepositStore(StoreBase):
                 UPDATE deposit_terms
                 SET status = ?,
                     actual_interest_minor = COALESCE(?, actual_interest_minor),
+                    effective_rate_ppm = COALESCE(?, effective_rate_ppm),
                     updated_at = ?
                 WHERE term_id = ?
                 """,
-                (status, actual_interest_minor, now_iso(), term_id),
+                (status, actual_interest_minor, effective_rate_ppm, now_iso(), term_id),
             ).rowcount
             if changed == 0:
                 raise NotFoundError("DEPOSIT_TERM_NOT_FOUND")
@@ -358,7 +531,8 @@ class DepositStore(StoreBase):
 
 _TERM_SELECT = """
 SELECT term_id, contract_id, sequence, start_date, maturity_date, principal_minor,
-       annual_rate_ppm, monthly_deposit_minor, actual_interest_minor, status, note
+       annual_rate_ppm, monthly_deposit_minor, actual_interest_minor, status, note,
+       effective_rate_ppm
 FROM deposit_terms
 """
 
@@ -387,6 +561,7 @@ def _row_to_contract(row: sqlite3.Row) -> DepositContract:
         term_months=int(row["term_months"]),
         status=str(row["status"]),
         note=str(row["note"]),
+        rate_type=str(row["rate_type"]),
     )
 
 
@@ -413,6 +588,9 @@ def _row_to_term(row: sqlite3.Row) -> DepositTerm:
         ),
         status=str(row["status"]),
         note=str(row["note"]),
+        effective_rate_ppm=(
+            int(row["effective_rate_ppm"]) if row["effective_rate_ppm"] is not None else None
+        ),
     )
 
 

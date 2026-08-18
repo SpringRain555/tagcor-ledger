@@ -8,7 +8,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 6
+LATEST_SCHEMA_VERSION = 7
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -370,6 +370,38 @@ def migrate_v6(connection: sqlite3.Connection) -> None:
     connection.executescript(SCHEMA_V6)
 
 
+def migrate_v7(connection: sqlite3.Connection) -> None:
+    """利率類型，以及從實際利息反推出來的實際年利率。
+
+    **必須是新的一版，不能改 v6。** 使用者的資料庫已經跑過 v6 了，改動 v6 的內容
+    對他們毫無效果 —— migration 記錄下來就不會再跑第二次。
+
+    `ALTER TABLE ... ADD COLUMN` 在 SQLite 是常數時間操作，不會重寫整張表。
+    """
+    _add_column_if_missing(
+        connection,
+        "deposit_contracts",
+        "rate_type",
+        "TEXT NOT NULL DEFAULT 'fixed'",
+    )
+    _add_column_if_missing(
+        connection,
+        "deposit_terms",
+        "effective_rate_ppm",
+        "INTEGER",
+    )
+
+
+def _add_column_if_missing(
+    connection: sqlite3.Connection, table: str, column: str, definition: str
+) -> None:
+    existing = {
+        str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")
+    }
+    if column not in existing:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 MIGRATIONS: dict[int, Migration] = {
     1: migrate_v1,
     2: migrate_v2,
@@ -377,6 +409,7 @@ MIGRATIONS: dict[int, Migration] = {
     4: migrate_v4,
     5: migrate_v5,
     6: migrate_v6,
+    7: migrate_v7,
 }
 
 

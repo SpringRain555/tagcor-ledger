@@ -366,6 +366,15 @@ class LedgerController:
     def create_deposit_contract(self, **values: Any) -> Result:
         return self.deposits.create_contract(**values)
 
+    def update_deposit_contract(self, contract_id: str, **values: Any) -> Result:
+        return self.deposits.update_contract(contract_id, **values)
+
+    def delete_deposit_contract(self, contract_id: str) -> Result:
+        return self.deposits.delete_contract(contract_id)
+
+    def update_deposit_term(self, term_id: str, **values: Any) -> Result:
+        return self.deposits.update_term(term_id, **values)
+
     def list_deposit_pending(self) -> list[dict[str, Any]]:
         result = self.deposits.list_pending()
         return list(result.details.get("events", []))

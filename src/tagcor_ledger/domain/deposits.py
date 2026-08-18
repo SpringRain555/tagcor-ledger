@@ -54,6 +54,24 @@ class MaturityAction(StrEnum):
     RENEW_PRINCIPAL_AND_INTEREST = "renew_principal_and_interest"  # 本息自動轉期續存
 
 
+class RateType(StrEnum):
+    """利率是固定的還是跟著牌告走。
+
+    **機動利率不預先填數字。** 郵局的機動利率會隨牌告調整，存的當下填一個數字，
+    到期時它多半已經不是那個值了 —— 那種「看起來精確但其實是舊的」比留空更糟。
+    機動利率一律照存摺記實際利息，再由程式反推出這一期的實際年利率當紀錄。
+    """
+
+    FIXED = "fixed"  # 固定利率
+    FLOATING = "floating"  # 機動利率
+
+
+RATE_TYPE_NAMES = {
+    RateType.FIXED: "固定",
+    RateType.FLOATING: "機動",
+}
+
+
 class DepositTermStatus(StrEnum):
     ACTIVE = "active"  # 存續中
     MATURED = "matured"  # 已到期，尚未處理
@@ -107,6 +125,7 @@ class DepositContract:
     term_months: int
     status: str
     note: str
+    rate_type: str = "fixed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +147,8 @@ class DepositTerm:
     actual_interest_minor: int | None
     status: str
     note: str
+    # 從實際利息反推出來的年利率。機動利率時這是唯一有意義的利率紀錄。
+    effective_rate_ppm: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +219,58 @@ def suggest_monthly_interest_minor(
         return None
     total = Decimal(principal_minor) * monthly_rate(annual_rate_ppm)
     return int(total.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+# 反推時的搜尋上界。**1% 是 10,000 ppm**，所以 100% 是 1,000,000 —— 不是 100,000,000。
+# 定存利率在 1–2% 這個量級，100% 已經是非常寬的天花板；超過它多半是金額打錯字。
+MAX_RATE_PPM = 1_000_000
+
+
+def derive_annual_rate_ppm(
+    *,
+    interest_method: str,
+    principal_minor: int,
+    interest_minor: int,
+    term_months: int,
+    monthly_deposit_minor: int | None = None,
+) -> int | None:
+    """從**實際領到的利息**反推這一期的年利率（ppm）。
+
+    機動利率的正確用法：不預先填利率，到期照存摺輸入實際利息，再由這裡算出
+    「這一期實際上等於年利率多少」存起來當紀錄。
+
+    做法是拿 `suggest_interest_minor()` 做二分搜尋，而不是各自推導反函數。這樣有兩個
+    好處：三種計息方式共用同一套邏輯（零存整付沒有簡潔的反函數），而且**反推一定與
+    正推一致** —— 進位規則變了兩邊會一起變，不會各說各話。
+    """
+    if term_months <= 0 or interest_minor < 0:
+        return None
+    if principal_minor <= 0 and not monthly_deposit_minor:
+        return None
+
+    def forward(ppm: int) -> int:
+        value = suggest_interest_minor(
+            interest_method=interest_method,
+            principal_minor=principal_minor,
+            annual_rate_ppm=ppm,
+            term_months=term_months,
+            monthly_deposit_minor=monthly_deposit_minor,
+        )
+        return value if value is not None else 0
+
+    if interest_minor == 0:
+        return 0
+    if forward(MAX_RATE_PPM) < interest_minor:
+        return None  # 利息大到超過 100% 年利率，多半是輸入錯了
+
+    low, high = 0, MAX_RATE_PPM
+    while low < high:
+        middle = (low + high) // 2
+        if forward(middle) < interest_minor:
+            low = middle + 1
+        else:
+            high = middle
+    return low
 
 
 def renewed_principal_minor(

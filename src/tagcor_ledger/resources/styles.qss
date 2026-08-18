@@ -417,3 +417,96 @@ QScrollBar::sub-line {
     height: 0;
     background: transparent;
 }
+
+/* ---------------------------------------------------------------------------
+ * 日曆彈出視窗
+ *
+ * 沒有這一節時，日曆會被上面幾條全域規則波及而壞掉：`QSpinBox` 的 padding 撐爆
+ * 年份輸入框、`QAbstractItemView` 的 padding 讓日期格容不下兩位數字，於是每一格都
+ * 顯示成「...」。2026-08-18 實機看到的就是那個畫面。
+ *
+ * 所以這裡的每一條都用 `QCalendarWidget` 開頭，把日曆從全域規則裡隔出來。
+ * --------------------------------------------------------------------------- */
+
+QCalendarWidget {
+    background-color: #111827;
+}
+
+/* 上方的月份／年份列 */
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background-color: #1E293B;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    min-height: 34px;
+}
+
+QCalendarWidget QToolButton {
+    color: #E5E7EB;
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin: 2px;
+    font-size: 10.5pt;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #334155;
+}
+
+QCalendarWidget QToolButton::menu-indicator {
+    image: none;
+}
+
+/* 年份輸入框：全域 QSpinBox 的 padding 會把它撐到超出導覽列 */
+QCalendarWidget QSpinBox {
+    color: #E5E7EB;
+    background-color: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 1px 4px;
+    margin: 2px;
+    min-height: 0;
+    min-width: 64px;
+}
+
+/* 月份選單 */
+QCalendarWidget QMenu {
+    color: #E5E7EB;
+    background-color: #111827;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+QCalendarWidget QMenu::item:selected {
+    background-color: #2563EB;
+    color: #FFFFFF;
+}
+
+/* 日期格。padding 要是 0 —— 全域 QAbstractItemView 的 padding 正是把
+ * 兩位數日期擠成「...」的原因。 */
+QCalendarWidget QAbstractItemView {
+    color: #E5E7EB;
+    background-color: #111827;
+    alternate-background-color: #111827;
+    selection-background-color: #2563EB;
+    selection-color: #FFFFFF;
+    padding: 0;
+    outline: 0;
+    font-size: 10pt;
+}
+
+QCalendarWidget QAbstractItemView:enabled {
+    color: #E5E7EB;
+}
+
+/* 上／下個月的日期灰掉，避免誤點 */
+QCalendarWidget QAbstractItemView:disabled {
+    color: #475569;
+}
+
+/* 星期標題列 */
+QCalendarWidget QWidget {
+    alternate-background-color: #162033;
+}

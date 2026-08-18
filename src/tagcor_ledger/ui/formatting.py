@@ -17,9 +17,11 @@ from tagcor_ledger.domain.deposits import (
     DEPOSIT_EVENT_TYPE_NAMES,
     INTEREST_METHOD_NAMES,
     MATURITY_ACTION_NAMES,
+    RATE_TYPE_NAMES,
     DepositEventType,
     InterestMethod,
     MaturityAction,
+    RateType,
 )
 
 ENTRY_NAMES = {"expense": "支出", "income": "收入", "transfer": "轉帳"}
@@ -163,24 +165,35 @@ def rate_text(annual_rate_ppm: Any) -> str:
 def deposit_contract_values(item: dict[str, Any]) -> list[str]:
     method = InterestMethod(str(item["interest_method"]))
     action = MaturityAction(str(item["maturity_action"]))
+    kind = RateType(str(item.get("rate_type", "fixed")))
     return [
         str(item["name"]),
         str(item.get("account_name", "")),
         INTEREST_METHOD_NAMES[method],
         MATURITY_ACTION_NAMES[action],
+        RATE_TYPE_NAMES[kind],
         f"{item['term_months']} 個月",
         "使用中" if item["status"] == "active" else "已結束",
     ]
 
 
 def deposit_term_values(item: dict[str, Any]) -> list[str]:
+    """年利率欄優先顯示**反推出來的實際利率** —— 那是真的發生過的事實。
+
+    事前填的牌告利率只是預期值，機動利率更是連填都不該填。
+    """
     actual = item.get("actual_interest_minor")
+    effective = item.get("effective_rate_ppm")
+    if effective is not None:
+        shown_rate = f"{rate_text(effective)}（實際）"
+    else:
+        shown_rate = rate_text(item.get("annual_rate_ppm"))
     return [
         f"第 {item['sequence']} 期",
         str(item["start_date"]),
         str(item["maturity_date"]),
         minor_text(item["principal_minor"]),
-        rate_text(item.get("annual_rate_ppm")),
+        shown_rate,
         minor_text(actual) if actual is not None else "尚未確認",
         DEPOSIT_TERM_STATUS_NAMES.get(str(item["status"]), str(item["status"])),
     ]
