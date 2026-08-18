@@ -17,12 +17,13 @@ from tagcor_ledger.infrastructure.stores.accounts import AccountStore
 from tagcor_ledger.infrastructure.stores.balance import BalanceStore
 from tagcor_ledger.infrastructure.stores.base import NotFoundError, StoreError
 from tagcor_ledger.infrastructure.stores.categories import CategoryStore
+from tagcor_ledger.infrastructure.stores.deposits import DepositStore
 from tagcor_ledger.infrastructure.stores.transactions import TransactionStore
 
 __all__ = ["LedgerStore", "NotFoundError", "StoreError"]
 
 
-class LedgerStore(AccountStore, CategoryStore, TransactionStore, BalanceStore):
+class LedgerStore(AccountStore, CategoryStore, TransactionStore, BalanceStore, DepositStore):
     def __init__(self, paths: AppPaths) -> None:
         super().__init__(paths)
         initialize_database(paths)

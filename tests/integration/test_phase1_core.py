@@ -21,11 +21,12 @@ from tagcor_ledger.application.transaction_service import (
 from tagcor_ledger.domain.models import ApplicationSettings, TransactionFilter
 from tagcor_ledger.infrastructure.database import connect_database, initialize_database
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
-from tagcor_ledger.infrastructure.migrations import migrate_v1
+from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION, migrate_v1
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
-def test_schema_v1_migrates_to_v5_and_reruns_safely(tmp_path: Path) -> None:
+def test_schema_v1_migrates_to_latest_and_reruns_safely(tmp_path: Path) -> None:
+    """名稱不綁版本號 —— 每加一次 migration 就要改一次測試名稱是沒有意義的維護成本。"""
     paths = resolve_app_paths(tmp_path / "ledger")
     paths.ledger_dir.mkdir(parents=True)
     with sqlite3.connect(paths.database_path) as connection:
@@ -61,7 +62,7 @@ def test_schema_v1_migrates_to_v5_and_reruns_safely(tmp_path: Path) -> None:
             str(row["name"])
             for row in connection.execute("PRAGMA table_info(transaction_fts)")
         }
-    assert versions == [1, 2, 3, 4, 5]
+    assert versions == list(range(1, LATEST_SCHEMA_VERSION + 1))
     assert "replaces_transaction_id" in transaction_columns
     assert "actual_balance_minor" in balance_columns
     assert "payee_id" not in transaction_columns

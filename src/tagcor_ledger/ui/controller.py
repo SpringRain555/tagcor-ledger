@@ -43,6 +43,7 @@ from tagcor_ledger.domain.models import (
     TransactionTemplate,
 )
 from tagcor_ledger.infrastructure.database import connect_database
+from tagcor_ledger.application.deposits import DepositService
 from tagcor_ledger.application.diagnostics import DiagnosticsService
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
@@ -64,6 +65,7 @@ class LedgerController:
         self.balance = BalanceSnapshotService(self.paths, self.store)
         self.maintenance = MaintenanceService(self.paths)
         self.diagnostics = DiagnosticsService(self.paths)
+        self.deposits = DepositService(self.paths, self.store)
         self.add_transaction = AddTransaction(self.paths, self.store)
         self.add_transfer = AddTransfer(self.paths, self.store)
         self.list_transaction_records = ListTransactions(self.paths, self.store)
@@ -73,6 +75,7 @@ class LedgerController:
 
     def _run_startup_tasks(self) -> None:
         self.startup_generation = self.automation.generate_due()
+        self.deposits.generate_due()
         self.refresh_balance_snapshot_reminder_due()
 
     def refresh_balance_snapshot_reminder_due(self) -> bool:
@@ -352,8 +355,38 @@ class LedgerController:
     def archive_schedule(self, schedule_id: str) -> Result:
         return self.automation.archive_schedule(schedule_id)
 
+    def list_deposit_contracts(self, *, include_closed: bool = False) -> list[dict[str, Any]]:
+        result = self.deposits.list_contracts(include_closed=include_closed)
+        return list(result.details.get("contracts", []))
+
+    def list_deposit_terms(self, contract_id: str | None = None) -> list[dict[str, Any]]:
+        result = self.deposits.list_terms(contract_id)
+        return list(result.details.get("terms", []))
+
+    def create_deposit_contract(self, **values: Any) -> Result:
+        return self.deposits.create_contract(**values)
+
+    def list_deposit_pending(self) -> list[dict[str, Any]]:
+        result = self.deposits.list_pending()
+        return list(result.details.get("events", []))
+
+    def confirm_deposit_event(
+        self, event_id: str, *, actual_amount_minor: int | None = None
+    ) -> Result:
+        return self.deposits.confirm(event_id, actual_amount_minor=actual_amount_minor)
+
+    def skip_deposit_event(self, event_id: str) -> Result:
+        return self.deposits.skip(event_id)
+
     def generate_due(self) -> Result:
-        return self.automation.generate_due()
+        """排程與定存一起產生。**單一收件匣**：使用者不該需要知道待確認來自哪個子系統。"""
+        result = self.automation.generate_due()
+        deposits = self.deposits.generate_due()
+        if not result.success:
+            return result
+        merged = dict(result.details)
+        merged["deposit_generated"] = deposits.details.get("generated", 0)
+        return Result.ok(result.message, details=merged, correlation_id=result.correlation_id)
 
     def list_pending(self) -> list[dict[str, Any]]:
         result = self.automation.list_pending()

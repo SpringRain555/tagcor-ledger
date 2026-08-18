@@ -10,12 +10,14 @@ from tagcor_ledger.infrastructure.stores.accounts import AccountStore
 from tagcor_ledger.infrastructure.stores.balance import BalanceStore
 from tagcor_ledger.infrastructure.stores.base import NotFoundError, StoreBase, StoreError
 from tagcor_ledger.infrastructure.stores.categories import CategoryStore
+from tagcor_ledger.infrastructure.stores.deposits import DepositStore
 from tagcor_ledger.infrastructure.stores.transactions import TransactionStore
 
 __all__ = [
     "AccountStore",
     "BalanceStore",
     "CategoryStore",
+    "DepositStore",
     "NotFoundError",
     "StoreBase",
     "StoreError",

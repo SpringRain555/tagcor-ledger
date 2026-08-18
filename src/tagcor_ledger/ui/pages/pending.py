@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -25,7 +26,12 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import minor_text, occurrence_values, result_message
+from tagcor_ledger.ui.formatting import (
+    deposit_event_values,
+    minor_text,
+    occurrence_values,
+    result_message,
+)
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
 from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
 
@@ -40,6 +46,11 @@ class PendingPage(QWidget):
         self.model = RowsModel(
             ["到期日", "排程", "類型", "金額", "狀態說明"],
             occurrence_values,
+        )
+        self.deposits = QTableView()
+        self.deposit_model = RowsModel(
+            ["到期日", "定存", "類型", "建議金額"],
+            deposit_event_values,
         )
         self.has_more = False
         self._build()
@@ -60,18 +71,72 @@ class PendingPage(QWidget):
             row.addWidget(widget)
         row.addStretch()
         setup_table(self.table, self.model)
+
+        # 定存事件的欄位形狀跟排程不一樣，所以分開兩張表。**仍然是同一頁** ——
+        # 使用者不需要知道待確認來自哪個子系統，但硬塞進同一張表只會讓兩邊的欄位都變模糊。
+        deposit_confirm = QPushButton("確認定存項目入帳")
+        deposit_skip = QPushButton("略過定存項目")
+        set_button_role(deposit_confirm, "primary")
+        deposit_row = QHBoxLayout()
+        deposit_row.addWidget(deposit_confirm)
+        deposit_row.addWidget(deposit_skip)
+        deposit_row.addStretch()
+        setup_table(self.deposits, self.deposit_model)
+
         layout = QVBoxLayout(self)
         layout.addWidget(title)
         layout.addLayout(row)
         layout.addWidget(self.table)
+        layout.addWidget(QLabel("定存到期與領息"))
+        layout.addLayout(deposit_row)
+        layout.addWidget(self.deposits)
         edit_confirm.clicked.connect(self.edit_confirm)
         skip.clicked.connect(self.skip)
         batch.clicked.connect(self.batch_confirm)
         generate.clicked.connect(self.generate)
+        deposit_confirm.clicked.connect(self.confirm_deposit)
+        deposit_skip.clicked.connect(self.skip_deposit)
 
     def refresh(self) -> None:
         self.model.replace_rows(self.controller.list_pending())
+        self.deposit_model.replace_rows(self.controller.list_deposit_pending())
         self.changed.emit()
+
+    def confirm_deposit(self) -> None:
+        item = self.deposit_model.selected_item(self.deposits)
+        if item is None:
+            return
+        suggested = item.get("suggested_amount_minor")
+        text, accepted = QInputDialog.getText(
+            self,
+            "確認定存項目",
+            "實際金額（TWD）—— 以存摺為準，建議值只是試算：",
+            text=minor_text(suggested) if suggested is not None else "",
+        )
+        if not accepted:
+            return
+        try:
+            amount = Money.from_decimal_string(text.strip(), allow_zero=True).amount_minor
+        except MoneyError as exc:
+            QMessageBox.warning(self, "金額無效", str(exc))
+            return
+        result = self.controller.confirm_deposit_event(
+            str(item["event_id"]), actual_amount_minor=amount
+        )
+        if not result.success:
+            QMessageBox.warning(self, "無法確認", result_message(result))
+            return
+        self.refresh()
+
+    def skip_deposit(self) -> None:
+        item = self.deposit_model.selected_item(self.deposits)
+        if item is None:
+            return
+        result = self.controller.skip_deposit_event(str(item["event_id"]))
+        if not result.success:
+            QMessageBox.warning(self, "無法略過", result_message(result))
+            return
+        self.refresh()
 
     def edit_confirm(self) -> None:
         item = self.model.selected_item(self.table)

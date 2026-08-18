@@ -1,6 +1,8 @@
 # REQ-0007 郵局定存
 
-狀態：**規劃中**（Stage 5，schema v6）
+狀態：**已實作**（Stage 5，schema v6，v0.9.0）
+
+實作位置：`domain/deposits.py`（列舉與試算）、`infrastructure/stores/deposits.py`（持久化）、`application/deposits.py`（十二種組合的效果）、`ui/pages/deposits.py`（合約與期）。到期與領息一律走「待確認」頁。
 
 ## 目標
 

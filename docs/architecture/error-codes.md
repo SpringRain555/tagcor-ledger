@@ -138,6 +138,23 @@
 | `DATABASE_UNAVAILABLE` | 其他 `sqlite3.DatabaseError` | 確認檔案存在且沒被佔用，並匯出診斷資訊 |
 | `STARTUP_FAILED` | 認不出來的啟動例外 | 提供日誌檔。**這個碼出現代表分類漏了一種情形**，應該補一個更明確的分支 |
 
+## 定存
+
+| 錯誤碼 | 成因 | 使用者該怎麼做 |
+|---|---|---|
+| `DEPOSIT_NAME_REQUIRED` | 合約沒有名稱 | 填名稱 |
+| `DEPOSIT_METHOD_INVALID` | 計息方式或到期轉存方式不是允許的值 | UI 正常操作不會發生 |
+| `DEPOSIT_TERM_MONTHS_INVALID` | 期長不是正整數 | 填月數，例如一年是 12 |
+| `DEPOSIT_PRINCIPAL_INVALID` | 本金是負數 | 本金不能是負的 |
+| `DEPOSIT_AMOUNT_INVALID` | 本金或每月存入金額格式不對 | 只接受整數元，不要加逗號或單位 |
+| `DEPOSIT_MATURITY_BEFORE_START` | 到期日不晚於起存日 | 檢查起存日與期長 |
+| `DEPOSIT_MONTHLY_DEPOSIT_REQUIRED` | 零存整付沒填每月存入金額 | 零存整付就是每月存一筆，這個欄位必填 |
+| `DEPOSIT_INTEREST_DESTINATION_REQUIRED` | 沒指定利息轉入哪個帳戶 | 選一個帳戶。**只有「本息續存」不需要**，因為利息留在定存裡 |
+| `DEPOSIT_CONTRACT_NOT_FOUND` / `DEPOSIT_TERM_NOT_FOUND` / `DEPOSIT_EVENT_NOT_FOUND` | 對應資料不存在 | 重新整理定存頁 |
+| `DEPOSIT_EVENT_NOT_PENDING` | 想處理一件已確認或已略過的項目 | 兩者都是終點。要改結果就去作廢它產生的交易 |
+| `DEPOSIT_AMOUNT_REQUIRED` | 確認時沒有金額，而且利率空白算不出建議值 | **照存摺填實際金額。** 或先回定存頁補上年利率 |
+| `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` | 對應操作在寫入層失敗 | 看 `details.reason` |
+
 ## 診斷資訊
 
 | 錯誤碼 | 成因 | 使用者該怎麼做 |

@@ -204,9 +204,10 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 
 ---
 
-## 7. 定存合約與期（Stage 5，尚未實作）
+## 7. 定存合約與期
 
-規格寫在 `docs/requirements/REQ-0007-time-deposits.md`，實作前不要當成既有行為。
+**已實作**（Stage 5，v0.9.0）。規格見 `docs/requirements/REQ-0007-time-deposits.md`，
+實作在 `domain/deposits.py` 與 `application/deposits.py`。
 
 **期**（`deposit_terms`）的狀態：
 
@@ -225,6 +226,41 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 | **`已續約`／`已結清`／`已解約`** | ✗ | ✗ | ✗ | ✗ | — |
 
 **與待確認相同的原則：到期不自動入帳。** 到期前 7 天產生待確認項目，由使用者確認才成為交易。
+`tests/integration/test_deposits.py::test_generating_events_never_writes_a_posting` 斷言
+產生事件之後 `account_postings` 一列都沒有增加。
+
+### 三 × 四效果矩陣
+
+`InterestMethod` 決定**期間內**發生什麼：
+
+| 計息方式 | 期間內每月 |
+|---|---|
+| 整存整付 `lump_sum` | 無 |
+| 存本取息 `monthly_interest` | 收入：利息 → 指定帳戶 |
+| 零存整付 `installment_savings` | 轉帳：指定帳戶 → 定存帳戶 |
+
+`MaturityAction` 決定**到期那天**發生什麼：
+
+| 到期轉存方式 | 本金 | 利息 | 這一期變成 |
+|---|---|---|---|
+| 不自動轉存 `none` | 轉帳：定存 → 指定帳戶 | 收入 → 指定帳戶 | 已結清 |
+| 本息自動轉存本人帳戶 `principal_interest_to_account` | 轉帳：定存 → 指定帳戶 | 收入 → 指定帳戶 | 已結清 |
+| 本金續存、利息轉存帳戶 `renew_principal_only` | 留在定存（不產生交易） | 收入 → 指定帳戶 | 已續約，下期本金不變 |
+| 本息續存 `renew_principal_and_interest` | 留在定存 | 收入 → **定存帳戶** | 已續約，下期本金含息 |
+
+> **前兩種在帳本上的效果完全相同**，差別只在銀行端是否自動處理。這裡誠實寫出來，
+> 免得日後有人以為漏實作了什麼而去「修」一個不存在的問題。
+
+**利息記成收入，不是轉帳。** 利息是新產生的錢；只有本金在兩個帳戶之間移動才是轉帳。
+把利息記成轉帳會讓總資產憑空不變，看不出自己賺了多少。
+
+### 這裡刻意不做的推論
+
+- **不自動判定「已到期」。** 期的狀態要等使用者確認到期事件才前進 —— 日期到了不代表
+  銀行已經處理，也不代表使用者已經去看過存摺。
+- **試算利息永遠只是建議值。** 實際入帳金額以存摺為準，使用者可以覆寫，覆寫的值才會
+  寫進 `deposit_terms.actual_interest_minor`。
+- **續約後的新一期利率留空**，不沿用上一期 —— 續存是照當時的牌告利率，沿用會捏造事實。
 
 ---
 

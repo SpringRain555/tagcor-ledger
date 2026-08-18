@@ -8,7 +8,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 5
+LATEST_SCHEMA_VERSION = 6
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -296,12 +296,87 @@ def _drop_column_if_exists(
         connection.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
 
 
+SCHEMA_V6 = """
+CREATE TABLE IF NOT EXISTS deposit_contracts (
+    contract_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(account_id),
+    name TEXT NOT NULL,
+    interest_method TEXT NOT NULL
+        CHECK (interest_method IN ('lump_sum', 'monthly_interest', 'installment_savings')),
+    maturity_action TEXT NOT NULL
+        CHECK (maturity_action IN (
+            'none',
+            'principal_interest_to_account',
+            'renew_principal_only',
+            'renew_principal_and_interest'
+        )),
+    interest_destination_account_id TEXT REFERENCES accounts(account_id),
+    term_months INTEGER NOT NULL CHECK (term_months > 0),
+    status TEXT NOT NULL CHECK (status IN ('active', 'closed')),
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deposit_contracts_account
+ON deposit_contracts(account_id, status);
+
+CREATE TABLE IF NOT EXISTS deposit_terms (
+    term_id TEXT PRIMARY KEY,
+    contract_id TEXT NOT NULL REFERENCES deposit_contracts(contract_id),
+    sequence INTEGER NOT NULL,
+    start_date TEXT NOT NULL,
+    maturity_date TEXT NOT NULL,
+    principal_minor INTEGER NOT NULL CHECK (principal_minor >= 0),
+    -- 百萬分之一為單位的整數；未知時為 NULL，此時算不出建議利息但合約照樣成立。
+    annual_rate_ppm INTEGER CHECK (annual_rate_ppm IS NULL OR annual_rate_ppm >= 0),
+    monthly_deposit_minor INTEGER CHECK (monthly_deposit_minor IS NULL OR monthly_deposit_minor >= 0),
+    actual_interest_minor INTEGER,
+    status TEXT NOT NULL
+        CHECK (status IN ('active', 'matured', 'renewed', 'settled', 'terminated')),
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (contract_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_deposit_terms_status_maturity
+ON deposit_terms(status, maturity_date);
+
+CREATE TABLE IF NOT EXISTS deposit_events (
+    event_id TEXT PRIMARY KEY,
+    term_id TEXT NOT NULL REFERENCES deposit_terms(term_id),
+    event_type TEXT NOT NULL
+        CHECK (event_type IN ('interest_payout', 'installment', 'maturity')),
+    due_date TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'skipped')),
+    suggested_amount_minor INTEGER,
+    actual_amount_minor INTEGER,
+    transaction_id TEXT REFERENCES transactions(transaction_id),
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (term_id, event_type, due_date)
+);
+CREATE INDEX IF NOT EXISTS idx_deposit_events_status_due
+ON deposit_events(status, due_date);
+"""
+
+
+def migrate_v6(connection: sqlite3.Connection) -> None:
+    """定存合約、期與待確認事件。
+
+    `UNIQUE (term_id, event_type, due_date)` 是重複產生的防線 —— 「產生到期項目」
+    可以按很多次，同一期同一天的同一種事件只會有一列。
+    """
+    connection.executescript(SCHEMA_V6)
+
+
 MIGRATIONS: dict[int, Migration] = {
     1: migrate_v1,
     2: migrate_v2,
     3: migrate_v3,
     4: migrate_v4,
     5: migrate_v5,
+    6: migrate_v6,
 }
 
 

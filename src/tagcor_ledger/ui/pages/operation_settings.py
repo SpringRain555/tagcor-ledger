@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.pages.automation import AutomationPage
 from tagcor_ledger.ui.pages.catalog import CatalogPage
+from tagcor_ledger.ui.pages.deposits import DepositsPage
 
 
 class OperationSettingsPage(QWidget):
@@ -22,6 +23,7 @@ class OperationSettingsPage(QWidget):
         self.accounts = CatalogPage(controller, "account")
         self.categories = CatalogPage(controller, "category")
         self.automation = AutomationPage(controller)
+        self.deposits = DepositsPage(controller)
         self._build()
 
     def _build(self) -> None:
@@ -30,14 +32,17 @@ class OperationSettingsPage(QWidget):
         tabs.addTab(self.accounts, "帳戶")
         tabs.addTab(self.categories, "類別")
         tabs.addTab(self.automation, "模板與週期排程")
+        tabs.addTab(self.deposits, "定存")
         layout = QVBoxLayout(self)
         layout.addWidget(tabs)
         self.accounts.changed.connect(self.changed.emit)
         self.categories.changed.connect(self.changed.emit)
         self.automation.changed.connect(self.changed.emit)
+        self.deposits.changed.connect(self.changed.emit)
         self.automation.apply_requested.connect(self.apply_requested.emit)
 
     def refresh(self) -> None:
         self.accounts.refresh()
         self.categories.refresh()
         self.automation.refresh()
+        self.deposits.refresh()

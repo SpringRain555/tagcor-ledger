@@ -13,6 +13,15 @@ from datetime import datetime
 from typing import Any
 
 
+from tagcor_ledger.domain.deposits import (
+    DEPOSIT_EVENT_TYPE_NAMES,
+    INTEREST_METHOD_NAMES,
+    MATURITY_ACTION_NAMES,
+    DepositEventType,
+    InterestMethod,
+    MaturityAction,
+)
+
 ENTRY_NAMES = {"expense": "支出", "income": "收入", "transfer": "轉帳"}
 STATUS_NAMES = {"active": "有效", "voided": "已作廢"}
 FREQUENCY_NAMES = {
@@ -127,4 +136,63 @@ def occurrence_values(item: dict[str, Any]) -> list[str]:
         ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
         amount,
         str(item.get("invalid_reason") or "可確認"),
+    ]
+
+
+DEPOSIT_TERM_STATUS_NAMES = {
+    "active": "存續中",
+    "matured": "已到期",
+    "renewed": "已續約",
+    "settled": "已結清",
+    "terminated": "已解約",
+}
+
+
+def rate_text(annual_rate_ppm: Any) -> str:
+    """百萬分之一為單位的整數 → 百分比字串。**不用浮點數。**
+
+    1.6% 存成 16000 ppm，除以 10000 得到整數位與小數位，用字串組起來。
+    """
+    if annual_rate_ppm is None:
+        return "未填"
+    ppm = int(annual_rate_ppm)
+    whole, fraction = divmod(ppm, 10_000)
+    return f"{whole}.{fraction:04d}".rstrip("0").rstrip(".") + "%"
+
+
+def deposit_contract_values(item: dict[str, Any]) -> list[str]:
+    method = InterestMethod(str(item["interest_method"]))
+    action = MaturityAction(str(item["maturity_action"]))
+    return [
+        str(item["name"]),
+        str(item.get("account_name", "")),
+        INTEREST_METHOD_NAMES[method],
+        MATURITY_ACTION_NAMES[action],
+        f"{item['term_months']} 個月",
+        "使用中" if item["status"] == "active" else "已結束",
+    ]
+
+
+def deposit_term_values(item: dict[str, Any]) -> list[str]:
+    actual = item.get("actual_interest_minor")
+    return [
+        f"第 {item['sequence']} 期",
+        str(item["start_date"]),
+        str(item["maturity_date"]),
+        minor_text(item["principal_minor"]),
+        rate_text(item.get("annual_rate_ppm")),
+        minor_text(actual) if actual is not None else "尚未確認",
+        DEPOSIT_TERM_STATUS_NAMES.get(str(item["status"]), str(item["status"])),
+    ]
+
+
+def deposit_event_values(item: dict[str, Any]) -> list[str]:
+    suggested = item.get("suggested_amount_minor")
+    return [
+        str(item["due_date"]),
+        str(item["contract_name"]),
+        DEPOSIT_EVENT_TYPE_NAMES.get(
+            DepositEventType(str(item["event_type"])), str(item["event_type"])
+        ),
+        minor_text(suggested) if suggested is not None else "需照存摺填寫",
     ]

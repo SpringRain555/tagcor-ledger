@@ -95,3 +95,46 @@ def test_quick_entry_hides_the_label_together_with_the_field(qtbot, tmp_path: Pa
     assert page.form.labelForField(page.destination).isHidden() is False
     assert page.form.labelForField(page.category).isHidden() is True
     assert page.form.labelForField(page.detail).isHidden() is True
+
+
+def test_deposits_tab_and_pending_deposit_section_exist(qtbot, tmp_path: Path) -> None:
+    """定存有自己的分頁，但到期處理一律在「待確認」頁 —— 不要有第二個入帳入口。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    deposits = window.operation_settings.deposits
+    assert deposits.contract_model.rowCount() == 0
+    assert deposits.term_model.rowCount() == 0
+
+    # 待確認頁要有定存區塊，而且一開始是空的。
+    assert window.pending.deposit_model.rowCount() == 0
+
+
+def test_deposit_contract_flows_into_pending_inbox(qtbot, tmp_path: Path) -> None:
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    account_id = str(controller.account_options()[0]["account_id"])
+    result = controller.create_deposit_contract(
+        account_id=account_id,
+        name="郵局定存",
+        interest_method="lump_sum",
+        maturity_action="renew_principal_only",
+        interest_destination_account_id=account_id,
+        term_months=12,
+        start_date="2020-01-15",
+        principal="100000",
+        annual_rate_ppm=16_000,
+    )
+    assert result.success, result.message
+
+    window.operation_settings.deposits.refresh()
+    assert window.operation_settings.deposits.contract_model.rowCount() == 1
+
+    # 起存日在過去，所以一按「產生」就會出現到期項目。
+    assert controller.generate_due().success
+    window.pending.refresh()
+    assert window.pending.deposit_model.rowCount() >= 1
