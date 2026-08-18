@@ -55,9 +55,9 @@
 | [REQ-0004 Phase 4 設定與路徑](requirements/REQ-0004-phase-4-settings-paths-terms.md) | 已實作 |
 | [REQ-0005 Phase 4.1 深色 UI](requirements/REQ-0005-phase-4-1-dark-ui-docs.md) | 已實作 |
 | [REQ-0006 資料與程式分離](requirements/REQ-0006-data-program-separation.md) | 已實作 |
-| [REQ-0007 郵局定存](requirements/REQ-0007-time-deposits.md) | 規劃中 |
-| [REQ-0008 法規參考庫](requirements/REQ-0008-reference-db.md) | 規劃中 |
-| [REQ-0009 例外處理與可觀測性](requirements/REQ-0009-observability.md) | 規劃中 |
+| [REQ-0007 郵局定存](requirements/REQ-0007-time-deposits.md) | 已實作（schema v6–v7） |
+| [REQ-0008 法規參考庫](requirements/REQ-0008-reference-db.md) | 已實作 |
+| [REQ-0009 例外處理與可觀測性](requirements/REQ-0009-observability.md) | 已實作 |
 | [REQ-0010 對帳缺口](requirements/REQ-0010-reconciliation-gap.md) | **刻意尚未實作** |
 
 ## Decisions

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import subprocess
 import sys
@@ -191,11 +192,22 @@ def test_app_package_never_imports_a_network_library() -> None:
 
 
 def test_law_sync_tools_run_without_the_app_environment() -> None:
-    """`tools/law_sync/` 的兩支建置腳本只用標準庫，專案環境跑得起來。"""
+    """`tools/law_sync/` 的兩支建置腳本只用標準庫，專案環境跑得起來。
+
+    子行程的編碼要兩邊都釘死成 UTF-8。原本只寫 `text=True`，於是子行程用 cp950 寫、
+    父行程用 cp950 讀，說明文字裡的中文一撞上就在 reader thread 丟 `UnicodeDecodeError` ——
+    **測試照樣通過**（returncode 另外拿），只是 `result.stderr` 變成空的，
+    真的失敗時錯誤訊息會什麼都看不到。
+    """
+    environment = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     for script in ("build_corpus.py", "build_reference_db.py"):
         result = subprocess.run(
             [sys.executable, str(PROJECT_ROOT / "tools" / "law_sync" / script), "--help"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            env=environment,
         )
         assert result.returncode == 0, f"{script}: {result.stderr}"
+        # 陽性對照：真的讀到了說明文字，而不是拿到一段被吞掉的空字串。
+        assert "--help" in result.stdout, f"{script} 的說明沒有讀回來：{result.stdout!r}"

@@ -16,6 +16,20 @@
 
 ---
 
+## 2026-08-18 schema 加了兩個欄位，只有一半的文件跟上
+
+**情境**：v0.9.1 加 schema v7（`deposit_contracts.rate_type` 與 `deposit_terms.effective_rate_ppm`）。
+
+**做了什麼**：程式、測試與 `glossary.md` 都同步了，`data-model.md` 沒有 —— 它的 migration registry 停在 v5，連 v6 的三張定存表都沒有。三個 Stage 之後的收尾才發現。
+
+**為什麼失敗**：`release_checklist.md` 有「有新用詞的話 glossary 已同步」這一條，卻沒有對應的 data-model 條目。於是「加了新表要更新哪裡」靠的是記得，而不是清單。**沒有進清單的步驟遲早會漏。**
+
+**結論**：`release_checklist.md` 的 Schema 一節加上「加了新表或新欄位就更新 data-model 的 migration registry」。
+
+**不要再做**：不要以為改完 schema 就結束了。權威文件是 `data-model.md`，`glossary.md` 只管用詞 —— 兩份都要動。
+
+---
+
 ## 2026-08-18 加了日誌，一鍵啟動器就壞了 —— 因為它把兩條串流接在一起
 
 **情境**：Stage 4 加上日誌之後，雙擊一鍵啟動器出現「啟動資訊無法解析」。

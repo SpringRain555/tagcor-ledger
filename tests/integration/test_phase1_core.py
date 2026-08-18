@@ -71,6 +71,66 @@ def test_schema_v1_migrates_to_latest_and_reruns_safely(tmp_path: Path) -> None:
     assert "payee" not in fts_columns
 
 
+# 電子票證（悠遊卡／一卡通／iCash）**只記儲值當下的支出**，不建帳戶、不追蹤卡內餘額。
+# 決定與理由見 ADR-0006，硬規則寫在 `AGENTS.md`。
+#
+# 為什麼要一條測試而不是只寫在文件裡：市面產品幾乎都做「卡片歸戶」（CWMoney 的主打功能
+# 逐字就是「歸戶悠遊卡、一卡通、iCash」），所以這是最容易被人順手加回來的一條。
+# 而且它不會以一個功能的形式出現，會先以**一個欄位**的形式出現。
+STORED_VALUE_TOKENS = (
+    "stored_value",
+    "prepaid",
+    "card_balance",
+    "easycard",
+    "ipass",
+    "icash",
+    "ticket",
+)
+
+
+def test_schema_never_grows_a_stored_value_card_concept(tmp_path: Path) -> None:
+    """守的是 **schema**，不是使用者怎麼命名。
+
+    使用者要把帳戶取名叫「悠遊卡」，程式攔不住也不該攔 —— 帳戶名是使用者的資料。
+    能機械檢查的是「資料庫裡有沒有長出卡內餘額這個概念」，那才是設計決定。
+    """
+    paths = resolve_app_paths(tmp_path / "ledger")
+    paths.ledger_dir.mkdir(parents=True)
+    initialize_database(paths)
+
+    scanned: list[str] = []
+    with connect_database(paths.database_path) as connection:
+        objects = [
+            str(row["name"])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"
+            )
+        ]
+        scanned.extend(objects)
+        tables = [
+            str(row["name"])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' "
+                "AND name NOT LIKE 'sqlite_%'"
+            )
+        ]
+        for table in tables:
+            scanned.extend(
+                f"{table}.{row['name']}"
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            )
+
+    # 陽性對照：掃描壞掉時這裡先失敗，而不是讓底下的斷言在空清單上靜默通過。
+    assert len(scanned) > 150, "schema 掃描沒抓到東西，守門等於沒作用"
+
+    offenders = [
+        name for name in scanned if any(token in name.lower() for token in STORED_VALUE_TOKENS)
+    ]
+    assert not offenders, (
+        "電子票證只記儲值當下的支出，schema 不得出現卡內餘額概念（見 ADR-0006）：" f"{offenders}"
+    )
+
+
 def test_replace_transfer_is_atomic_and_links_old_transaction(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "ledger")
     store = LedgerStore(paths)
