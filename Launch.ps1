@@ -53,6 +53,14 @@ function ConvertTo-PlainText {
     ($lines -join [Environment]::NewLine).TrimEnd()
 }
 
+function Read-TextFile {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    if ($null -eq $text) { return '' }
+    return $text.TrimEnd()
+}
+
 function Stop-WithMessage {
     param([string]$Title, [string[]]$Lines)
     Write-Host ''
@@ -134,16 +142,33 @@ Write-Step '檢查套件與資料路徑'
 $jsonArgs = @('-m', 'tagcor_ledger', '--json')
 if ($DataDir) { $jsonArgs = @('-m', 'tagcor_ledger', '--data-dir', $DataDir, '--json') }
 
-# PowerShell 5.1 會把原生程式被導向的 stderr 每一行包成 ErrorRecord，
-# 在 $ErrorActionPreference = 'Stop' 之下那會直接丟例外 —— 底下的錯誤處理根本輪不到，
-# 使用者看到的是 PowerShell 的堆疊而不是「套件沒裝」。所以這一段要退回 Continue。
-$previousPreference = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
-$stdout = & $python @jsonArgs 2>&1
-$exitCode = $LASTEXITCODE
-$ErrorActionPreference = $previousPreference
+# **兩個串流必須分開收。** `--json` 保證 stdout 是純 JSON，診斷訊息一律走 stderr；
+# 用 `2>&1` 合起來再解析的話，只要程式往 stderr 寫任何一行（例如啟動日誌），
+# JSON 就解析失敗 —— 這正是 2026-08-18 踩到的：程式沒問題，是啟動器把兩條線接在一起。
+#
+# 順帶避開 PowerShell 5.1 的另一個坑：對原生程式用 `2>&1` 會把 stderr 每行包成
+# ErrorRecord，在 $ErrorActionPreference = 'Stop' 之下直接丟例外。用 Start-Process
+# 導向檔案就沒有這個問題。
+$stamp = [guid]::NewGuid().ToString('N')
+$outFile = Join-Path $env:TEMP "tagcor-preflight-$stamp.out"
+$errFile = Join-Path $env:TEMP "tagcor-preflight-$stamp.err"
 
-$outputText = ConvertTo-PlainText $stdout
+# 導向檔案時 Python 會用系統地區編碼（本機是 cp950），路徑含中文就會亂碼。
+$env:PYTHONIOENCODING = 'utf-8'
+
+try {
+    $probe = Start-Process -FilePath $python -ArgumentList $jsonArgs -NoNewWindow -Wait -PassThru `
+        -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+    $exitCode = $probe.ExitCode
+    $outputText = (Read-TextFile $outFile)
+    $errorText = (Read-TextFile $errFile)
+} finally {
+    Remove-Item $outFile, $errFile -ErrorAction SilentlyContinue
+}
+
+if ($exitCode -ne 0) {
+    $outputText = (@($errorText, $outputText) | Where-Object { $_ }) -join [Environment]::NewLine
+}
 if ($exitCode -ne 0) {
     Stop-WithMessage '程式無法啟動' (
         ($outputText -split "`r?`n") + @(
@@ -158,7 +183,10 @@ if ($exitCode -ne 0) {
 try {
     $info = $outputText | ConvertFrom-Json
 } catch {
-    Stop-WithMessage '啟動資訊無法解析' ($outputText -split "`r?`n")
+    Stop-WithMessage '啟動資訊無法解析' (
+        @('程式回報成功，但 stdout 不是預期的 JSON。', '') +
+        ($outputText -split "`r?`n")
+    )
 }
 Write-Ok "版本 $($info.version)"
 Write-Ok "資料庫 $($info.database_path)"

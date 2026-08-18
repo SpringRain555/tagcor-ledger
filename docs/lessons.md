@@ -16,6 +16,22 @@
 
 ---
 
+## 2026-08-18 加了日誌，一鍵啟動器就壞了 —— 因為它把兩條串流接在一起
+
+**情境**：Stage 4 加上日誌之後，雙擊一鍵啟動器出現「啟動資訊無法解析」。
+
+**做了什麼**：`Launch.ps1` 的前置檢查寫 `& $python @jsonArgs 2>&1`，把 stdout 與 stderr 合成一份文字再 `ConvertFrom-Json`。
+
+**為什麼失敗**：`configure_logging` 會裝一個寫到 stderr 的 handler，所以啟動時多了一行 `INFO ... startup version=0.8.0`。**程式本身完全正確** —— `--json` 的 stdout 仍然是純 JSON，日誌走的是 stderr 這個正確的管道。壞掉的是啟動器：它一開始就不該把兩條串流混在一起。
+
+值得注意的是這個缺陷**跨了兩個元件**：改的是 Python 這邊，壞的是 PowerShell 那邊，而兩邊各自的測試都是綠的。整合點沒有測試，就沒有人守著那個契約。
+
+**結論**：改用 `Start-Process -RedirectStandardOutput/-RedirectStandardError` 分開收兩條串流（順帶避開 PS 5.1 把原生 stderr 包成 ErrorRecord 的坑），並設 `PYTHONIOENCODING=utf-8` 避免導向檔案時退回 cp950。新增 `tests/integration/test_cli_output.py` 把「`--json` 的 stdout 必須是純 JSON」釘成測試。
+
+**不要再做**：不要用 `2>&1` 合併之後再解析結構化輸出。**stdout 是資料、stderr 是說明**，這條界線兩邊都要守。跨元件的契約要有屬於契約本身的測試，不能靠兩邊各自的單元測試。
+
+---
+
 ## 2026-08-18 守門測試「通過」了，但它其實什麼都抓不到
 
 **情境**：Stage 4 加 `EXPLAIN QUERY PLAN` 守門，禁止熱查詢退化成全表掃描。七個測試全綠。
