@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -20,7 +21,7 @@ from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.domain.models import ApplicationSettings
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import ENTRY_NAMES, result_message
-from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
+from tagcor_ledger.ui.widgets.forms import fill_combo, form_panel, select_data
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 
@@ -40,8 +41,6 @@ class GeneralSettingsPage(QWidget):
         self.reload()
 
     def _build(self) -> None:
-        title = QLabel("一般設定")
-        title.setObjectName("pageTitle")
         for key in ("expense", "income", "transfer"):
             self.flow.addItem(ENTRY_NAMES[key], key)
         for size in (20, 50, 100):
@@ -49,6 +48,7 @@ class GeneralSettingsPage(QWidget):
         save = QPushButton("儲存設定")
         set_button_role(save, "primary")
         form = QFormLayout()
+        form.setSpacing(10)
         form.addRow("預設帳戶", self.account)
         form.addRow("預設流向", self.flow)
         form.addRow("交易列表每頁", self.page_size)
@@ -58,9 +58,11 @@ class GeneralSettingsPage(QWidget):
         form.addRow("資料庫", QLabel(str(self.paths.database_path)))
         form.addRow("", save)
         form.addRow("", self.result)
+        row = QHBoxLayout()
+        row.addWidget(form_panel(form))
+        row.addStretch()
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
-        layout.addLayout(form)
+        layout.addLayout(row)
         layout.addStretch()
         save.clicked.connect(self.save)
 

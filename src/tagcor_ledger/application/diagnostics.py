@@ -94,7 +94,7 @@ class DiagnosticsService:
             "",
             "== 筆數（只有數量，沒有內容） ==",
         ]
-        for table, count in self._counts().items():
+        for table, count in self.counts().items():
             lines.append(f"{table:<24}: {count}")
 
         lines += ["", f"== 最近 {LOG_TAIL_LINES} 行日誌 =="]
@@ -123,7 +123,8 @@ class DiagnosticsService:
         except sqlite3.Error as exc:
             return f"（檢查失敗：{exc}）"
 
-    def _counts(self) -> dict[str, int]:
+    def counts(self) -> dict[str, int]:
+        """各表筆數。**只有數量，沒有內容** —— 重製前的確認框也用這個。"""
         counts: dict[str, int] = {}
         if not self.paths.database_path.exists():
             return counts

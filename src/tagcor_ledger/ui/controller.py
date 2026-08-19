@@ -345,6 +345,10 @@ class LedgerController:
     def export_diagnostics(self) -> Result:
         return self.diagnostics.export()
 
+    def ledger_counts(self) -> dict[str, int]:
+        """各表筆數。給重製確認框用 —— 不可逆的操作要講得出「會失去什麼」。"""
+        return self.diagnostics.counts()
+
     def list_templates(self) -> list[dict[str, Any]]:
         result = self.automation.list_templates()
         return list(result.details.get("templates", []))

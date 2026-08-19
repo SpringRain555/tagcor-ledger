@@ -67,7 +67,7 @@ class ReferencePage(QWidget):
         filters.addWidget(self.search, 1)
         filters.addWidget(refresh_button)
 
-        setup_table(self.table, self.model)
+        setup_table(self.table, self.model, stretch_column=2)
         self.detail.setOpenExternalLinks(False)
         self.detail.setObjectName("referenceDetail")
 

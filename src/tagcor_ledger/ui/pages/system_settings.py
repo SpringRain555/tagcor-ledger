@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
 
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.ui.controller import LedgerController
@@ -31,13 +31,18 @@ class SystemSettingsPage(QWidget):
         self._build()
 
     def _build(self) -> None:
+        title = QLabel("系統設定")
+        title.setObjectName("pageTitle")
         tabs = QTabWidget()
         tabs.setObjectName("settingsTabs")
         tabs.addTab(self.general, "一般設定")
         tabs.addTab(self.paths, "資料路徑")
+        # 分頁名稱照 glossary：「還原」是從備份救回整個資料庫，「重製」是清空重來。
+        # 舊名「重製與還原」讓同一個詞在兩個分頁指不同的事，而那一頁其實只做重製。
         tabs.addTab(self.maintenance, "備份與還原")
-        tabs.addTab(self.reset, "重製與還原")
+        tabs.addTab(self.reset, "重製")
         layout = QVBoxLayout(self)
+        layout.addWidget(title)
         layout.addWidget(tabs)
         self.general.saved.connect(self.saved.emit)
         self.paths.changed.connect(self.paths_changed.emit)

@@ -108,13 +108,22 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 
 ## UI 樣式規範
 
-- 固定深色主題，由 `tagcor_ledger.ui.theme.apply_dark_theme(app)` 套用 `Fusion` style、字體、palette 與 `styles.qss`。
+**色票的正本是 `ui/colors.py`。** QSS 裡不得出現那份清單以外的色碼，`test_resources.py` 會掃過去比對。要新增顏色就先去那邊宣告，並且**算過對比**再用。
+
+- 固定深色主題（**中性純灰，零色偏**），由 `tagcor_ledger.ui.theme.apply_dark_theme(app)` 套用 `Fusion` style、字體、palette 與 `styles.qss`。palette 與 QSS 都從 `colors.py` 取值。
+- **彩色只留給金額與警示。** 主要按鈕是近白底深字（靠明度，不靠色相），選取列是淺一階的灰，焦點框是中性亮灰。畫面上任何一抹紅或綠都應該是資訊。
+- 金額：支出紅 `EXPENSE`、收入綠 `INCOME`、轉帳不上色。顏色**不是唯一線索** —— 一律同時有正負號與右對齊。
+- 所有「文字／底色」組合的 WCAG 對比 >= 4.5，而且要拿**選取列**（最亮的底）去算。
 - 不要用過寬的全域 QSS selector 污染不同用途元件；共用元件若用途不同，需指定 objectName。
-- 側邊欄 `QListWidget` 用 `sidebarNavigation`；備份清單用 `backupList`；內容堆疊用 `contentStack`。
+- 側邊欄 `QListWidget` 用 `sidebarNavigation`；備份清單用 `backupList`；內容堆疊用 `contentStack`；狀態訊息用 `statusLabel`（帶 `state` 屬性）；流向切換用 `segmentButton`。
 - 主要操作按鈕用 `primaryButton`；刪除、作廢、重製、還原等高風險操作用 `dangerButton`。
+- **表格不得在 QSS 設 `color` 或 `selection-color`。** 那會蓋掉 model 的 `ForegroundRole`，金額的紅綠會被壓成同一個白。顏色由 `widgets/table.py` 的 `amount_color` 決定。
+- **對所選項目動作的按鈕一律用 `bind_selection` 綁選取狀態。** 沒選取就停用，不要讓使用者按下去什麼都不發生。
 - 分頁必須由 QSS 覆蓋 `QTabWidget/QTabBar` 的 selected、unselected、hover、disabled 狀態。
+- **不要覆寫 `QComboBox::drop-down`。** 一碰那個 subcontrol，Fusion 就不再畫箭頭，而本專案不打包圖檔，結果是一塊空白方格。
 - 字體不打包，使用本機 fallback：`Segoe UI Variable`、`Segoe UI`、`Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、sans-serif。
 - UI 變更至少跑 `tests/ui` smoke；樣式資源變更需同步更新 `tests/unit/test_resources.py`。
+- **改配色或改樣式之後要真的看一眼。** `window.grab().save(...)` 可以在不開視窗的情況下把畫面存成 PNG（用 `QT_QPA_PLATFORM=windows` 才有中文字型）。純看 QSS 看不出「顏色被蓋掉」這種問題。
 
 ## 環境與驗證
 

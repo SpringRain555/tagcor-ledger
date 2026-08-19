@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message
+from tagcor_ledger.ui.widgets.forms import form_panel
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 
@@ -41,8 +42,6 @@ class PathSettingsPage(QWidget):
         self.reload()
 
     def _build(self) -> None:
-        title = QLabel("資料路徑")
-        title.setObjectName("pageTitle")
         self.result.setWordWrap(True)
         self.result.setObjectName("hintLabel")
         browse_ledger = QPushButton("選擇記帳資料路徑")
@@ -53,6 +52,7 @@ class PathSettingsPage(QWidget):
         set_button_role(move_button, "primary")
 
         form = QFormLayout()
+        form.setSpacing(10)
         form.addRow("記帳資料路徑", self.ledger_dir)
         form.addRow("", browse_ledger)
         form.addRow("備份路徑", self.backup_dir)
@@ -62,9 +62,11 @@ class PathSettingsPage(QWidget):
         actions.addWidget(move_button)
         actions.addStretch()
 
+        form_row = QHBoxLayout()
+        form_row.addWidget(form_panel(form))
+        form_row.addStretch()
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
-        layout.addLayout(form)
+        layout.addLayout(form_row)
         layout.addLayout(actions)
         hint = QLabel("記帳資料會存放 ledger.sqlite3；備份會建立在獨立備份路徑下。備份路徑不可與資料路徑相同或互相包含。")
         hint.setObjectName("hintLabel")

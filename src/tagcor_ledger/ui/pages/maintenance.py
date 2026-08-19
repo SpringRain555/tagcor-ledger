@@ -39,8 +39,6 @@ class MaintenancePage(QWidget):
         self.refresh()
 
     def _build(self) -> None:
-        title = QLabel("備份與匯出")
-        title.setObjectName("pageTitle")
         self.list.setObjectName("backupList")
         create = QPushButton("建立完整備份")
         validate = QPushButton("驗證所選備份")
@@ -59,7 +57,6 @@ class MaintenancePage(QWidget):
         self.result.setWordWrap(True)
         self.result.setObjectName("hintLabel")
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
         layout.addLayout(buttons)
         layout.addWidget(self.protect_restore)
         layout.addWidget(self.list)

@@ -1,4 +1,14 @@
-"""快速記帳：每天最常用的那一頁。"""
+"""快速記帳：每天最常用的那一頁。
+
+## 這一頁的三個設計取捨
+
+1. **金額是主角。** 它是唯一每次都必須手打的欄位，所以字級與高度都比其他欄位大一階，
+   而且 `Ctrl+N` 直接聚焦到它。其他欄位多半沿用上次或用預設值。
+2. **流向用三顆分段按鈕，不是下拉選單。** 下拉要「點開、找、再點」三個動作；
+   三顆按鈕一下就好。選項永遠只有三個，不會長出第四個。
+3. **成功與失敗共用一個訊息位置，但顏色不同。** 以前成功訊息寫進紅色的 `errorLabel`，
+   每天最常做的動作回饋長得像失敗。
+"""
 
 from __future__ import annotations
 
@@ -6,9 +16,11 @@ from typing import Any
 
 from PySide6.QtCore import QDateTime, Signal
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QDateTimeEdit,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -18,8 +30,17 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import ENTRY_NAMES, minor_text, result_message
-from tagcor_ledger.ui.widgets.forms import fill_combo, iso_datetime, select_data
+from tagcor_ledger.ui.widgets.forms import (
+    fill_combo,
+    form_panel,
+    iso_datetime,
+    select_data,
+    show_status,
+    status_label,
+)
 from tagcor_ledger.ui.widgets.table import set_button_role
+
+ENTRY_TYPES = ("expense", "income", "transfer")
 
 
 class QuickEntryPage(QWidget):
@@ -28,7 +49,7 @@ class QuickEntryPage(QWidget):
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
         self.controller = controller
-        self.flow = QComboBox()
+        self.flow_buttons = QButtonGroup(self)
         self.account = QComboBox()
         self.destination = QComboBox()
         self.category = QComboBox()
@@ -36,7 +57,7 @@ class QuickEntryPage(QWidget):
         self.occurred_at = QDateTimeEdit(QDateTime.currentDateTime())
         self.amount = QLineEdit()
         self.description = QLineEdit()
-        self.error = QLabel()
+        self.status = status_label()
         self.save_button = QPushButton("儲存交易")
         self._build()
         self.reload_options()
@@ -46,40 +67,69 @@ class QuickEntryPage(QWidget):
         title = QLabel("快速記帳")
         title.setObjectName("pageTitle")
         set_button_role(self.save_button, "primary")
-        for key in ("expense", "income", "transfer"):
-            self.flow.addItem(ENTRY_NAMES[key], key)
+
+        flow_row = QHBoxLayout()
+        flow_row.setSpacing(8)
+        for index, key in enumerate(ENTRY_TYPES):
+            button = QPushButton(ENTRY_NAMES[key])
+            button.setObjectName("segmentButton")
+            button.setCheckable(True)
+            button.setProperty("entry_type", key)
+            self.flow_buttons.addButton(button, index)
+            flow_row.addWidget(button)
+        flow_row.addStretch()
+        self.flow_buttons.setExclusive(True)
+        self.flow_buttons.button(0).setChecked(True)
+
         self.occurred_at.setCalendarPopup(True)
         self.occurred_at.setDisplayFormat("yyyy/MM/dd HH:mm")
-        self.amount.setPlaceholderText("例如：120")
+        self.amount.setObjectName("amountInput")
+        self.amount.setPlaceholderText("0")
         self.description.setPlaceholderText("可留空")
-        self.error.setObjectName("errorLabel")
-        self.error.setWordWrap(True)
 
-        # 留著這個參考是為了 _sync_flow 能用 setRowVisible 一起收掉標籤，
-        # 只對欄位 setVisible 會留下一個沒有內容的「轉入帳戶」標籤。
         self.form = QFormLayout()
         form = self.form
-        form.addRow("流向", self.flow)
+        form.setSpacing(10)
+        form.addRow("流向", flow_row)
+        form.addRow("金額（TWD）", self.amount)
         form.addRow("帳戶", self.account)
         form.addRow("轉入帳戶", self.destination)
         form.addRow("類別", self.category)
         form.addRow("項目", self.detail)
         form.addRow("時間", self.occurred_at)
-        form.addRow("金額（TWD）", self.amount)
         form.addRow("備註", self.description)
-        form.addRow("", self.error)
+        form.addRow("", self.status)
         form.addRow("", self.save_button)
+
+        row = QHBoxLayout()
+        row.addWidget(form_panel(form))
+        row.addStretch()
+
         layout = QVBoxLayout(self)
         layout.addWidget(title)
-        layout.addLayout(form)
+        layout.addLayout(row)
         layout.addStretch()
 
-        self.flow.currentIndexChanged.connect(self._sync_flow)
+        self.flow_buttons.idToggled.connect(lambda *_: self._sync_flow())
         self.category.currentIndexChanged.connect(self._reload_details)
         self.save_button.clicked.connect(self.submit)
         self.amount.returnPressed.connect(self.submit)
         self.description.returnPressed.connect(self.submit)
         self._sync_flow()
+
+    # --- 流向 -----------------------------------------------------------------
+
+    def current_entry_type(self) -> str:
+        button = self.flow_buttons.checkedButton()
+        return str(button.property("entry_type")) if button is not None else "expense"
+
+    def select_entry_type(self, entry_type: object) -> None:
+        for button in self.flow_buttons.buttons():
+            if button.property("entry_type") == entry_type:
+                button.setChecked(True)
+                return
+
+    # --- 選項 -----------------------------------------------------------------
 
     def reload_options(self) -> None:
         fill_combo(self.account, self.controller.account_options(), "name", "account_id")
@@ -90,11 +140,11 @@ class QuickEntryPage(QWidget):
     def apply_defaults(self) -> None:
         settings = self.controller.get_settings()
         select_data(self.account, settings.default_account_id)
-        select_data(self.flow, settings.default_entry_type)
+        self.select_entry_type(settings.default_entry_type)
         self._sync_flow()
 
     def apply_draft(self, draft: dict[str, Any], *, use_current_time: bool = True) -> None:
-        select_data(self.flow, draft.get("entry_type"))
+        self.select_entry_type(draft.get("entry_type"))
         select_data(self.account, draft.get("account_id"))
         select_data(self.destination, draft.get("destination_account_id"))
         self._select_category(draft.get("category_id"))
@@ -103,40 +153,37 @@ class QuickEntryPage(QWidget):
         self.description.setText(str(draft.get("description", "")))
         if use_current_time:
             self.occurred_at.setDateTime(QDateTime.currentDateTime())
-        self.error.setText("內容已帶入，確認後再儲存。")
+        show_status(self.status, "內容已帶入，確認後再儲存。")
         self.amount.setFocus()
 
     def clear_form(self) -> None:
         self.occurred_at.setDateTime(QDateTime.currentDateTime())
         self.amount.clear()
         self.description.clear()
-        self.error.clear()
+        show_status(self.status, "")
         self.amount.setFocus()
 
     def submit(self) -> None:
+        entry_type = self.current_entry_type()
         result = self.controller.submit(
             occurred_at=iso_datetime(self.occurred_at),
-            entry_type=str(self.flow.currentData()),
+            entry_type=entry_type,
             amount=self.amount.text().strip(),
             account_id=str(self.account.currentData()),
             destination_account_id=(
-                str(self.destination.currentData())
-                if self.flow.currentData() == "transfer"
-                else None
+                str(self.destination.currentData()) if entry_type == "transfer" else None
             ),
             category_id=(
-                str(self.detail.currentData())
-                if self.flow.currentData() != "transfer"
-                else None
+                str(self.detail.currentData()) if entry_type != "transfer" else None
             ),
             description=self.description.text().strip(),
         )
         if result.success:
             self.clear_form()
-            self.error.setText("交易已儲存。")
+            show_status(self.status, "交易已儲存。", ok=True)
             self.saved.emit()
             return
-        self.error.setText(result_message(result))
+        show_status(self.status, result_message(result), ok=False)
 
     def _sync_flow(self) -> None:
         """轉帳沒有類別／項目，非轉帳沒有轉入帳戶 —— 用不到的整列收起來。
@@ -144,7 +191,7 @@ class QuickEntryPage(QWidget):
         必須用 `setRowVisible` 而不是對欄位 `setVisible`：QFormLayout 的標籤是獨立的
         widget，只藏欄位會留下一個沒有內容的標籤浮在畫面上。
         """
-        transfer = self.flow.currentData() == "transfer"
+        transfer = self.current_entry_type() == "transfer"
         self.form.setRowVisible(self.destination, transfer)
         self.form.setRowVisible(self.category, not transfer)
         self.form.setRowVisible(self.detail, not transfer)

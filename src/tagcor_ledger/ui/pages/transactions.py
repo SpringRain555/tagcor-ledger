@@ -30,7 +30,12 @@ from PySide6.QtWidgets import (
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, transaction_values
 from tagcor_ledger.ui.widgets.forms import fill_combo, iso_datetime, select_data
-from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
+from tagcor_ledger.ui.widgets.table import (
+    RowsModel,
+    bind_selection,
+    set_button_role,
+    setup_table,
+)
 
 
 class TransactionsPage(QWidget):
@@ -41,8 +46,9 @@ class TransactionsPage(QWidget):
         self.controller = controller
         self.table = QTableView()
         self.model = RowsModel(
-            ["時間", "類型", "帳戶", "類別／項目", "金額", "備註", "狀態"],
+            ["時間", "類型", "帳戶", "類別／項目", "金額（TWD）", "備註", "狀態"],
             transaction_values,
+            amount_column=4,
         )
         self.search = QLineEdit()
         self.date_enabled = QCheckBox("日期")
@@ -77,25 +83,36 @@ class TransactionsPage(QWidget):
         apply_button = QPushButton("套用篩選")
         clear_button = QPushButton("清除篩選")
         set_button_role(apply_button, "primary")
-        filters = QHBoxLayout()
-        for filter_widget in (
-            self.search,
-            self.date_enabled,
-            self.date_from,
-            self.date_to,
-            self.account,
-            self.category,
-            self.status,
-            apply_button,
-            clear_button,
+
+        # 篩選列拆成兩行並加上標籤。原本九個元件擠同一行，其中帳戶／類別／狀態
+        # 三個下拉**完全沒有標籤**，要靠猜哪個是哪個。
+        top_row = QHBoxLayout()
+        top_row.addWidget(self.search, 1)
+        top_row.addWidget(self.date_enabled)
+        top_row.addWidget(self.date_from)
+        top_row.addWidget(QLabel("到"))
+        top_row.addWidget(self.date_to)
+
+        bottom_row = QHBoxLayout()
+        for label, widget in (
+            ("帳戶", self.account),
+            ("類別", self.category),
+            ("狀態", self.status),
         ):
-            filters.addWidget(filter_widget)
-        setup_table(self.table, self.model)
+            bottom_row.addWidget(QLabel(label))
+            bottom_row.addWidget(widget)
+            bottom_row.addSpacing(12)
+        bottom_row.addStretch()
+        bottom_row.addWidget(apply_button)
+        bottom_row.addWidget(clear_button)
+
+        setup_table(self.table, self.model, stretch_column=5)
         edit_button = QPushButton("編輯／替換")
         duplicate_button = QPushButton("複製到快速記帳")
         void_button = QPushButton("作廢")
         set_button_role(edit_button, "primary")
         set_button_role(void_button, "danger")
+        bind_selection(self.table, edit_button, duplicate_button, void_button)
         actions = QHBoxLayout()
         for action_button in (edit_button, duplicate_button, void_button):
             actions.addWidget(action_button)
@@ -104,7 +121,8 @@ class TransactionsPage(QWidget):
         actions.addWidget(self.next_button)
         layout = QVBoxLayout(self)
         layout.addWidget(title)
-        layout.addLayout(filters)
+        layout.addLayout(top_row)
+        layout.addLayout(bottom_row)
         layout.addWidget(self.table)
         layout.addLayout(actions)
         apply_button.clicked.connect(self.first_page)

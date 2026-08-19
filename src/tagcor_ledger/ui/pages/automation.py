@@ -40,7 +40,12 @@ from tagcor_ledger.ui.formatting import (
     template_values,
 )
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
-from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
+from tagcor_ledger.ui.widgets.table import (
+    RowsModel,
+    bind_selection,
+    set_button_role,
+    setup_table,
+)
 
 
 class AutomationPage(QWidget):
@@ -52,8 +57,9 @@ class AutomationPage(QWidget):
         self.controller = controller
         self.templates = QTableView()
         self.template_model = RowsModel(
-            ["名稱", "類型", "金額", "備註"],
+            ["名稱", "類型", "金額（TWD）", "備註"],
             template_values,
+            amount_column=2,
         )
         self.schedules = QTableView()
         self.schedule_model = RowsModel(
@@ -64,12 +70,11 @@ class AutomationPage(QWidget):
         self.refresh()
 
     def _build(self) -> None:
-        title = QLabel("模板與排程")
-        title.setObjectName("pageTitle")
         tabs = QTabWidget()
         tabs.setObjectName("contentTabs")
         template_tab = QWidget()
         template_buttons = QHBoxLayout()
+        needs_template_selection: list[QPushButton] = []
         for label, handler in (
             ("新增模板", lambda: self.edit_template(None)),
             ("編輯模板", self.edit_selected_template),
@@ -81,15 +86,20 @@ class AutomationPage(QWidget):
                 set_button_role(button, "primary")
             if label.startswith("封存"):
                 set_button_role(button, "danger")
+            if not label.startswith("新增"):
+                needs_template_selection.append(button)
             button.clicked.connect(handler)
             template_buttons.addWidget(button)
-        setup_table(self.templates, self.template_model)
+        template_buttons.addStretch()
+        setup_table(self.templates, self.template_model, stretch_column=3)
+        bind_selection(self.templates, *needs_template_selection)
         template_layout = QVBoxLayout(template_tab)
         template_layout.addLayout(template_buttons)
         template_layout.addWidget(self.templates)
 
         schedule_tab = QWidget()
         schedule_buttons = QHBoxLayout()
+        needs_schedule_selection: list[QPushButton] = []
         for label, handler in (
             ("新增排程", lambda: self.edit_schedule(None)),
             ("編輯排程", self.edit_selected_schedule),
@@ -101,16 +111,19 @@ class AutomationPage(QWidget):
                 set_button_role(button, "primary")
             if label.startswith("封存"):
                 set_button_role(button, "danger")
+            if label.startswith(("編輯", "封存")):
+                needs_schedule_selection.append(button)
             button.clicked.connect(handler)
             schedule_buttons.addWidget(button)
+        schedule_buttons.addStretch()
         setup_table(self.schedules, self.schedule_model)
+        bind_selection(self.schedules, *needs_schedule_selection)
         schedule_layout = QVBoxLayout(schedule_tab)
         schedule_layout.addLayout(schedule_buttons)
         schedule_layout.addWidget(self.schedules)
         tabs.addTab(template_tab, "模板")
         tabs.addTab(schedule_tab, "週期排程")
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
         layout.addWidget(tabs)
 
     def refresh(self) -> None:

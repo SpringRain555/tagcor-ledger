@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QStackedWidget,
     QWidget,
@@ -54,33 +56,46 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             apply_dark_theme(cast(QApplication, app))
-        labels = [
-            "快速記帳",
-            "餘額盤點",
-            "待確認",
-            "交易紀錄",
-            "操作設定",
-            "法規參考",
-            "系統設定",
-        ]
-        widgets: list[QWidget] = [
-            self.quick,
-            self.balance,
-            self.pending,
-            self.transactions,
-            self.operation_settings,
-            self.reference,
-            self.system_settings,
+        # 側邊欄分成「每天用」與「設定與查閱」兩組。原本七項平鋪，而且「法規參考」
+        # 卡在兩個設定頁中間 —— 每天要用的四頁跟一年動兩次的設定看起來一樣重要。
+        sections: list[tuple[str, list[tuple[str, QWidget]]]] = [
+            (
+                "每天用",
+                [
+                    ("快速記帳", self.quick),
+                    ("待確認", self.pending),
+                    ("交易紀錄", self.transactions),
+                    ("餘額盤點", self.balance),
+                ],
+            ),
+            (
+                "設定與查閱",
+                [
+                    ("法規參考", self.reference),
+                    ("操作設定", self.operation_settings),
+                    ("系統設定", self.system_settings),
+                ],
+            ),
         ]
         self.navigation.setObjectName("sidebarNavigation")
         self.pages.setObjectName("contentStack")
-        self.navigation.addItems(labels)
-        for page in widgets:
-            page.setObjectName("pageSurface")
-            self.pages.addWidget(page)
-        self.navigation.setFixedWidth(180)
-        self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
-        self.navigation.setCurrentRow(0)
+        self._page_rows: dict[str, int] = {}
+        self._row_to_page: dict[int, int] = {}
+        for section_title, entries in sections:
+            header = QListWidgetItem(section_title)
+            # 分組標題不可選、不可聚焦 —— 它是標籤，不是一頁。
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.navigation.addItem(header)
+            for label, page in entries:
+                row = self.navigation.count()
+                self._page_rows[label] = row
+                self._row_to_page[row] = self.pages.count()
+                self.navigation.addItem(QListWidgetItem(label))
+                page.setObjectName("pageSurface")
+                self.pages.addWidget(page)
+        self.navigation.setFixedWidth(184)
+        self.navigation.currentRowChanged.connect(self._navigate)
+        self.navigation.setCurrentRow(self._page_rows["快速記帳"])
         layout = QHBoxLayout()
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(16)
@@ -116,13 +131,22 @@ class MainWindow(QMainWindow):
         clear_action.triggered.connect(self.quick.clear_form)
         self.addActions([new_action, save_action, clear_action])
 
+    def _navigate(self, row: int) -> None:
+        """側邊欄有分組標題，所以列號不等於頁面編號。"""
+        page_index = self._row_to_page.get(row)
+        if page_index is not None:
+            self.pages.setCurrentIndex(page_index)
+
+    def show_page(self, label: str) -> None:
+        self.navigation.setCurrentRow(self._page_rows[label])
+
     def _focus_new(self) -> None:
-        self.navigation.setCurrentRow(0)
+        self.show_page("快速記帳")
         self.quick.amount.setFocus()
 
     def _prefill_quick(self, draft: dict[str, Any]) -> None:
         self.quick.apply_draft(draft)
-        self.navigation.setCurrentRow(0)
+        self.show_page("快速記帳")
 
     def _transaction_changed(self) -> None:
         self.transactions.first_page()
@@ -161,10 +185,11 @@ class MainWindow(QMainWindow):
         self.system_settings.reload()
 
     def refresh_pending_badge(self) -> None:
+        """待確認的數字直接寫在側邊欄，不必點進去才知道有沒有事情要處理。"""
         count = len(self.controller.list_pending())
-        item = self.navigation.item(2)
+        item = self.navigation.item(self._page_rows["待確認"])
         if item is not None:
-            item.setText(f"待確認（{count}）")
+            item.setText(f"待確認（{count}）" if count else "待確認")
 
     def _show_balance_snapshot_reminder(self) -> None:
         if self.controller.refresh_balance_snapshot_reminder_due():

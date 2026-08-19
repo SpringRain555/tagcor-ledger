@@ -1,4 +1,8 @@
-"""Application-wide PySide6 dark theme."""
+"""固定深色主題（中性純灰）。
+
+**顏色一律從 `colors.py` 取**，這裡不出現任何寫死的色碼 —— palette 與 QSS 用的是
+同一份色票，才不會出現「QSS 改了、palette 沒改」那種只在某些原生元件上看得到的殘留。
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication
 
 from tagcor_ledger.app.resources import read_text_resource
+from tagcor_ledger.ui import colors
 
 
 def apply_dark_theme(app: QApplication) -> None:
@@ -25,32 +30,26 @@ def apply_dark_theme(app: QApplication) -> None:
 
 def _build_palette() -> QPalette:
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#0F172A"))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor("#E5E7EB"))
-    palette.setColor(QPalette.ColorRole.Base, QColor("#111827"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#162033"))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#1E293B"))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#F8FAFC"))
-    palette.setColor(QPalette.ColorRole.Text, QColor("#E5E7EB"))
-    palette.setColor(QPalette.ColorRole.Button, QColor("#1E293B"))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#E5E7EB"))
-    palette.setColor(QPalette.ColorRole.BrightText, QColor("#F87171"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#3B82F6"))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
+    palette.setColor(QPalette.ColorRole.Window, QColor(colors.BG))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(colors.TEXT))
+    palette.setColor(QPalette.ColorRole.Base, QColor(colors.SURFACE))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(colors.RAISED))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(colors.RAISED))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(colors.TEXT))
+    palette.setColor(QPalette.ColorRole.Text, QColor(colors.TEXT))
+    palette.setColor(QPalette.ColorRole.Button, QColor(colors.RAISED))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(colors.TEXT))
+    palette.setColor(QPalette.ColorRole.BrightText, QColor(colors.EXPENSE))
+    # 選取是灰的，不是彩色的 —— 使用者選的是「幾乎不用彩色」。
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(colors.SELECTED))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(colors.TEXT))
 
-    palette.setColor(
-        QPalette.ColorGroup.Disabled,
+    for role in (
         QPalette.ColorRole.WindowText,
-        QColor("#64748B"),
-    )
-    palette.setColor(
-        QPalette.ColorGroup.Disabled,
         QPalette.ColorRole.Text,
-        QColor("#64748B"),
-    )
-    palette.setColor(
-        QPalette.ColorGroup.Disabled,
         QPalette.ColorRole.ButtonText,
-        QColor("#64748B"),
-    )
+    ):
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, role, QColor(colors.TEXT_FAINT)
+        )
     return palette

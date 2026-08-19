@@ -33,7 +33,12 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
-from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
+from tagcor_ledger.ui.widgets.table import (
+    RowsModel,
+    bind_selection,
+    set_button_role,
+    setup_table,
+)
 
 
 class PendingPage(QWidget):
@@ -44,13 +49,15 @@ class PendingPage(QWidget):
         self.controller = controller
         self.table = QTableView()
         self.model = RowsModel(
-            ["到期日", "排程", "類型", "金額", "狀態說明"],
+            ["到期日", "排程", "類型", "金額（TWD）", "狀態說明"],
             occurrence_values,
+            amount_column=3,
         )
         self.deposits = QTableView()
         self.deposit_model = RowsModel(
-            ["到期日", "定存", "類型", "建議金額"],
+            ["到期日", "定存", "類型", "建議金額（TWD）"],
             deposit_event_values,
+            amount_column=3,
         )
         self.has_more = False
         self._build()
@@ -70,7 +77,9 @@ class PendingPage(QWidget):
         for widget in (edit_confirm, skip, batch, generate):
             row.addWidget(widget)
         row.addStretch()
-        setup_table(self.table, self.model)
+        setup_table(self.table, self.model, stretch_column=4)
+        # 批次確認與產生不需要選取，其他兩顆需要 —— 沒選就停用，不要按了沒反應。
+        bind_selection(self.table, edit_confirm, skip)
 
         # 定存事件的欄位形狀跟排程不一樣，所以分開兩張表。**仍然是同一頁** ——
         # 使用者不需要知道待確認來自哪個子系統，但硬塞進同一張表只會讓兩邊的欄位都變模糊。
@@ -82,12 +91,15 @@ class PendingPage(QWidget):
         deposit_row.addWidget(deposit_skip)
         deposit_row.addStretch()
         setup_table(self.deposits, self.deposit_model)
+        bind_selection(self.deposits, deposit_confirm, deposit_skip)
 
+        deposit_title = QLabel("定存到期與領息")
+        deposit_title.setObjectName("sectionTitle")
         layout = QVBoxLayout(self)
         layout.addWidget(title)
         layout.addLayout(row)
         layout.addWidget(self.table)
-        layout.addWidget(QLabel("定存到期與領息"))
+        layout.addWidget(deposit_title)
         layout.addLayout(deposit_row)
         layout.addWidget(self.deposits)
         edit_confirm.clicked.connect(self.edit_confirm)

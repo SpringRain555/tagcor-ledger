@@ -32,8 +32,18 @@ from tagcor_ledger.ui.formatting import (
     result_message,
     transaction_values,
 )
-from tagcor_ledger.ui.widgets.forms import fill_combo, iso_datetime, select_data
-from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
+from tagcor_ledger.ui.widgets.forms import (
+    fill_combo,
+    iso_datetime,
+    select_data,
+    show_status,
+)
+from tagcor_ledger.ui.widgets.table import (
+    RowsModel,
+    bind_selection,
+    set_button_role,
+    setup_table,
+)
 
 
 class BalanceSnapshotPage(QWidget):
@@ -54,11 +64,13 @@ class BalanceSnapshotPage(QWidget):
         self.model = RowsModel(
             ["盤點時間", "帳戶", "實際金額", "預期金額", "未解釋差額", "備註", "狀態"],
             balance_gap_values,
+            amount_column=4,
         )
         self.transactions = QTableView()
         self.transactions_model = RowsModel(
-            ["時間", "類型", "帳戶", "類別／項目", "金額"],
+            ["時間", "類型", "帳戶", "類別／項目", "金額（TWD）"],
             transaction_values,
+            amount_column=4,
         )
         self._build()
         self.reload_accounts()
@@ -76,7 +88,7 @@ class BalanceSnapshotPage(QWidget):
         self.observed_at.setDisplayFormat("yyyy/MM/dd HH:mm")
         self.amount.setPlaceholderText("例如：1200，可填 0")
         self.note.setPlaceholderText("可留空，例如：開啟程式時盤點")
-        self.result.setObjectName("errorLabel")
+        self.result.setObjectName("statusLabel")
         self.result.setWordWrap(True)
         self.summary.setObjectName("hintLabel")
         self.summary.setWordWrap(True)
@@ -112,17 +124,23 @@ class BalanceSnapshotPage(QWidget):
             actions.addWidget(button)
         actions.addStretch()
 
-        setup_table(self.table, self.model)
-        setup_table(self.transactions, self.transactions_model)
+        setup_table(self.table, self.model, stretch_column=5)
+        setup_table(self.transactions, self.transactions_model, stretch_column=3)
+        # 更新／作廢是對所選盤點動作，沒選就停用。
+        bind_selection(self.table, update_button, void_button)
         layout = QVBoxLayout(self)
         layout.addWidget(title)
         layout.addWidget(help_text)
         layout.addLayout(form)
         layout.addLayout(actions)
         layout.addWidget(self.summary)
-        layout.addWidget(QLabel("盤點紀錄"))
+        records_title = QLabel("盤點紀錄")
+        records_title.setObjectName("sectionTitle")
+        layout.addWidget(records_title)
         layout.addWidget(self.table)
-        layout.addWidget(QLabel("最近盤點差額期間內的交易"))
+        period_title = QLabel("最近盤點差額期間內的交易")
+        period_title.setObjectName("sectionTitle")
+        layout.addWidget(period_title)
         layout.addWidget(self.transactions)
 
         self.account.currentIndexChanged.connect(self.refresh)
@@ -177,7 +195,7 @@ class BalanceSnapshotPage(QWidget):
     def create_snapshot(self) -> None:
         account_id = self._account_id()
         if account_id is None:
-            self.result.setText("請先建立帳戶。")
+            show_status(self.result, "請先建立帳戶。", ok=False)
             return
         result = self.controller.create_balance_snapshot(
             account_id=account_id,
@@ -185,7 +203,7 @@ class BalanceSnapshotPage(QWidget):
             actual_balance=self.amount.text().strip(),
             note=self.note.text().strip(),
         )
-        self.result.setText(result_message(result))
+        show_status(self.result, result_message(result), ok=result.success)
         if result.success:
             self.amount.clear()
             self.note.clear()
@@ -197,7 +215,7 @@ class BalanceSnapshotPage(QWidget):
         item = self.model.selected_item(self.table)
         account_id = self._account_id()
         if item is None or account_id is None:
-            self.result.setText("請先選擇要更新的盤點。")
+            show_status(self.result, "請先選擇要更新的盤點。", ok=False)
             return
         result = self.controller.update_balance_snapshot(
             str(item["snapshot_id"]),
@@ -206,7 +224,7 @@ class BalanceSnapshotPage(QWidget):
             actual_balance=self.amount.text().strip(),
             note=self.note.text().strip(),
         )
-        self.result.setText(result_message(result))
+        show_status(self.result, result_message(result), ok=result.success)
         if result.success:
             self.changed.emit()
             self.refresh()
@@ -219,7 +237,7 @@ class BalanceSnapshotPage(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
         result = self.controller.void_balance_snapshot(str(item["snapshot_id"]))
-        self.result.setText(result_message(result))
+        show_status(self.result, result_message(result), ok=result.success)
         if result.success:
             self.changed.emit()
             self.refresh()
@@ -242,9 +260,13 @@ class BalanceSnapshotPage(QWidget):
     def export_csv(self) -> None:
         result = self.controller.export_balance_snapshots_csv()
         if result.success:
-            self.result.setText(f"餘額盤點 CSV 已匯出：{result.details.get('path')}")
+            show_status(
+                self.result,
+                f"餘額盤點 CSV 已匯出：{result.details.get('path')}",
+                ok=True,
+            )
         else:
-            self.result.setText(result_message(result))
+            show_status(self.result, result_message(result), ok=False)
 
     def _account_id(self) -> str | None:
         value = self.account.currentData()

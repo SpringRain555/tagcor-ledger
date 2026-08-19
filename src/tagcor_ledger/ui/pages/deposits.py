@@ -47,7 +47,12 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
-from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
+from tagcor_ledger.ui.widgets.table import (
+    RowsModel,
+    bind_selection,
+    set_button_role,
+    setup_table,
+)
 
 
 def rate_to_ppm(text: str) -> int | None:
@@ -81,15 +86,14 @@ class DepositsPage(QWidget):
         )
         self.terms = QTableView()
         self.term_model = RowsModel(
-            ["期", "起存日", "到期日", "本金", "年利率", "實際利息", "狀態"],
+            ["期", "起存日", "到期日", "本金（TWD）", "年利率", "實際利息", "狀態"],
             deposit_term_values,
+            amount_column=3,
         )
         self._build()
         self.refresh()
 
     def _build(self) -> None:
-        title = QLabel("定存")
-        title.setObjectName("pageTitle")
         hint = QLabel(
             "定存到期與每月領息都只會產生「待確認」項目，程式不會自動入帳 —— "
             "確認之後才會變成交易。機動利率請把年利率留空，到期照存摺輸入實際利息即可，"
@@ -117,13 +121,19 @@ class DepositsPage(QWidget):
 
         setup_table(self.contracts, self.contract_model)
         setup_table(self.terms, self.term_model)
+        bind_selection(self.contracts, edit_button, delete_button)
+        bind_selection(self.terms, edit_term_button)
+
+        contracts_title = QLabel("合約")
+        contracts_title.setObjectName("sectionTitle")
+        terms_title = QLabel("每一期（續存會產生新的一期，舊的不會被改寫）")
+        terms_title.setObjectName("sectionTitle")
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
         layout.addWidget(hint)
         layout.addLayout(row)
-        layout.addWidget(QLabel("合約"))
+        layout.addWidget(contracts_title)
         layout.addWidget(self.contracts)
-        layout.addWidget(QLabel("每一期（續存會產生新的一期，舊的不會被改寫）"))
+        layout.addWidget(terms_title)
         layout.addLayout(term_row)
         layout.addWidget(self.terms)
 

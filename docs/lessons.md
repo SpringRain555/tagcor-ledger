@@ -16,6 +16,34 @@
 
 ---
 
+## 2026-08-19 QSS 的 `color` 會蓋掉 model 的顏色，而 model 層的測試看不出來
+
+**情境**：交易列表要把支出標紅、收入標綠，顏色由 `RowsModel` 的 `ForegroundRole` 提供。
+
+**做了什麼**：實作完，測試（讀 `index.data(ForegroundRole)`）全綠，就當作做好了。實際畫面上**每個金額都是白的**。
+
+**為什麼失敗**：`styles.qss` 裡有 `QTableView::item { color: #E8E8EA; }`。Qt 的樣式表優先於 model 的 `ForegroundRole`，所以 model 照樣回報紅色、畫面照樣畫白色。**測試讀的是 model，不是畫面**，於是那個 bug 在測試裡完全隱形 —— 後來實際注入驗證過：把 `color` 加回去，model 層的測試仍然通過。
+
+**結論**：表格的 QSS 不設 `color` 也不設 `selection-color`，顏色交給 model。新增一條**看像素**的測試：把儲存格 `grab()` 成 QImage，取「離背景最遠」的那顆像素當文字色（反鋸齒讓邊緣是混色，不能直接比對色碼）。那條測試在注入後會紅。
+
+**不要再做**：不要用「model 回傳什麼」證明「畫面長什麼樣」。凡是**畫出來才成立**的性質（顏色、對齊、有沒有被蓋掉），就要看畫出來的東西 —— `window.grab().save(...)` 存成 PNG 直接看是最快的方法。
+
+---
+
+## 2026-08-19 `python - <<EOF` 跑到別的專案的 venv，把失敗誤讀成「守門有效」
+
+**情境**：想證明新加的守門測試在注入 bug 之後真的會失敗。
+
+**做了什麼**：用 `python - <<'PY'` 寫一段腳本，裡面用 `sys.executable` 去跑 pytest。看到 exit code 1 就當成「守門有效」。
+
+**為什麼失敗**：heredoc 開頭那個 `python` 是 **PATH 上的**，解析到 `D:\Projects\caption-lingo\.venv`。`sys.executable` 因此是別的專案的直譯器，錯誤其實是 `No module named pytest`。**退出碼 1 是真的，理由是假的。**
+
+**結論**：注入驗證的腳本一律用完整路徑 `<conda-root>\envs\tagcor-ledger\python.exe` 起頭，並在輸出裡印出 `sys.executable` 確認。
+
+**不要再做**：不要只看退出碼就宣告守門有效。**要看到那條斷言的失敗訊息**，確認它失敗的理由正是你注入的那個 bug。
+
+---
+
 ## 2026-08-18 注入違規驗證守門，結果被自己的 `.pyc` 騙了
 
 **情境**：Stage 7 新增版本一致性守門，照慣例把 `__version__` 改回舊值、確認測試會紅、再改回來。

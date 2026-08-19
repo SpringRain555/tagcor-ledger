@@ -12,7 +12,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
-    QLabel,
     QMessageBox,
     QPushButton,
     QTableView,
@@ -22,7 +21,12 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import account_values, category_values, result_message
-from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
+from tagcor_ledger.ui.widgets.table import (
+    RowsModel,
+    bind_selection,
+    set_button_role,
+    setup_table,
+)
 
 
 class CatalogPage(QWidget):
@@ -33,19 +37,21 @@ class CatalogPage(QWidget):
         self.controller = controller
         self.kind = kind
         headers = (
-            ["帳戶", "類型", "幣別", "目前餘額", "狀態"]
+            ["帳戶", "目前餘額（TWD）", "狀態"]
             if kind == "account"
             else ["類別", "項目", "狀態"]
         )
         mapper = account_values if kind == "account" else category_values
-        self.model = RowsModel(headers, mapper)
+        self.model = RowsModel(
+            headers,
+            mapper,
+            amount_column=1 if kind == "account" else None,
+        )
         self.table = QTableView()
         self._build()
         self.refresh()
 
     def _build(self) -> None:
-        title = QLabel("帳戶" if self.kind == "account" else "類別／項目")
-        title.setObjectName("pageTitle")
         add_button = QPushButton("新增帳戶" if self.kind == "account" else "新增類別")
         add_child = QPushButton("新增項目")
         rename = QPushButton("重新命名")
@@ -63,8 +69,9 @@ class CatalogPage(QWidget):
         row.addWidget(delete_button)
         row.addStretch()
         setup_table(self.table, self.model)
+        # 「新增」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
+        bind_selection(self.table, rename, toggle, delete_button)
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
         layout.addLayout(row)
         layout.addWidget(self.table)
         add_button.clicked.connect(self.add_item)
