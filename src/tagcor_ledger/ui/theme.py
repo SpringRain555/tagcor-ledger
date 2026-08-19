@@ -17,15 +17,39 @@ def apply_dark_theme(app: QApplication) -> None:
     """Apply the fixed TagCor Ledger dark theme to the Qt application."""
     app.setStyle("Fusion")
 
-    font = QFont("Segoe UI Variable")
-    font.setPointSize(11)
-    app.setFont(font)
+    app.setFont(ui_font())
 
     app.setPalette(_build_palette())
     try:
         app.setStyleSheet(read_text_resource("styles.qss"))
     except FileNotFoundError:
         app.setStyleSheet("")
+
+
+FONT_FAMILY = "Microsoft JhengHei UI"
+FONT_POINT_SIZE = 12.0
+
+
+def ui_font() -> QFont:
+    """介面字體。
+
+    ## 為什麼主字體是中文字型而不是 `Segoe UI Variable`
+
+    `Segoe UI Variable` **沒有中文字形**，中文全部是 fallback 出來的。後果是：
+    對它設 Medium 字重，**只有數字與英文變粗，中文完全沒變** —— 字重設定套不到
+    fallback 字型上。2026-08-20 把七種組合排在一起比對時才看出來。
+
+    介面幾乎全是中文，所以主字體直接用中文 UI 字型，字重才管得到該管的字。
+
+    ## 為什麼是 Medium 而不是 Normal
+
+    深色底上的淺色字看起來會比實際細（同樣的筆畫，亮字在暗底上視覺上更瘦）。
+    Medium 補回來剛好，再重就顯得吵。
+    """
+    font = QFont(FONT_FAMILY)
+    font.setPointSizeF(FONT_POINT_SIZE)
+    font.setWeight(QFont.Weight.Medium)
+    return font
 
 
 def _build_palette() -> QPalette:

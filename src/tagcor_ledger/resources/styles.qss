@@ -14,8 +14,8 @@
  * =========================================================================== */
 
 QWidget {
-    font-family: "Segoe UI Variable", "Segoe UI", "Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
-    font-size: 11pt;
+    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", "Segoe UI Variable", "Segoe UI", sans-serif;
+    font-size: 12pt;
     color: #E8E8EA;
     background-color: #0D0D0F;
 }
@@ -243,7 +243,7 @@ QListWidget#sidebarNavigation::item:disabled {
 }
 
 QListWidget#backupList {
-    font-family: "Segoe UI Variable", "Segoe UI", "Microsoft JhengHei UI", "Noto Sans TC", sans-serif;
+    font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
     background-color: #16161A;
     border: 1px solid #33333C;
     border-radius: 8px;

@@ -1,12 +1,15 @@
+from datetime import date, datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from tagcor_ledger.app.paths import resolve_app_paths
+from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui import colors
 from tagcor_ledger.ui.main_window import MainWindow
+from tagcor_ledger.ui.widgets.forms import date_field, iso_from_date
 
 
 def test_main_window_groups_navigation_and_keeps_pages_in_step(qtbot, tmp_path: Path) -> None:
@@ -333,6 +336,78 @@ def test_reset_confirmation_names_what_will_be_lost(qtbot, tmp_path: Path) -> No
     summary = window.system_settings.reset.loss_summary()
     assert "交易 1 筆" in summary
     assert "帳戶 1 筆" in summary
+
+
+def test_date_field_stores_a_timestamp_that_preserves_ordering(qtbot) -> None:
+    """畫面只問日期，資料庫仍然存完整時間戳。
+
+    時分秒是**同一天多筆交易唯一的排序依據** —— 全部塞 00:00 的話，
+    當天的順序就只能靠 id，看起來會像隨機的。
+    """
+    widget = date_field(QDate(2026, 8, 19))
+    qtbot.addWidget(widget)
+
+    stamped = datetime.fromisoformat(iso_from_date(widget))
+    assert stamped.date() == date(2026, 8, 19)
+
+    # 時分秒應該是「現在」，不是午夜。
+    now = datetime.now(TAIPEI)
+    reference = datetime.combine(stamped.date(), now.time(), tzinfo=TAIPEI)
+    assert abs((stamped - reference).total_seconds()) < 5
+
+
+def test_editing_keeps_the_original_time_of_day(qtbot) -> None:
+    """只改備註不該讓那筆跳到當天最後一筆。"""
+    widget = date_field(QDate(2026, 8, 19))
+    qtbot.addWidget(widget)
+
+    assert iso_from_date(widget, keep_time_from="2026-08-19T07:15:30+08:00") == (
+        "2026-08-19T07:15:30+08:00"
+    )
+
+    # 連日期一起改時，時分秒照樣沿用。
+    widget.setDate(QDate(2026, 8, 1))
+    assert iso_from_date(widget, keep_time_from="2026-08-19T07:15:30+08:00") == (
+        "2026-08-01T07:15:30+08:00"
+    )
+
+
+def test_lists_show_the_date_without_a_made_up_time(qtbot, tmp_path: Path) -> None:
+    """時分秒是程式補的，印出來會讓人以為那是真的記錄時間。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    window.controller.submit(
+        occurred_at="2026-08-19T13:45:00+08:00",
+        entry_type="expense",
+        amount="85",
+        account_id="acct_cash",
+        destination_account_id=None,
+        category_id="cat_food_711",
+        description="午餐",
+    )
+    window.transactions.first_page()
+
+    model = window.transactions.model
+    assert model.headerData(0, Qt.Orientation.Horizontal) == "日期"
+    assert model.index(0, 0).data() == "2026/08/19"
+
+
+def test_sidebar_headers_look_like_labels_not_rows(qtbot, tmp_path: Path) -> None:
+    """分組標題點不下去，所以**不能長得像可以點的東西**。
+
+    第一版只是把顏色調淡、大小照舊，使用者的第一個反應是「這是什麼？為什麼不能用？」
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    header = window.navigation.item(0)
+    entry = window.navigation.item(window._page_rows["快速記帳"])
+    assert header.text() == "每天用"
+    assert not (header.flags() & Qt.ItemFlag.ItemIsEnabled)
+    assert header.font().pointSizeF() < entry.font().pointSizeF()
+    assert header.font().letterSpacing() > entry.font().letterSpacing()
 
 
 def test_deposits_tab_and_pending_deposit_section_exist(qtbot, tmp_path: Path) -> None:

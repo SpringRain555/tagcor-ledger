@@ -14,11 +14,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QDateTime, Signal
+from PySide6.QtCore import QDate, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
-    QDateTimeEdit,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -31,9 +30,10 @@ from PySide6.QtWidgets import (
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import ENTRY_NAMES, minor_text, result_message
 from tagcor_ledger.ui.widgets.forms import (
+    date_field,
     fill_combo,
     form_panel,
-    iso_datetime,
+    iso_from_date,
     select_data,
     show_status,
     status_label,
@@ -54,7 +54,7 @@ class QuickEntryPage(QWidget):
         self.destination = QComboBox()
         self.category = QComboBox()
         self.detail = QComboBox()
-        self.occurred_at = QDateTimeEdit(QDateTime.currentDateTime())
+        self.occurred_at = date_field()
         self.amount = QLineEdit()
         self.description = QLineEdit()
         self.status = status_label()
@@ -81,8 +81,6 @@ class QuickEntryPage(QWidget):
         self.flow_buttons.setExclusive(True)
         self.flow_buttons.button(0).setChecked(True)
 
-        self.occurred_at.setCalendarPopup(True)
-        self.occurred_at.setDisplayFormat("yyyy/MM/dd HH:mm")
         self.amount.setObjectName("amountInput")
         self.amount.setPlaceholderText("0")
         self.description.setPlaceholderText("可留空")
@@ -96,7 +94,7 @@ class QuickEntryPage(QWidget):
         form.addRow("轉入帳戶", self.destination)
         form.addRow("類別", self.category)
         form.addRow("項目", self.detail)
-        form.addRow("時間", self.occurred_at)
+        form.addRow("日期", self.occurred_at)
         form.addRow("備註", self.description)
         form.addRow("", self.status)
         form.addRow("", self.save_button)
@@ -152,12 +150,12 @@ class QuickEntryPage(QWidget):
         self.amount.setText(minor_text(amount_minor) if amount_minor is not None else "")
         self.description.setText(str(draft.get("description", "")))
         if use_current_time:
-            self.occurred_at.setDateTime(QDateTime.currentDateTime())
+            self.occurred_at.setDate(QDate.currentDate())
         show_status(self.status, "內容已帶入，確認後再儲存。")
         self.amount.setFocus()
 
     def clear_form(self) -> None:
-        self.occurred_at.setDateTime(QDateTime.currentDateTime())
+        self.occurred_at.setDate(QDate.currentDate())
         self.amount.clear()
         self.description.clear()
         show_status(self.status, "")
@@ -166,7 +164,7 @@ class QuickEntryPage(QWidget):
     def submit(self) -> None:
         entry_type = self.current_entry_type()
         result = self.controller.submit(
-            occurred_at=iso_datetime(self.occurred_at),
+            occurred_at=iso_from_date(self.occurred_at),
             entry_type=entry_type,
             amount=self.amount.text().strip(),
             account_id=str(self.account.currentData()),

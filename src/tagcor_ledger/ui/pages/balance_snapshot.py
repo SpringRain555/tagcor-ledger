@@ -8,10 +8,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import cast
 
-from PySide6.QtCore import QDateTime, Signal
+from PySide6.QtCore import QDate, Signal
 from PySide6.QtWidgets import (
     QComboBox,
-    QDateTimeEdit,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -27,14 +26,15 @@ from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import (
     balance_gap_values,
-    display_datetime,
+    display_date,
     minor_text,
     result_message,
     transaction_values,
 )
 from tagcor_ledger.ui.widgets.forms import (
+    date_field,
     fill_combo,
-    iso_datetime,
+    iso_from_date,
     select_data,
     show_status,
 )
@@ -55,20 +55,20 @@ class BalanceSnapshotPage(QWidget):
         self.controller = controller
         self.account = QComboBox()
         self.status = QComboBox()
-        self.observed_at = QDateTimeEdit(QDateTime.currentDateTime())
+        self.observed_at = date_field()
         self.amount = QLineEdit()
         self.note = QLineEdit()
         self.result = QLabel()
         self.summary = QLabel()
         self.table = QTableView()
         self.model = RowsModel(
-            ["盤點時間", "帳戶", "實際金額", "預期金額", "未解釋差額", "備註", "狀態"],
+            ["盤點日期", "帳戶", "實際金額", "預期金額", "未解釋差額", "備註", "狀態"],
             balance_gap_values,
             amount_column=4,
         )
         self.transactions = QTableView()
         self.transactions_model = RowsModel(
-            ["時間", "類型", "帳戶", "類別／項目", "金額（TWD）"],
+            ["日期", "類型", "帳戶", "類別／項目", "金額（TWD）"],
             transaction_values,
             amount_column=4,
         )
@@ -84,8 +84,6 @@ class BalanceSnapshotPage(QWidget):
         )
         help_text.setObjectName("hintLabel")
         help_text.setWordWrap(True)
-        self.observed_at.setCalendarPopup(True)
-        self.observed_at.setDisplayFormat("yyyy/MM/dd HH:mm")
         self.amount.setPlaceholderText("例如：1200，可填 0")
         self.note.setPlaceholderText("可留空，例如：開啟程式時盤點")
         self.result.setObjectName("statusLabel")
@@ -106,7 +104,7 @@ class BalanceSnapshotPage(QWidget):
 
         form = QFormLayout()
         form.addRow("帳戶", self.account)
-        form.addRow("盤點時間", self.observed_at)
+        form.addRow("盤點日期", self.observed_at)
         form.addRow("目前金額（TWD）", self.amount)
         form.addRow("備註", self.note)
         form.addRow("列表狀態", self.status)
@@ -179,7 +177,7 @@ class BalanceSnapshotPage(QWidget):
         sign_text = "完全吻合" if difference == 0 else latest["difference"]
         self.summary.setText(
             "最近盤點："
-            f"{display_datetime(str(latest['observed_at']))}；"
+            f"{display_date(str(latest['observed_at']))}；"
             f"實際 {latest['actual_balance']} TWD，"
             f"預期 {latest['expected_balance']} TWD，"
             f"未解釋差額 {sign_text} TWD。"
@@ -199,7 +197,7 @@ class BalanceSnapshotPage(QWidget):
             return
         result = self.controller.create_balance_snapshot(
             account_id=account_id,
-            observed_at=iso_datetime(self.observed_at),
+            observed_at=iso_from_date(self.observed_at),
             actual_balance=self.amount.text().strip(),
             note=self.note.text().strip(),
         )
@@ -207,7 +205,7 @@ class BalanceSnapshotPage(QWidget):
         if result.success:
             self.amount.clear()
             self.note.clear()
-            self.observed_at.setDateTime(QDateTime.currentDateTime())
+            self.observed_at.setDate(QDate.currentDate())
             self.changed.emit()
             self.refresh()
 
@@ -220,7 +218,9 @@ class BalanceSnapshotPage(QWidget):
         result = self.controller.update_balance_snapshot(
             str(item["snapshot_id"]),
             account_id=account_id,
-            observed_at=iso_datetime(self.observed_at),
+            observed_at=iso_from_date(
+                self.observed_at, keep_time_from=str(item["observed_at"])
+            ),
             actual_balance=self.amount.text().strip(),
             note=self.note.text().strip(),
         )
@@ -249,9 +249,7 @@ class BalanceSnapshotPage(QWidget):
         select_data(self.account, item.get("account_id"))
         try:
             observed = datetime.fromisoformat(str(item["observed_at"])).astimezone(TAIPEI)
-            self.observed_at.setDateTime(
-                QDateTime.fromString(observed.strftime("%Y/%m/%d %H:%M"), "yyyy/MM/dd HH:mm")
-            )
+            self.observed_at.setDate(QDate(observed.year, observed.month, observed.day))
         except ValueError:
             pass
         self.amount.setText(minor_text(item["actual_balance_minor"]))

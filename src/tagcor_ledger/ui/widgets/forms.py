@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, cast
 
-from PySide6.QtWidgets import QComboBox, QDateTimeEdit, QLabel, QLayout, QWidget
+from PySide6.QtCore import QDate
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDateEdit,
+    QDateTimeEdit,
+    QLabel,
+    QLayout,
+    QWidget,
+)
 
 from tagcor_ledger.infrastructure.clock import TAIPEI
 
@@ -80,6 +88,38 @@ def select_data(combo: QComboBox, value: object) -> None:
     index = combo.findData(value)
     if index >= 0:
         combo.setCurrentIndex(index)
+
+
+def date_field(value: QDate | None = None) -> QDateEdit:
+    """日期欄位。**只問到哪一天，不問幾點幾分。**
+
+    記帳需要的精度就是「哪一天」—— 午餐是 12:07 還是 12:31 不會影響任何一個數字，
+    但每記一筆都要面對一個時分欄位，那是每天都要付的成本。
+    """
+    widget = QDateEdit(value or QDate.currentDate())
+    widget.setCalendarPopup(True)
+    widget.setDisplayFormat("yyyy/MM/dd")
+    return widget
+
+
+def iso_from_date(widget: QDateEdit, *, keep_time_from: str | None = None) -> str:
+    """畫面上的日期 → 帶時區的 ISO 時間戳。
+
+    **資料庫仍然存完整時間戳。** 畫面只問日期，時分秒由程式補：
+
+    - 新建：補現在的時分秒。同一天記好幾筆時，這是唯一能保住「先後順序」的東西 ——
+      全部塞 00:00 的話，當天的排序就只能靠 id，看起來會是隨機的。
+    - 編輯：沿用那筆原本的時分秒（`keep_time_from`）。只改個備註卻讓它跳到當天最後一筆，
+      是沒有人會預期的行為。
+    """
+    day = cast(date, widget.date().toPython())
+    clock = datetime.now(TAIPEI).time()
+    if keep_time_from:
+        try:
+            clock = datetime.fromisoformat(keep_time_from).astimezone(TAIPEI).time()
+        except ValueError:
+            pass
+    return datetime.combine(day, clock, tzinfo=TAIPEI).isoformat(timespec="seconds")
 
 
 def iso_datetime(widget: QDateTimeEdit) -> str:

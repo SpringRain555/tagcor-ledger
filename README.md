@@ -2,13 +2,13 @@
 
 TagCor Ledger 是 Windows-first、本機優先的個人記帳工具。核心資料使用 SQLite，介面使用 PySide6，目標是快速記錄收支、轉帳、餘額盤點與待確認週期項目，同時保持資料可備份、可還原、可長期維護。
 
-目前版本：0.12.0（中性純灰配色、介面優化、郵局定存、法規參考庫）。
+目前版本：0.13.0（中性純灰配色、日期只到日、郵局定存、法規參考庫）。
 
 **帳務資料不在專案資料夾裡。** 程式在 `D:\Projects\tagcor-ledger`，資料在 `<資料根目錄>`，兩者分開，資料永遠不進版控。完整說明見 [Storage layout](docs/architecture/storage-layout.md)。
 
 ## 目前功能
 
-- 快速記帳流程：流向 → 帳戶 → 類別 → 項目 → 時間 → 金額 → 備註。
+- 快速記帳流程：流向 → 金額 → 帳戶 → 類別 → 項目 → 日期 → 備註。
 - 收入、支出、同幣別 TWD 轉帳。
 - 交易紀錄支援文字、日期、帳戶、類別與狀態篩選，使用 keyset pagination。
 - 帳戶、類別與項目可新增、重新命名、封存、恢復、刪除未使用。
@@ -38,7 +38,10 @@ TagCor Ledger 是 Windows-first、本機優先的個人記帳工具。核心資�
   與右對齊千分位（`+36,000`），色盲、列印與截圖都讀得出來。
 - 所有「文字／底色」組合的 WCAG 對比都 >= 4.5，而且是拿**選取列**（最亮的底）算的。
 - 高風險操作（刪除、作廢、重製、還原）用紅色危險按鈕。
-- 字體優先順序為 `Segoe UI Variable`、`Segoe UI`、`Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、sans-serif；不額外打包字型檔。
+- 字體是 **Microsoft JhengHei UI 12pt Medium**。主字體用中文字型是刻意的 ——
+  `Segoe UI Variable` 沒有中文字形，對它設字重只有數字會變粗，中文不會。
+  fallback 順序：`Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、
+  `Segoe UI Variable`、`Segoe UI`、sans-serif；不額外打包字型檔。
 - 色票的正本是 `src/tagcor_ledger/ui/colors.py`，QSS 不得出現清單以外的色碼（有測試擋）。
 
 ## 安裝
@@ -119,7 +122,7 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 
 1. 選擇流向：支出、收入或轉帳。
 2. 選擇帳戶；支出/收入再選「類別」與「項目」，轉帳改選轉入帳戶。
-3. 填寫時間、TWD 整數金額與備註。
+3. 填寫 TWD 整數金額、日期與備註。**日期只到「哪一天」，沒有時分欄位。**
 4. 按「儲存交易」。
 
 「項目」用來描述具體收支項目，例如早餐、捷運、7-11。備註用來補充當次交易的額外資訊。Phase 4 已移除「對象／商家」欄位。

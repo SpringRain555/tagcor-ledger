@@ -82,16 +82,21 @@ def result_message(result: Any) -> str:
     return f"{result.message}{'（' + reason + '）' if reason else ''}"
 
 
-def display_datetime(value: str) -> str:
+def display_date(value: str) -> str:
+    """只顯示日期。
+
+    資料庫存的是完整時間戳，但那個時分秒是**程式補的排序用值**，不是使用者輸入的 ——
+    把它印出來會讓人以為那是真的記錄時間。畫面只問到哪一天，就只顯示到哪一天。
+    """
     try:
-        return datetime.fromisoformat(value).strftime("%Y/%m/%d %H:%M")
+        return datetime.fromisoformat(value).strftime("%Y/%m/%d")
     except ValueError:
         return value
 
 
 def balance_gap_values(item: dict[str, Any]) -> list[str]:
     return [
-        display_datetime(str(item["observed_at"])),
+        display_date(str(item["observed_at"])),
         str(item["account_name"]),
         group_digits(str(item["actual_balance"])),
         group_digits(str(item["expected_balance"])),
@@ -112,7 +117,7 @@ def transaction_values(item: dict[str, Any]) -> list[str]:
         account += f" → {item.get('destination_account_name') or ''}"
     # 幣別不放進每一列 —— 目前固定 TWD，寫在欄位標題就夠，每列重複只是雜訊。
     return [
-        display_datetime(str(item["occurred_at"])),
+        display_date(str(item["occurred_at"])),
         str(item["entry_type_name"]),
         account,
         category,

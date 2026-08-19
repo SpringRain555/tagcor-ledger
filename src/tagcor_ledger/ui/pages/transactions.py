@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDateEdit,
-    QDateTimeEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -29,7 +28,12 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, transaction_values
-from tagcor_ledger.ui.widgets.forms import fill_combo, iso_datetime, select_data
+from tagcor_ledger.ui.widgets.forms import (
+    date_field,
+    fill_combo,
+    iso_from_date,
+    select_data,
+)
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
     bind_selection,
@@ -46,7 +50,7 @@ class TransactionsPage(QWidget):
         self.controller = controller
         self.table = QTableView()
         self.model = RowsModel(
-            ["時間", "類型", "帳戶", "類別／項目", "金額（TWD）", "備註", "狀態"],
+            ["日期", "類型", "帳戶", "類別／項目", "金額（TWD）", "備註", "狀態"],
             transaction_values,
             amount_column=4,
         )
@@ -245,7 +249,7 @@ class TransactionEditDialog(QDialog):
         self.destination = QComboBox()
         self.category = QComboBox()
         self.detail = QComboBox()
-        self.occurred_at = QDateTimeEdit()
+        self.occurred_at = date_field()
         self.amount = QLineEdit(str(transaction["amount"]))
         self.description = QLineEdit(str(transaction["description"]))
         self.error = QLabel()
@@ -255,10 +259,10 @@ class TransactionEditDialog(QDialog):
     def _build(self) -> None:
         transfer = self.transaction["entry_type"] == "transfer"
         self.setWindowTitle("替換轉帳" if transfer else "編輯交易")
-        self.occurred_at.setCalendarPopup(True)
-        self.occurred_at.setDisplayFormat("yyyy/MM/dd HH:mm")
-        self.occurred_at.setDateTime(
-            QDateTime.fromString(str(self.transaction["occurred_at"]), Qt.DateFormat.ISODate)
+        self.occurred_at.setDate(
+            QDateTime.fromString(
+                str(self.transaction["occurred_at"]), Qt.DateFormat.ISODate
+            ).date()
         )
         self.error.setObjectName("errorLabel")
         form = QFormLayout()
@@ -268,7 +272,7 @@ class TransactionEditDialog(QDialog):
         else:
             form.addRow("類別", self.category)
             form.addRow("項目", self.detail)
-        form.addRow("時間", self.occurred_at)
+        form.addRow("日期", self.occurred_at)
         form.addRow("金額（TWD）", self.amount)
         form.addRow("備註", self.description)
         form.addRow("", self.error)
@@ -315,7 +319,10 @@ class TransactionEditDialog(QDialog):
 
     def save(self) -> None:
         common = {
-            "occurred_at": iso_datetime(self.occurred_at),
+            # 編輯時沿用原本的時分秒：只改個備註不該讓它跳到當天最後一筆。
+            "occurred_at": iso_from_date(
+                self.occurred_at, keep_time_from=str(self.transaction["occurred_at"])
+            ),
             "amount": self.amount.text().strip(),
             "description": self.description.text().strip(),
         }

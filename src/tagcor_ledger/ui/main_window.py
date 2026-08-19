@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QColor, QFont, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.app.paths import AppPaths
+from tagcor_ledger.ui import colors, theme
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
@@ -31,6 +32,27 @@ from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
 from tagcor_ledger.ui.pages.transactions import TransactionsPage
 from tagcor_ledger.ui.theme import apply_dark_theme
+
+
+def _section_header(text: str) -> QListWidgetItem:
+    """側邊欄的分組標題。
+
+    **它不是一頁，點不下去。** 第一版把它做得跟其他項目一樣大、只是顏色淡一點，
+    使用者的第一個反應是「這是什麼？為什麼不能用？」—— 那就是做壞了。
+
+    所以現在明確做成標籤的樣子：字級小一階、字距拉開、顏色更淡。看起來不像可以點的
+    東西，就不會有人想點。
+    """
+    item = QListWidgetItem(text)
+    item.setFlags(Qt.ItemFlag.NoItemFlags)
+    font = QFont(theme.FONT_FAMILY)
+    font.setPointSizeF(9.0)
+    font.setWeight(QFont.Weight.DemiBold)
+    # 字距是「這是標題不是選項」最省事的訊號，中文尤其明顯。
+    font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.0)
+    item.setFont(font)
+    item.setForeground(QColor(colors.TEXT_FAINT))
+    return item
 
 
 class MainWindow(QMainWindow):
@@ -82,10 +104,7 @@ class MainWindow(QMainWindow):
         self._page_rows: dict[str, int] = {}
         self._row_to_page: dict[int, int] = {}
         for section_title, entries in sections:
-            header = QListWidgetItem(section_title)
-            # 分組標題不可選、不可聚焦 —— 它是標籤，不是一頁。
-            header.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.navigation.addItem(header)
+            self.navigation.addItem(_section_header(section_title))
             for label, page in entries:
                 row = self.navigation.count()
                 self._page_rows[label] = row
