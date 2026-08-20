@@ -16,7 +16,7 @@
 - `settings`：ledger 內的一般偏好，例如預設帳戶、預設流向、每頁筆數、盤點提醒。
 - `schema_migrations`：migration registry。
 - `transaction_templates`：交易模板。
-- `recurring_schedules`：週期排程。
+- `recurring_schedules`：定期收支（UI 用詞；表名維持 `recurring_schedules`，改它要 migration）。
 - `scheduled_occurrences`：待確認項目 snapshot。
 - `balance_snapshots`：餘額盤點。
 - `deposit_contracts`：定存的持續關係 —— 哪個帳戶、怎麼計息、到期怎麼處理、利率是固定還是機動。

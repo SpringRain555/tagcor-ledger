@@ -83,7 +83,7 @@
 
 另外三條限制：
 
-- **預設帳戶不能刪**（`ACCOUNT_IS_DEFAULT`）。刪掉之後快速記帳沒有預設值可填。
+- **預設帳戶不能刪**（`ACCOUNT_IS_DEFAULT`）。刪掉之後記帳頁沒有預設值可填。
 - **有子項目的類別不能刪**（`CATEGORY_HAS_CHILDREN`），要先處理掉子項目。
 - **有使用中子項目的類別不能封存**（`CATEGORY_HAS_ACTIVE_CHILDREN`），否則會出現
   「父類別已封存但子項目還在選單裡」的矛盾。
@@ -173,12 +173,15 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 
 ---
 
-## 5. 模板 `transaction_templates` 與 週期排程 `recurring_schedules`
+## 5. 模板 `transaction_templates` 與 定期收支 `recurring_schedules`
 
 兩者都是 `CHECK (status IN ('active', 'archived'))`，轉移與帳戶／類別相同（`active ↔ archived`）。
 
-- **套用模板只預填快速記帳，不直接入帳。**
-- **封存排程不會刪掉已經產生的 `pending` 項目**，那些仍需個別處理。
+> **UI 上叫「定期收支」，資料表仍叫 `recurring_schedules`。** 那是 schema，
+> 改它要 migration，而使用者看不到它。用詞對照見 [glossary](glossary.md)。
+
+- **套用模板只預填記帳頁，不直接入帳。**
+- **封存定期收支不會刪掉已經產生的 `pending` 項目**，那些仍需個別處理。
 
 ---
 
