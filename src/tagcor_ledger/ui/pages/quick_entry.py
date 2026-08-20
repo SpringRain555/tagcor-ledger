@@ -1,4 +1,4 @@
-"""快速記帳：每天最常用的那一頁。
+"""記帳：每天最常用的那一頁。
 
 ## 這一頁的三個設計取捨
 
@@ -64,7 +64,7 @@ class QuickEntryPage(QWidget):
         self.apply_defaults()
 
     def _build(self) -> None:
-        title = QLabel("快速記帳")
+        title = QLabel("記帳")
         title.setObjectName("pageTitle")
         set_button_role(self.save_button, "primary")
 

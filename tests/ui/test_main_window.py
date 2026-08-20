@@ -1,3 +1,4 @@
+import ast
 from datetime import date, datetime
 from pathlib import Path
 
@@ -9,57 +10,123 @@ from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui import colors
 from tagcor_ledger.ui.main_window import MainWindow
+from tagcor_ledger.ui.navigation import DAILY_PAGES, SETTINGS_PAGES, PageId
 from tagcor_ledger.ui.widgets.forms import date_field, iso_from_date
+from tagcor_ledger.ui.widgets.sidebar import BADGE_ROLE
 
 
-def test_main_window_groups_navigation_and_keeps_pages_in_step(qtbot, tmp_path: Path) -> None:
-    """側邊欄有分組標題，所以**列號不等於頁面編號** —— 這裡守的就是那個對應關係。"""
+def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(qtbot, tmp_path: Path) -> None:
+    """側邊欄的順序與頁面堆疊必須一一對應。
+
+    導覽 key 是 `PageId` 不是顯示文字 —— 所以這裡改標籤不會讓測試失效，
+    改對應關係才會。
+    """
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     window.show()
 
-    labels = [window.navigation.item(row).text() for row in range(window.navigation.count())]
-    assert labels == [
-        "每天用",
-        "快速記帳",
+    assert [item.text() for item in window.sidebar.all_items()] == [
+        "記帳",
         "待確認",
         "交易紀錄",
         "餘額盤點",
-        "設定與查閱",
         "法規參考",
         "操作設定",
         "系統設定",
     ]
 
-    # 分組標題不可選：使用者用鍵盤上下鍵不會停在一個沒有內容的項目上。
-    for row, label in enumerate(labels):
-        selectable = bool(window.navigation.item(row).flags() & Qt.ItemFlag.ItemIsSelectable)
-        assert selectable is (label not in {"每天用", "設定與查閱"}), label
-
-    # 每一個可選的項目都要真的切到對應的那一頁。
-    for label, page in (
-        ("快速記帳", window.quick),
-        ("待確認", window.pending),
-        ("交易紀錄", window.transactions),
-        ("餘額盤點", window.balance),
-        ("法規參考", window.reference),
-        ("操作設定", window.operation_settings),
-        ("系統設定", window.system_settings),
+    for page, widget in (
+        (PageId.ENTRY, window.quick),
+        (PageId.INBOX, window.pending),
+        (PageId.TRANSACTIONS, window.transactions),
+        (PageId.BALANCE, window.balance),
+        (PageId.REFERENCE, window.reference),
+        (PageId.OPERATION_SETTINGS, window.operation_settings),
+        (PageId.SYSTEM_SETTINGS, window.system_settings),
     ):
-        window.show_page(label)
-        assert window.pages.currentWidget() is page, label
+        window.show_page(page)
+        assert window.pages.currentWidget() is widget, page
 
     assert window.windowTitle() == "TagCor Ledger"
 
 
-def test_pending_badge_follows_the_row_it_belongs_to(qtbot, tmp_path: Path) -> None:
-    """數字要出現在「待確認」那一列 —— 以前是寫死 `item(2)`，重排側邊欄就會標錯列。"""
+def test_every_sidebar_row_can_be_clicked(qtbot, tmp_path: Path) -> None:
+    """**側邊欄裡不得有任何點不動的東西。**
+
+    分組標題失敗過兩次 —— 第一版只是顏色淡一點，第二版縮小加字距。兩次使用者的第一個
+    反應都是「這是什麼？為什麼點不動？」。第三次的做法是把標籤整個拿掉，分組改用位置
+    表達（日常在上、設定沉底），這條測試就是不讓它再長回來。
+    """
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     window.show()
 
-    row = window._page_rows["待確認"]
-    assert window.navigation.item(row).text() == "待確認"  # 沒有待確認就不掛括號
+    items = window.sidebar.all_items()
+    assert items
+    for item in items:
+        assert item.flags() & Qt.ItemFlag.ItemIsSelectable, item.text()
+        assert item.flags() & Qt.ItemFlag.ItemIsEnabled, item.text()
+
+
+def test_selecting_one_group_clears_the_other(qtbot, tmp_path: Path) -> None:
+    """兩個清單各有 current row，選了一邊必須清掉另一邊。
+
+    這段最容易寫成無窮遞迴：清掉對方會觸發對方的 `currentRowChanged`。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    window.show_page(PageId.ENTRY)
+    assert window.sidebar.daily.currentRow() == 0
+    assert window.sidebar.settings.currentRow() == -1
+
+    window.show_page(PageId.SYSTEM_SETTINGS)
+    assert window.sidebar.daily.currentRow() == -1
+    assert window.sidebar.settings.currentRow() == 2
+    assert window.sidebar.current_page() is PageId.SYSTEM_SETTINGS
+    assert window.pages.currentWidget() is window.system_settings
+
+
+def test_settings_group_sits_at_the_bottom_of_the_rail(qtbot, tmp_path: Path) -> None:
+    """設定要**沉底**，中間的留白會隨視窗長高。
+
+    如果兩個清單都用預設的 Expanding size policy，它們會各分一半空間，
+    設定那一組就浮在中間 —— 分組靠位置表達的做法也就失效了。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.resize(1280, 900)
+    window.show()
+    qtbot.waitExposed(window)
+
+    rail = window.sidebar
+    row_height = rail.daily.sizeHintForRow(0)
+    assert row_height > 0
+
+    # 兩個清單的高度剛好等於內容 —— 沒有這一點，它們會各自長高把留白吃光。
+    assert rail.daily.height() == row_height * len(DAILY_PAGES)
+    assert rail.settings.height() == row_height * len(SETTINGS_PAGES)
+
+    # 設定那一組貼在底部（只剩版面外距），而且離日常那一組有一段真正的留白。
+    assert rail.height() - rail.settings.geometry().bottom() < 40
+    assert rail.settings.geometry().top() - rail.daily.geometry().bottom() > 80
+
+
+def test_pending_badge_is_drawn_beside_the_label_not_inside_it(qtbot, tmp_path: Path) -> None:
+    """數字放在項目資料裡，**不寫進標籤文字**。
+
+    舊做法是把文字改寫成「待確認（2）」，標籤長度會隨數字跳動 —— 而側邊欄的項目
+    應該是固定不動的錨點。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    item = window.sidebar.item_for(PageId.INBOX)
+    assert item is not None
+    assert item.text() == "待確認"
+    assert item.data(BADGE_ROLE) is None
 
     controller = window.controller
     schedule = controller.save_schedule(
@@ -80,7 +147,8 @@ def test_pending_badge_follows_the_row_it_belongs_to(qtbot, tmp_path: Path) -> N
     assert schedule.success
     assert controller.generate_due().success
     window.refresh_pending_badge()
-    assert window.navigation.item(row).text().startswith("待確認（")
+    assert item.text() == "待確認"  # 文字不動
+    assert item.data(BADGE_ROLE) == len(controller.list_pending())
 
 
 def test_main_window_applies_scoped_dark_theme(qtbot, tmp_path: Path) -> None:
@@ -91,10 +159,13 @@ def test_main_window_applies_scoped_dark_theme(qtbot, tmp_path: Path) -> None:
     app = QApplication.instance()
     assert app is not None
     styles = app.styleSheet()
-    assert window.navigation.objectName() == "sidebarNavigation"
+    assert window.sidebar.objectName() == "sidebarRail"
+    assert window.sidebar.daily.objectName() == "sidebarNavigation"
+    assert window.sidebar.settings.objectName() == "sidebarNavigation"
     assert window.pages.objectName() == "contentStack"
     assert window.system_settings.maintenance.list.objectName() == "backupList"
     assert "QTabBar::tab" in styles
+    assert "QFrame#sidebarRail" in styles
     assert "QListWidget#sidebarNavigation" in styles
     assert "QListWidget#backupList" in styles
     assert colors.BG in styles
@@ -191,7 +262,7 @@ def test_action_buttons_are_disabled_until_a_row_is_selected(qtbot, tmp_path: Pa
     buttons = [
         button
         for button in window.transactions.findChildren(QPushButton)
-        if button.text() in {"編輯／替換", "複製到快速記帳", "作廢"}
+        if button.text() in {"編輯／替換", "複製到記帳", "作廢"}
     ]
     assert len(buttons) == 3
     assert all(not button.isEnabled() for button in buttons)
@@ -393,21 +464,30 @@ def test_lists_show_the_date_without_a_made_up_time(qtbot, tmp_path: Path) -> No
     assert model.index(0, 0).data() == "2026/08/19"
 
 
-def test_sidebar_headers_look_like_labels_not_rows(qtbot, tmp_path: Path) -> None:
-    """分組標題點不下去，所以**不能長得像可以點的東西**。
+def test_navigation_labels_are_not_used_as_lookup_keys() -> None:
+    """導覽查表不得以中文字串當 key。
 
-    第一版只是把顏色調淡、大小照舊，使用者的第一個反應是「這是什麼？為什麼不能用？」
+    以前是 `show_page("快速記帳")`、`_page_rows["待確認"]` —— 改一個字就是
+    執行時的 `KeyError`。身分是 `PageId`，顯示文字只從 `LABELS` 查出來。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "tagcor_ledger"
+        / "ui"
+        / "main_window.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
 
-    header = window.navigation.item(0)
-    entry = window.navigation.item(window._page_rows["快速記帳"])
-    assert header.text() == "每天用"
-    assert not (header.flags() & Qt.ItemFlag.ItemIsEnabled)
-    assert header.font().pointSizeF() < entry.font().pointSizeF()
-    assert header.font().letterSpacing() > entry.font().letterSpacing()
+    offenders = [
+        ast.unparse(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Subscript)
+        and isinstance(node.slice, ast.Constant)
+        and isinstance(node.slice.value, str)
+        and any("一" <= char <= "鿿" for char in node.slice.value)
+    ]
+    assert not offenders, f"這些查表用中文字串當 key：{offenders}"
 
 
 def test_deposits_tab_and_pending_deposit_section_exist(qtbot, tmp_path: Path) -> None:

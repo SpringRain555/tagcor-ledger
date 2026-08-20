@@ -22,6 +22,7 @@ def test_styles_define_dark_theme_colors_and_scoped_widgets() -> None:
     assert f"background-color: {colors.BG};" in styles
     assert f"selection-background-color: {colors.SELECTED};" in styles
     assert "QTabBar::tab" in styles
+    assert "QFrame#sidebarRail" in styles
     assert "QListWidget#sidebarNavigation" in styles
     assert "QListWidget#backupList" in styles
     assert "QPushButton#dangerButton" in styles

@@ -78,7 +78,7 @@ class AutomationPage(QWidget):
         for label, handler in (
             ("新增模板", lambda: self.edit_template(None)),
             ("編輯模板", self.edit_selected_template),
-            ("套用到快速記帳", self.apply_template),
+            ("套用到記帳", self.apply_template),
             ("封存模板", self.archive_template),
         ):
             button = QPushButton(label)

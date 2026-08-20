@@ -113,7 +113,7 @@ QLineEdit {
     placeholder-text-color: #7A7A85;
 }
 
-/* 金額輸入框：快速記帳那一頁真正的主角，比其他欄位大一階 */
+/* 金額輸入框：記帳那一頁真正的主角，比其他欄位大一階 */
 QLineEdit#amountInput {
     font-size: 15pt;
     font-weight: 600;
@@ -205,13 +205,22 @@ QListWidget::item:selected {
     background-color: #26262E;
 }
 
-QListWidget#sidebarNavigation {
-    color: #9A9AA5;
+/* 側邊欄外框。**分隔線畫在這一層，不能畫在清單上** —— 側邊欄是兩個清單夾一段
+ * 會伸縮的留白（日常在上、設定沉底），線若畫在清單上就會跟著斷成兩截。
+ * 內距也移到這一層，清單本身的高度才等於它的內容高度（見 `widgets/sidebar.py`）。 */
+QFrame#sidebarRail {
     background-color: #0D0D0F;
     border: 0;
     border-right: 1px solid #33333C;
     border-radius: 0;
-    padding: 6px 8px 6px 0;
+}
+
+QListWidget#sidebarNavigation {
+    color: #9A9AA5;
+    background-color: #0D0D0F;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
 }
 
 QListWidget#sidebarNavigation::item {
@@ -230,16 +239,6 @@ QListWidget#sidebarNavigation::item:selected {
     color: #E8E8EA;
     background-color: #1F1F25;
     font-weight: 600;
-}
-
-/* 側邊欄的分組標題：不可選，只是把「每天用」與「設定」分開 */
-QListWidget#sidebarNavigation::item:disabled {
-    color: #7A7A85;
-    background-color: transparent;
-    font-size: 9pt;
-    font-weight: 600;
-    min-height: 18px;
-    padding: 12px 12px 4px 12px;
 }
 
 QListWidget#backupList {

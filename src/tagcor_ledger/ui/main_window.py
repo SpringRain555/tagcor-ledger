@@ -3,27 +3,27 @@
 **頁面之間的連動只寫在這裡。** 每一頁只管自己，做完事情就發訊號；「存了一筆交易之後
 要重刷交易列表與餘額盤點」這種跨頁規則集中在下面幾個 `_..._changed` 方法裡，這樣要
 知道某個動作會影響誰，只需要讀這一個檔案。
+
+**導覽用 `PageId`，不用顯示文字。** 以前是 `show_page("快速記帳")` ——
+改一個字就會噴 `KeyError`。頁面身分與顯示文字現在分開，見 `ui/navigation.py`。
 """
 
 from __future__ import annotations
 
 from typing import Any, cast
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QColor, QFont, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QStackedWidget,
     QWidget,
 )
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.ui import colors, theme
 from tagcor_ledger.ui.controller import LedgerController
+from tagcor_ledger.ui.navigation import ALL_PAGES, PageId
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
 from tagcor_ledger.ui.pages.pending import PendingPage
@@ -32,34 +32,13 @@ from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
 from tagcor_ledger.ui.pages.transactions import TransactionsPage
 from tagcor_ledger.ui.theme import apply_dark_theme
-
-
-def _section_header(text: str) -> QListWidgetItem:
-    """側邊欄的分組標題。
-
-    **它不是一頁，點不下去。** 第一版把它做得跟其他項目一樣大、只是顏色淡一點，
-    使用者的第一個反應是「這是什麼？為什麼不能用？」—— 那就是做壞了。
-
-    所以現在明確做成標籤的樣子：字級小一階、字距拉開、顏色更淡。看起來不像可以點的
-    東西，就不會有人想點。
-    """
-    item = QListWidgetItem(text)
-    item.setFlags(Qt.ItemFlag.NoItemFlags)
-    font = QFont(theme.FONT_FAMILY)
-    font.setPointSizeF(9.0)
-    font.setWeight(QFont.Weight.DemiBold)
-    # 字距是「這是標題不是選項」最省事的訊號，中文尤其明顯。
-    font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.0)
-    item.setFont(font)
-    item.setForeground(QColor(colors.TEXT_FAINT))
-    return item
+from tagcor_ledger.ui.widgets.sidebar import Sidebar
 
 
 class MainWindow(QMainWindow):
     def __init__(self, paths: AppPaths) -> None:
         super().__init__()
         self.controller = LedgerController(paths)
-        self.navigation = QListWidget()
         self.pages = QStackedWidget()
         self.quick = QuickEntryPage(self.controller)
         self.balance = BalanceSnapshotPage(self.controller)
@@ -78,52 +57,37 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             apply_dark_theme(cast(QApplication, app))
-        # 側邊欄分成「每天用」與「設定與查閱」兩組。原本七項平鋪，而且「法規參考」
-        # 卡在兩個設定頁中間 —— 每天要用的四頁跟一年動兩次的設定看起來一樣重要。
-        sections: list[tuple[str, list[tuple[str, QWidget]]]] = [
-            (
-                "每天用",
-                [
-                    ("快速記帳", self.quick),
-                    ("待確認", self.pending),
-                    ("交易紀錄", self.transactions),
-                    ("餘額盤點", self.balance),
-                ],
-            ),
-            (
-                "設定與查閱",
-                [
-                    ("法規參考", self.reference),
-                    ("操作設定", self.operation_settings),
-                    ("系統設定", self.system_settings),
-                ],
-            ),
-        ]
-        self.navigation.setObjectName("sidebarNavigation")
+
+        self._page_widgets: dict[PageId, QWidget] = {
+            PageId.ENTRY: self.quick,
+            PageId.INBOX: self.pending,
+            PageId.TRANSACTIONS: self.transactions,
+            PageId.BALANCE: self.balance,
+            PageId.REFERENCE: self.reference,
+            PageId.OPERATION_SETTINGS: self.operation_settings,
+            PageId.SYSTEM_SETTINGS: self.system_settings,
+        }
         self.pages.setObjectName("contentStack")
-        self._page_rows: dict[str, int] = {}
-        self._row_to_page: dict[int, int] = {}
-        for section_title, entries in sections:
-            self.navigation.addItem(_section_header(section_title))
-            for label, page in entries:
-                row = self.navigation.count()
-                self._page_rows[label] = row
-                self._row_to_page[row] = self.pages.count()
-                self.navigation.addItem(QListWidgetItem(label))
-                page.setObjectName("pageSurface")
-                self.pages.addWidget(page)
-        self.navigation.setFixedWidth(184)
-        self.navigation.currentRowChanged.connect(self._navigate)
-        self.navigation.setCurrentRow(self._page_rows["快速記帳"])
+        for page in ALL_PAGES:
+            widget = self._page_widgets[page]
+            widget.setObjectName("pageSurface")
+            self.pages.addWidget(widget)
+
+        # 側邊欄要在 apply_dark_theme 之後才建 —— 它的高度是照 QSS 的項目內距算出來的。
+        self.sidebar = Sidebar()
+        self.sidebar.setFixedWidth(184)
+        self.sidebar.page_selected.connect(self._navigate)
+
         layout = QHBoxLayout()
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(16)
-        layout.addWidget(self.navigation)
+        layout.addWidget(self.sidebar)
         layout.addWidget(self.pages, 1)
         content = QWidget()
         content.setObjectName("appShell")
         content.setLayout(layout)
         self.setCentralWidget(content)
+        self.show_page(PageId.ENTRY)
         self.statusBar().showMessage(f"資料庫：{paths.database_path}")
 
         self.quick.saved.connect(self._transaction_changed)
@@ -150,22 +114,21 @@ class MainWindow(QMainWindow):
         clear_action.triggered.connect(self.quick.clear_form)
         self.addActions([new_action, save_action, clear_action])
 
-    def _navigate(self, row: int) -> None:
-        """側邊欄有分組標題，所以列號不等於頁面編號。"""
-        page_index = self._row_to_page.get(row)
-        if page_index is not None:
-            self.pages.setCurrentIndex(page_index)
+    def _navigate(self, page_value: str) -> None:
+        self.pages.setCurrentWidget(self._page_widgets[PageId(page_value)])
 
-    def show_page(self, label: str) -> None:
-        self.navigation.setCurrentRow(self._page_rows[label])
+    def show_page(self, page: PageId) -> None:
+        """跳到某一頁。走側邊欄，讓選取狀態與畫面永遠是同一個真相。"""
+        self.sidebar.select(page)
+        self._navigate(str(page))
 
     def _focus_new(self) -> None:
-        self.show_page("快速記帳")
+        self.show_page(PageId.ENTRY)
         self.quick.amount.setFocus()
 
     def _prefill_quick(self, draft: dict[str, Any]) -> None:
         self.quick.apply_draft(draft)
-        self.show_page("快速記帳")
+        self.show_page(PageId.ENTRY)
 
     def _transaction_changed(self) -> None:
         self.transactions.first_page()
@@ -204,11 +167,8 @@ class MainWindow(QMainWindow):
         self.system_settings.reload()
 
     def refresh_pending_badge(self) -> None:
-        """待確認的數字直接寫在側邊欄，不必點進去才知道有沒有事情要處理。"""
-        count = len(self.controller.list_pending())
-        item = self.navigation.item(self._page_rows["待確認"])
-        if item is not None:
-            item.setText(f"待確認（{count}）" if count else "待確認")
+        """待確認的數字直接畫在側邊欄右側，不必點進去才知道有沒有事情要處理。"""
+        self.sidebar.set_badge(PageId.INBOX, len(self.controller.list_pending()))
 
     def _show_balance_snapshot_reminder(self) -> None:
         if self.controller.refresh_balance_snapshot_reminder_due():

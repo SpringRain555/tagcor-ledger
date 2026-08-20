@@ -112,7 +112,7 @@ class TransactionsPage(QWidget):
 
         setup_table(self.table, self.model, stretch_column=5)
         edit_button = QPushButton("編輯／替換")
-        duplicate_button = QPushButton("複製到快速記帳")
+        duplicate_button = QPushButton("複製到記帳")
         void_button = QPushButton("作廢")
         set_button_role(edit_button, "primary")
         set_button_role(void_button, "danger")
