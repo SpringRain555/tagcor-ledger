@@ -12,6 +12,7 @@ from tagcor_ledger.application.transaction_service import AddTransaction, AddTra
 from tagcor_ledger.domain.models import CreateBalanceSnapshotRequest, TransactionFilter
 from tagcor_ledger.infrastructure.database import database_transaction
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
+from tagcor_ledger.ui.controller import LedgerController
 
 
 @pytest.mark.performance
@@ -72,6 +73,16 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     accounts = AccountService(paths, store).list()
     accounts_elapsed = perf_counter() - started
 
+    # 上面量的是地基，這一筆量的是**使用者實際會等的那件事**：切到資產總覽。
+    # `overview_snapshot()` 不只算餘額，還要取定存、收件匣筆數、盤點提醒與未解釋差額，
+    # 而且**每次切過去都重算一次**（刻意的：靠其他頁發訊號通知遲早會漏掉一項，
+    # 而漏掉的症狀是總資產停在舊數字 —— 看起來像算錯帳）。
+    # 所以「重算成本」是這個設計的前提，它必須被量著。
+    controller = LedgerController(paths)
+    started = perf_counter()
+    overview = controller.overview_snapshot()
+    overview_elapsed = perf_counter() - started
+
     print(
         "performance:",
         f"add={add_elapsed * 1000:.2f}ms",
@@ -80,7 +91,9 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
         f"snapshot={snapshot_elapsed * 1000:.2f}ms",
         f"gap={gap_elapsed * 1000:.2f}ms",
         f"accounts={accounts_elapsed * 1000:.2f}ms",
+        f"overview={overview_elapsed * 1000:.2f}ms",
     )
+    assert overview["accounts"], "沒有帳戶就等於什麼都沒算到，門檻會變成假的"
     assert accounts.success
     assert result.success
     assert snapshot.success
@@ -95,6 +108,10 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     # 實測 113ms（2026-08-20，20 萬筆）。門檻比照盤點與差額那兩筆的 0.5s ——
     # 它們同樣要走過整段分錄，量級也相近。
     assert accounts_elapsed < 0.5
+    # 實測 183ms / 182ms（2026-08-20，兩次，20 萬筆）。它幾乎剛好是
+    # accounts（77ms）＋ gap（100ms）—— 其餘幾項（定存、收件匣、設定）的筆數與
+    # 資料量無關，所以這一頁只有兩個成本會隨帳本長大。門檻取那兩筆各自預算的和。
+    assert overview_elapsed < 1.0
 
 
 def _seed_transactions(paths, count: int) -> None:

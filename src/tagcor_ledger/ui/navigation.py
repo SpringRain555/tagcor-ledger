@@ -30,8 +30,9 @@ from enum import StrEnum
 class PageId(StrEnum):
     """側邊欄一頁的身分。**這是 key，顯示文字不是。**
 
-    `INBOX` 對到的類別目前仍叫 `PendingPage` —— id 描述的是概念（收件匣），
-    不是實作的檔名。
+    `INBOX` 的顯示文字是「待確認」，兩個名字都是刻意的：畫面上要回答使用者的問題
+    （有什麼等我確認），程式裡要講得出結構（兩個來源落在同一個地方）。
+    對照表在 `docs/architecture/glossary.md`。
     """
 
     OVERVIEW = "overview"

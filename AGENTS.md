@@ -187,3 +187,9 @@ python -m tagcor_ledger --gui
 ## 文件維護
 
 任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog。踩到坑要在 `docs/lessons.md` 追加一筆 —— 那是 append-only 的失敗紀錄，目的是不要重蹈覆轍。
+
+**新增或改名一頁時，`docs/architecture/ui-workflows.md` 的頁面地圖要跟著改**，
+而且那一列的**「不在這裡做的事」不可以留空** —— 那一欄才是整張表存在的理由。
+v0.14.0 之前沒有這張表，症狀是連作者自己都會忘記「待確認」是做什麼的；
+一頁說不出自己不做什麼，下一個功能就會被塞進去。名稱由
+`tests/unit/test_docs_drift.py` 逐字守著，那一欄的內容只有人看得出來。
