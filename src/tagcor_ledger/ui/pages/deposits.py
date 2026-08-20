@@ -119,8 +119,8 @@ class DepositsPage(QWidget):
         term_row.addWidget(edit_term_button)
         term_row.addStretch()
 
-        setup_table(self.contracts, self.contract_model)
-        setup_table(self.terms, self.term_model)
+        setup_table(self.contracts, self.contract_model, fit_content=True)
+        setup_table(self.terms, self.term_model, fit_content=True)
         bind_selection(self.contracts, edit_button, delete_button)
         bind_selection(self.terms, edit_term_button)
 

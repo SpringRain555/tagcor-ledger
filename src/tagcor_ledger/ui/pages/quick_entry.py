@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -32,12 +31,12 @@ from tagcor_ledger.ui.formatting import ENTRY_NAMES, minor_text, result_message
 from tagcor_ledger.ui.widgets.forms import (
     date_field,
     fill_combo,
-    form_panel,
     iso_from_date,
     select_data,
     show_status,
     status_label,
 )
+from tagcor_ledger.ui.widgets.layout import FORM_WIDTH, page_layout
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 ENTRY_TYPES = ("expense", "income", "transfer")
@@ -99,13 +98,9 @@ class QuickEntryPage(QWidget):
         form.addRow("", self.status)
         form.addRow("", self.save_button)
 
-        row = QHBoxLayout()
-        row.addWidget(form_panel(form))
-        row.addStretch()
-
-        layout = QVBoxLayout(self)
+        layout = page_layout(self, width=FORM_WIDTH)
         layout.addWidget(title)
-        layout.addLayout(row)
+        layout.addLayout(form)
         layout.addStretch()
 
         self.flow_buttons.idToggled.connect(lambda *_: self._sync_flow())

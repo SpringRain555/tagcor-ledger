@@ -55,7 +55,8 @@ class GeneralSettingsPage(QWidget):
         form.addRow("餘額盤點提醒", self.balance_snapshot_reminder)
         form.addRow("固定幣別", QLabel("TWD"))
         form.addRow("固定時區", QLabel("Asia/Taipei"))
-        form.addRow("資料庫", QLabel(str(self.paths.database_path)))
+        # 資料庫檔案的完整路徑在「資料路徑」分頁 —— 這一頁講的是偏好，不是位置。
+        # 而且那一行 QLabel 是整個視窗最小寬度的來源（907 px），放在這裡沒有理由。
         form.addRow("", save)
         form.addRow("", self.result)
         row = QHBoxLayout()

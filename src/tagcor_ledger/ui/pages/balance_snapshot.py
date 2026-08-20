@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QTableView,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -34,10 +33,12 @@ from tagcor_ledger.ui.formatting import (
 from tagcor_ledger.ui.widgets.forms import (
     date_field,
     fill_combo,
+    form_panel,
     iso_from_date,
     select_data,
     show_status,
 )
+from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
     bind_selection,
@@ -110,27 +111,27 @@ class BalanceSnapshotPage(QWidget):
         form.addRow("列表狀態", self.status)
         form.addRow("", self.result)
 
+        # 分兩行：對盤點動作的一行，其他的一行。六顆擠一行會把視窗最小寬度撐大。
         actions = QHBoxLayout()
-        for button in (
-            create_button,
-            update_button,
-            void_button,
-            export_button,
-            refresh_button,
-            quick_button,
-        ):
+        for button in (create_button, update_button, void_button):
             actions.addWidget(button)
         actions.addStretch()
+        extra_actions = QHBoxLayout()
+        for button in (export_button, refresh_button, quick_button):
+            extra_actions.addWidget(button)
+        extra_actions.addStretch()
 
         setup_table(self.table, self.model, stretch_column=5)
         setup_table(self.transactions, self.transactions_model, stretch_column=3)
         # 更新／作廢是對所選盤點動作，沒選就停用。
         bind_selection(self.table, update_button, void_button)
-        layout = QVBoxLayout(self)
+        layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addWidget(help_text)
-        layout.addLayout(form)
+        # 表單另外收到 720 —— 這一頁有表單也有表格，整頁用表單寬度會塞不下七欄的表。
+        layout.addWidget(form_panel(form))
         layout.addLayout(actions)
+        layout.addLayout(extra_actions)
         layout.addWidget(self.summary)
         records_title = QLabel("盤點紀錄")
         records_title.setObjectName("sectionTitle")

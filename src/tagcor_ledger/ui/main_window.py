@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -21,7 +21,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tagcor_ledger.app import window_state
 from tagcor_ledger.app.paths import AppPaths
+from tagcor_ledger.app.window_state import WindowGeometry, load_geometry, save_geometry
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.navigation import ALL_PAGES, PageId
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
@@ -53,7 +55,7 @@ class MainWindow(QMainWindow):
 
     def _build(self, paths: AppPaths) -> None:
         self.setWindowTitle("TagCor Ledger")
-        self.resize(1280, 760)
+        self._restore_geometry()
         app = QApplication.instance()
         if app is not None:
             apply_dark_theme(cast(QApplication, app))
@@ -75,12 +77,14 @@ class MainWindow(QMainWindow):
 
         # 側邊欄要在 apply_dark_theme 之後才建 —— 它的高度是照 QSS 的項目內距算出來的。
         self.sidebar = Sidebar()
-        self.sidebar.setFixedWidth(184)
+        self.sidebar.adapt_to(self.width())
         self.sidebar.page_selected.connect(self._navigate)
 
+        # 外框不留邊，側邊欄的右框線才會是一條**通到底**的分隔線；內容自己的外距
+        # 由 `page_layout` 負責。間距也是 0 —— 那條線就是分隔，不需要再空一段。
         layout = QHBoxLayout()
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(16)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(self.sidebar)
         layout.addWidget(self.pages, 1)
         content = QWidget()
@@ -88,7 +92,6 @@ class MainWindow(QMainWindow):
         content.setLayout(layout)
         self.setCentralWidget(content)
         self.show_page(PageId.ENTRY)
-        self.statusBar().showMessage(f"資料庫：{paths.database_path}")
 
         self.quick.saved.connect(self._transaction_changed)
         self.balance.changed.connect(self._balance_changed)
@@ -113,6 +116,35 @@ class MainWindow(QMainWindow):
         clear_action.setShortcut(QKeySequence("Esc"))
         clear_action.triggered.connect(self.quick.clear_form)
         self.addActions([new_action, save_action, clear_action])
+
+    # --- 視窗幾何 -------------------------------------------------------------
+
+    def _restore_geometry(self) -> None:
+        """回到上次的大小與位置。讀不到就用預設值 —— 這個檔案壞掉不該讓程式開不起來。"""
+        saved = load_geometry(self.controller.paths.config_dir)
+        if saved is None:
+            self.resize(window_state.DEFAULT_WIDTH, window_state.DEFAULT_HEIGHT)
+            return
+        self.setGeometry(saved.x, saved.y, saved.width, saved.height)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        geometry = self.normalGeometry() if self.isMaximized() else self.geometry()
+        save_geometry(
+            self.controller.paths.config_dir,
+            WindowGeometry(
+                x=geometry.x(),
+                y=geometry.y(),
+                width=geometry.width(),
+                height=geometry.height(),
+            ),
+        )
+        super().closeEvent(event)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self.sidebar.adapt_to(event.size().width())
+
+    # --- 導覽 -----------------------------------------------------------------
 
     def _navigate(self, page_value: str) -> None:
         self.pages.setCurrentWidget(self._page_widgets[PageId(page_value)])
@@ -156,7 +188,9 @@ class MainWindow(QMainWindow):
         self._show_balance_snapshot_reminder()
 
     def _restored(self) -> None:
-        self.statusBar().showMessage(f"資料庫位置：{self.controller.paths.database_path}")
+        # 狀態列只放**暫時**訊息。資料庫路徑常駐在這裡吃掉一整行，而它是一年看兩次的
+        # 東西 —— 現在住在「系統設定 → 資料路徑」。
+        self.statusBar().showMessage("資料庫已重新載入。", 6000)
         self.quick.reload_options()
         self.quick.apply_defaults()
         self.balance.reload_accounts()

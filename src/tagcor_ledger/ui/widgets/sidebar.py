@@ -38,6 +38,14 @@ from tagcor_ledger.ui.navigation import DAILY_PAGES, LABELS, SETTINGS_PAGES, Pag
 PAGE_ROLE = int(Qt.ItemDataRole.UserRole)
 BADGE_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 
+WIDTH = 184
+COMPACT_WIDTH = 152
+COMPACT_BREAKPOINT = 1100
+"""視窗窄於這個寬度時，側邊欄縮一階把空間讓給內容。
+
+**不做圖示折疊模式** —— 專案沒有圖示集，八個項目也不值得為此發明一套圖示語言。
+"""
+
 BADGE_MARGIN = 12
 """數字距離項目右緣的距離，對齊 QSS 裡 `::item` 的左內距。"""
 
@@ -124,7 +132,7 @@ class Sidebar(QFrame):
         separator.setFixedHeight(1)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 8, 12)
+        layout.setContentsMargins(8, 12, 8, 12)
         layout.setSpacing(0)
         layout.addWidget(self.daily)
         layout.addStretch(1)
@@ -162,6 +170,12 @@ class Sidebar(QFrame):
         return widget
 
     # --- 對外 -----------------------------------------------------------------
+
+    def adapt_to(self, window_width: int) -> None:
+        """視窗變窄時把側邊欄縮一階。導覽本身不該跟著視窗抖動，所以只有兩個寬度。"""
+        self.setFixedWidth(
+            COMPACT_WIDTH if window_width < COMPACT_BREAKPOINT else WIDTH
+        )
 
     def select(self, page: PageId) -> None:
         """跳到某一頁。已經在那一頁時什麼都不做（`setCurrentRow` 不會重複發訊號）。"""

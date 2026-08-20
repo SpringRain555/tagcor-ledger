@@ -9,12 +9,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QTabWidget, QWidget
 
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.pages.automation import AutomationPage
 from tagcor_ledger.ui.pages.catalog import CatalogPage
 from tagcor_ledger.ui.pages.deposits import DepositsPage
+from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 
 
 class OperationSettingsPage(QWidget):
@@ -38,7 +39,7 @@ class OperationSettingsPage(QWidget):
         tabs.addTab(self.categories, "類別／項目")
         tabs.addTab(self.automation, "模板與週期排程")
         tabs.addTab(self.deposits, "定存")
-        layout = QVBoxLayout(self)
+        layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addWidget(tabs)
         self.accounts.changed.connect(self.changed.emit)

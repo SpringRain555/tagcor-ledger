@@ -16,12 +16,10 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.infrastructure.clock import TAIPEI
+from tagcor_ledger.ui.widgets.layout import FORM_WIDTH
 
 
-FORM_MAX_WIDTH = 620
-
-
-def form_panel(form: QLayout, *, max_width: int = FORM_MAX_WIDTH) -> QWidget:
+def form_panel(form: QLayout, *, max_width: int = FORM_WIDTH) -> QWidget:
     """把表單裝進有寬度上限的容器。
 
     視窗放大時，一個 1,400 px 寬的下拉選單不會比較好選 —— 只會讓標籤與欄位隔著

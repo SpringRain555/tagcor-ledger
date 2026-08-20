@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableView,
     QTextBrowser,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -26,6 +25,7 @@ from tagcor_ledger.application.reference import DISCLAIMER, ReferenceEntry, is_s
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import reference_entry_values
 from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
+from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 
 
 class ReferencePage(QWidget):
@@ -76,7 +76,7 @@ class ReferencePage(QWidget):
         splitter.addWidget(self.detail)
         splitter.setStretchFactor(1, 1)
 
-        layout = QVBoxLayout(self)
+        layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addWidget(disclaimer)
         layout.addWidget(self.status)

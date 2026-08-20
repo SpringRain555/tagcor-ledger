@@ -68,7 +68,7 @@ class CatalogPage(QWidget):
         row.addWidget(toggle)
         row.addWidget(delete_button)
         row.addStretch()
-        setup_table(self.table, self.model)
+        setup_table(self.table, self.model, fit_content=True)
         # 「新增」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
         bind_selection(self.table, rename, toggle, delete_button)
         layout = QVBoxLayout(self)

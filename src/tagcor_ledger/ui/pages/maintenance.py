@@ -51,13 +51,21 @@ class MaintenancePage(QWidget):
         )
         set_button_role(create, "primary")
         set_button_role(restore, "danger")
-        buttons = QHBoxLayout()
-        for widget in (create, validate, restore, external, export, self.diagnostics_button):
-            buttons.addWidget(widget)
+        # 六顆按鈕擠同一行，會把整個視窗的最小寬度撐到 855 px。分成兩行同時也把
+        # 「對備份動作」與「匯出東西出去」分開 —— 它們本來就不是同一類事。
+        backup_row = QHBoxLayout()
+        for widget in (create, validate, restore):
+            backup_row.addWidget(widget)
+        backup_row.addStretch()
+        export_row = QHBoxLayout()
+        for widget in (external, export, self.diagnostics_button):
+            export_row.addWidget(widget)
+        export_row.addStretch()
         self.result.setWordWrap(True)
         self.result.setObjectName("hintLabel")
         layout = QVBoxLayout(self)
-        layout.addLayout(buttons)
+        layout.addLayout(backup_row)
+        layout.addLayout(export_row)
         layout.addWidget(self.protect_restore)
         layout.addWidget(self.list)
         layout.addWidget(self.result)

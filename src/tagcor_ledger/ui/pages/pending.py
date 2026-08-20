@@ -33,6 +33,7 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
+from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
     bind_selection,
@@ -90,12 +91,12 @@ class PendingPage(QWidget):
         deposit_row.addWidget(deposit_confirm)
         deposit_row.addWidget(deposit_skip)
         deposit_row.addStretch()
-        setup_table(self.deposits, self.deposit_model)
+        setup_table(self.deposits, self.deposit_model, fit_content=True)
         bind_selection(self.deposits, deposit_confirm, deposit_skip)
 
         deposit_title = QLabel("定存到期與領息")
         deposit_title.setObjectName("sectionTitle")
-        layout = QVBoxLayout(self)
+        layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addLayout(row)
         layout.addWidget(self.table)

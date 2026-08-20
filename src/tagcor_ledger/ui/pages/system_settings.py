@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QTabWidget, QWidget
 
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.ui.controller import LedgerController
@@ -15,6 +15,7 @@ from tagcor_ledger.ui.pages.maintenance import MaintenancePage
 from tagcor_ledger.ui.pages.reset import ResetPage
 from tagcor_ledger.ui.pages.settings_general import GeneralSettingsPage
 from tagcor_ledger.ui.pages.settings_paths import PathSettingsPage
+from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 
 
 class SystemSettingsPage(QWidget):
@@ -41,7 +42,7 @@ class SystemSettingsPage(QWidget):
         # 舊名「重製與還原」讓同一個詞在兩個分頁指不同的事，而那一頁其實只做重製。
         tabs.addTab(self.maintenance, "備份與還原")
         tabs.addTab(self.reset, "重製")
-        layout = QVBoxLayout(self)
+        layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addWidget(tabs)
         self.general.saved.connect(self.saved.emit)

@@ -119,11 +119,35 @@ def amount_color(item: dict[str, Any]) -> str:
     return colors.AMOUNT_NEUTRAL
 
 
+def fit_to_contents(table: QTableView) -> None:
+    """把表格的寬度收到欄寬總和。
+
+    三四欄的表拉滿整個視窗時，表頭只畫到最後一欄就結束，右邊留下一大塊有框線卻沒有
+    表頭的空白 —— 看起來像壞掉。收到內容寬度就沒有那條接縫。
+
+    **不要讀 `sectionSize`。** `ResizeToContents` 的欄寬是 Qt 在版面階段才算的，
+    在 `modelReset` 或 `sectionResized` 當下讀到的都可能是中間值 —— 2026-08-20 兩種
+    寫法都試過，結果是把帳戶表夾成 187 px（欄寬其實要 311），「狀態」欄整個看不到
+    還冒出橫向捲軸。
+
+    `sizeHintForColumn()` 是**現算**的：它直接問 model 與 delegate，不經過版面階段，
+    所以資料一進去就是最終值。表頭文字的寬度另外由 `sectionSizeHint()` 補上 ——
+    「目前餘額（TWD）」比它底下的數字寬。
+    """
+    header = table.horizontalHeader()
+    width = sum(
+        max(table.sizeHintForColumn(column), header.sectionSizeHint(column))
+        for column in range(header.count())
+    )
+    table.setMaximumWidth(width + 2 * table.frameWidth())
+
+
 def setup_table(
     table: QTableView,
     model: RowsModel,
     *,
     stretch_column: int | None = None,
+    fit_content: bool = False,
 ) -> None:
     """套用共用外觀。
 
@@ -131,9 +155,12 @@ def setup_table(
     **不用 `setStretchLastSection`** —— 最後一欄通常是「狀態」這種兩個字的欄位，
     讓它獨吞剩下的寬度，而真正需要空間的「備註」反而被擠窄。
 
-    沒有指定 `stretch_column` 時，多餘的寬度就留在右邊 —— 留白比硬撐開某一欄好看，
-    也不會讓短短的「使用中」離「帳戶」有半個螢幕遠。
+    `fit_content=True` 讓整張表收到欄寬總和（見 `fit_to_contents`）。
+    欄位少的設定用表格用它；欄位多的長表（交易紀錄、待確認）維持滿寬並指定
+    `stretch_column`。**兩者不會同時用** —— 收寬之後就沒有多餘寬度可以給誰吃。
     """
+    if fit_content and stretch_column is not None:
+        raise ValueError("fit_content 與 stretch_column 不能同時指定")
     table.setModel(model)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -153,6 +180,12 @@ def setup_table(
             else QHeaderView.ResizeMode.ResizeToContents
         )
         header.setSectionResizeMode(column, mode)
+
+    if fit_content:
+        # 換資料就重量。`fit_to_contents` 是現算的，所以在 `modelReset` 當下就已經
+        # 拿得到最終值，不必等版面階段。
+        model.modelReset.connect(lambda: fit_to_contents(table))
+        fit_to_contents(table)
 
 
 def bind_selection(table: QTableView, *buttons: QPushButton) -> None:

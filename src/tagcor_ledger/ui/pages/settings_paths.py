@@ -37,6 +37,11 @@ class PathSettingsPage(QWidget):
         self.controller = controller
         self.ledger_dir = QLineEdit()
         self.backup_dir = QLineEdit()
+        # 唯讀的 QLineEdit 而不是 QLabel：路徑很長又沒有空白，QLabel 就算開了
+        # wordWrap 也斷不掉，會把整個視窗的最小寬度撐大。QLineEdit 會自己捲，
+        # 而且可以選取複製 —— 出問題要貼給人看的時候正好需要。
+        self.database = QLineEdit()
+        self.database.setReadOnly(True)
         self.result = QLabel()
         self._build()
         self.reload()
@@ -57,6 +62,7 @@ class PathSettingsPage(QWidget):
         form.addRow("", browse_ledger)
         form.addRow("備份路徑", self.backup_dir)
         form.addRow("", browse_backup)
+        form.addRow("目前的資料庫檔案", self.database)
         actions = QHBoxLayout()
         actions.addWidget(switch_button)
         actions.addWidget(move_button)
@@ -84,6 +90,7 @@ class PathSettingsPage(QWidget):
         settings = self.controller.get_path_settings()
         self.ledger_dir.setText(str(settings.ledger_dir))
         self.backup_dir.setText(str(settings.backup_dir))
+        self.database.setText(str(self.controller.paths.database_path))
 
     def _choose(self, target: QLineEdit) -> None:
         selected = QFileDialog.getExistingDirectory(self, "選擇資料夾")

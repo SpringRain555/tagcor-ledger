@@ -34,6 +34,7 @@ from tagcor_ledger.ui.widgets.forms import (
     iso_from_date,
     select_data,
 )
+from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
     bind_selection,
@@ -123,7 +124,7 @@ class TransactionsPage(QWidget):
         actions.addStretch()
         actions.addWidget(self.previous_button)
         actions.addWidget(self.next_button)
-        layout = QVBoxLayout(self)
+        layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addLayout(top_row)
         layout.addLayout(bottom_row)
