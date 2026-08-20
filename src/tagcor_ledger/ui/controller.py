@@ -78,6 +78,7 @@ class LedgerController:
 
     def _run_startup_tasks(self) -> None:
         self.startup_generation = self.automation.generate_due()
+        self.generation_has_more = bool(self.startup_generation.details.get("has_more"))
         self.deposits.generate_due()
         self.refresh_balance_snapshot_reminder_due()
 
@@ -160,13 +161,36 @@ class LedgerController:
             "contract_count": len(terms),
         }
 
+    def list_inbox(self) -> list[dict[str, Any]]:
+        """待確認的單一清單：定期收支與定存合成一份，依到期日排序。
+
+        **使用者不需要知道待確認來自哪個子系統。** 以前是同一頁上下兩張表，於是
+        「我還有幾件事要處理」得自己把兩個數字加起來，六顆按鈕還得先想清楚哪三顆
+        是對上面那張表的。
+
+        兩邊的欄位形狀確實不同，所以每一列多帶一個 `source`：
+        `inbox_values()` 靠它決定怎麼顯示，「確認入帳」靠它決定分派給誰。
+        排序的第二、三順位是 `source` 與 id —— 只用到期日排的話，同一天的項目
+        每次重整順序都可能不一樣。
+        """
+        rows = [dict(item, source="schedule") for item in self.list_pending()]
+        rows += [dict(item, source="deposit") for item in self.list_deposit_pending()]
+        rows.sort(
+            key=lambda item: (
+                str(item["due_date"]),
+                str(item["source"]),
+                str(item.get("occurrence_id") or item.get("event_id") or ""),
+            )
+        )
+        return rows
+
     def inbox_count(self) -> int:
-        """待確認的總筆數 —— **排程與定存一起算**。
+        """待確認的總筆數 —— **定期收支與定存一起算**。
 
         側邊欄的數字與資產總覽的數字都走這一個方法。兩邊各自算就會出現「側邊欄說 2、
         總覽說 3」，而使用者沒有辦法知道哪一個才對。
         """
-        return len(self.list_pending()) + len(self.list_deposit_pending())
+        return len(self.list_inbox())
 
     def category_options(
         self,
@@ -491,13 +515,15 @@ class LedgerController:
         return self.deposits.skip(event_id)
 
     def generate_due(self) -> Result:
-        """排程與定存一起產生。**單一收件匣**：使用者不該需要知道待確認來自哪個子系統。"""
+        """定期收支與定存一起產生。**單一收件匣**：使用者不該需要知道待確認來自哪個子系統。"""
         result = self.automation.generate_due()
         deposits = self.deposits.generate_due()
         if not result.success:
             return result
         merged = dict(result.details)
         merged["deposit_generated"] = deposits.details.get("generated", 0)
+        # 收件匣靠這個值決定要不要浮出「還有更多漏期」那一行。
+        self.generation_has_more = bool(merged.get("has_more"))
         return Result.ok(result.message, details=merged, correlation_id=result.correlation_id)
 
     def list_pending(self) -> list[dict[str, Any]]:

@@ -8,7 +8,7 @@
 改一個字就會噴 `KeyError`。頁面身分與顯示文字現在分開，見 `ui/navigation.py`。
 
 **資產總覽是唯一的例外**：它不靠 `_..._changed` 通知，而是**切過去就重算**。
-它讀的東西橫跨帳戶、定存、排程與盤點，要在每個 `_..._changed` 各記一筆的話，
+它讀的東西橫跨帳戶、定存、定期收支與盤點，要在每個 `_..._changed` 各記一筆的話，
 遲早會漏掉一項 —— 而漏掉的症狀是總資產停在舊數字，看起來像算錯帳。
 """
 
@@ -32,8 +32,8 @@ from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.navigation import ALL_PAGES, LANDING_PAGE, PageId
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
+from tagcor_ledger.ui.pages.inbox import InboxPage
 from tagcor_ledger.ui.pages.overview import OverviewPage
-from tagcor_ledger.ui.pages.pending import PendingPage
 from tagcor_ledger.ui.pages.quick_entry import QuickEntryPage
 from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         self.overview = OverviewPage(self.controller)
         self.quick = QuickEntryPage(self.controller)
         self.balance = BalanceSnapshotPage(self.controller)
-        self.pending = PendingPage(self.controller)
+        self.inbox = InboxPage(self.controller)
         self.transactions = TransactionsPage(self.controller)
         self.operation_settings = OperationSettingsPage(self.controller)
         self.reference = ReferencePage(self.controller)
@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         self._page_widgets: dict[PageId, QWidget] = {
             PageId.OVERVIEW: self.overview,
             PageId.ENTRY: self.quick,
-            PageId.INBOX: self.pending,
+            PageId.INBOX: self.inbox,
             PageId.TRANSACTIONS: self.transactions,
             PageId.BALANCE: self.balance,
             PageId.REFERENCE: self.reference,
@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
         self.transactions.duplicate_requested.connect(self._prefill_quick)
         self.operation_settings.apply_requested.connect(self._prefill_quick)
         self.operation_settings.changed.connect(self._catalog_changed)
-        self.pending.changed.connect(self.refresh_pending_badge)
+        self.inbox.changed.connect(self.refresh_pending_badge)
         self.system_settings.restored.connect(self._restored)
         self.system_settings.saved.connect(self._settings_changed)
         self.system_settings.paths_changed.connect(self._restored)
@@ -188,11 +188,11 @@ class MainWindow(QMainWindow):
         self.transactions.reload_filters()
         self.system_settings.reload()
         self.operation_settings.refresh()
-        self.pending.refresh()
+        self.inbox.refresh()
 
     def _automation_changed(self) -> None:
         self.operation_settings.refresh()
-        self.pending.refresh()
+        self.inbox.refresh()
 
     def _settings_changed(self) -> None:
         self.quick.apply_defaults()
@@ -209,7 +209,7 @@ class MainWindow(QMainWindow):
         self.transactions.reload_filters()
         self.transactions.first_page()
         self.operation_settings.refresh()
-        self.pending.refresh()
+        self.inbox.refresh()
         self.system_settings.reload()
 
     def refresh_pending_badge(self) -> None:

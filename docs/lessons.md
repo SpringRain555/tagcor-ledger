@@ -16,6 +16,25 @@
 
 ---
 
+## 2026-08-20 對 `git mv` 之後還沒 commit 的檔案用 `git checkout --`，整份新內容被蓋掉
+
+**情境**：Stage 5 把 `pending.py` 用 `git mv` 改名成 `inbox.py`，然後整份重寫。
+為了確認守門測試真的會紅，注入了三個退步；驗證完要還原，順手打了
+`git checkout -- src/tagcor_ledger/ui/pages/inbox.py`。
+
+**為什麼失敗**：`git checkout -- <path>` 是**從 index 還原**，而 index 裡那份是
+`git mv` 當下暫存的內容 —— 也就是**改名前的舊 `pending.py`**。整份新寫的頁面就這樣
+沒了。錯誤訊息一個都沒有，`git status` 只是從 `A` 變回 `A`。
+
+**結論**：注入驗證之後要還原，**用當初注入的那個腳本反向改回去**（字串換回來），
+不要用 git。真的要用 git 還原，先確認那個檔案的 index 版本是什麼：
+`git show :<path> | head`。
+
+**不要再做**：不要對「新增但還沒 commit」的檔案用 `git checkout --` 當作
+「取消我剛剛的修改」—— 對這種檔案，index 不是你以為的那個版本。
+
+---
+
 ## 2026-08-20 用 `isVisible()` 過濾要檢查的 widget，整條守門變成空的
 
 **情境**：Stage 4 把操作設定拆成六個分頁，要加一條「每個分頁的內容都貼著上緣」的守門。

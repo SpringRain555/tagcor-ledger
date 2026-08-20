@@ -95,13 +95,20 @@
 
 ---
 
-## 3. 待確認項目 `scheduled_occurrences`
+## 3. 待確認項目：`scheduled_occurrences` 與 `deposit_events`
 
-`CHECK (status IN ('pending', 'confirmed', 'skipped'))`。
+**兩個來源、同一張轉移表。** 使用者看到的是**一個收件匣**（`controller.list_inbox()`
+把兩邊合成一份，每一列帶一個 `source`），所以狀態機也寫在一起 —— 分開寫的那一版
+正是「同一頁上下兩張表」的來源。
+
+| 來源 | 資料表 | 狀態欄 | 誰產生 |
+|---|---|---|---|
+| `schedule`（定期收支） | `scheduled_occurrences` | `CHECK (status IN ('pending', 'confirmed', 'skipped'))` | `AutomationService.generate_due()` |
+| `deposit`（定存） | `deposit_events` | 同上三個值 | `DepositService.generate_due()` |
 
 | 狀態 | 定義 |
 |---|---|
-| `pending` 待確認 | 排程產生的**草稿**，尚未成為交易。不影響任何餘額 |
+| `pending` 待確認 | 定期收支或定存產生的**草稿**，尚未成為交易。不影響任何餘額 |
 | `confirmed` 已確認 | 使用者確認過，**已經產生對應的交易** |
 | `skipped` 已略過 | 使用者決定這一期不記。不產生交易，但留下「我看過並決定跳過」的紀錄 |
 
@@ -116,12 +123,25 @@
 `confirmed` 與 `skipped` 都是**終點**。想改變已確認的結果，去作廢它產生的那筆交易；
 `OCCURRENCE_NOT_PENDING` 就是在擋非 `pending` 的修改。
 
+### 兩個來源的差別（只有這兩點）
+
+| | 定期收支 | 定存 |
+|---|---|---|
+| 確認時問什麼 | 開對話框，可先改帳戶／類別／金額／備註 | 只問**實際金額**，以存摺為準 |
+| 「全部確認」會不會處理 | **會**（`batch_confirm_valid`） | **不會** |
+
+**「全部確認」不碰定存是刻意的。** 建議利息是程式試算的，權威值在存摺上；批次套用
+試算值等於替使用者決定了一個他沒看過的數字。UI 上會講清楚還剩幾件，不是默默跳過。
+
 ### 這裡刻意不做的事
 
-- **排程不會自動入帳。** 它只產生 `pending` 項目，一定要由使用者確認。
+- **定期收支與定存都不會自動入帳。** 它們只產生 `pending` 項目，一定要由使用者確認。
   這與「每一筆都手動輸入」的核心一致，也是與 Firefly III 的明確分歧（後者會自動建立交易）。
 - **確認與帳務寫入在同一個 SQLite transaction 內。** 不會出現「狀態變成 confirmed 但交易沒建出來」。
-- **每次產生最多 366 期**，且 `(schedule_id, due_date)` 唯一，所以重複產生是冪等的。
+- **每次產生最多 366 期**，且 `(schedule_id, due_date)`、
+  `(term_id, event_type, due_date)` 各自唯一，所以重複產生是冪等的。
+- **不合併兩張資料表。** 使用者看到的是同一張畫面，但一個是「每 N 個月重複同一筆」、
+  一個是「一期一期滾、有利率與到期轉存方式」；合併 schema 只會讓兩邊的欄位都變成可空。
 
 ---
 

@@ -214,6 +214,43 @@ def occurrence_values(item: dict[str, Any]) -> list[str]:
     ]
 
 
+INBOX_SOURCE_NAMES = {"schedule": "定期", "deposit": "定存"}
+"""待確認那一列是哪裡來的。**這一欄不能省** —— 兩種來源的「類型」講的是不同的事
+（一邊是收入／支出／轉帳，一邊是到期／領息／存入），沒有這一欄就看不懂。"""
+
+
+def inbox_values(item: dict[str, Any]) -> list[str]:
+    """待確認的單一表格：到期日／來源／名稱／類型／金額／狀態說明。
+
+    定期收支與定存的欄位形狀不同，統一成字串的地方就是這裡 —— 頁面只擺 widget。
+
+    **定存的金額欄寫「需照存摺填寫」而不是 0。** 建議值是程式試算的，權威值在存摺上；
+    印一個 0 會讓人以為那就是答案。
+    """
+    source = str(item["source"])
+    if source == "deposit":
+        suggested = item.get("suggested_amount_minor")
+        return [
+            display_date(str(item["due_date"])),
+            INBOX_SOURCE_NAMES[source],
+            str(item["contract_name"]),
+            DEPOSIT_EVENT_TYPE_NAMES.get(
+                DepositEventType(str(item["event_type"])), str(item["event_type"])
+            ),
+            group_digits(suggested) if suggested is not None else "需照存摺填寫",
+            "確認時輸入實際金額",
+        ]
+    amount = item.get("amount_minor")
+    return [
+        display_date(str(item["due_date"])),
+        INBOX_SOURCE_NAMES[source],
+        str(item["schedule_name"]),
+        ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
+        group_digits(amount) if amount is not None else "尚未填寫",
+        str(item.get("invalid_reason") or "可確認"),
+    ]
+
+
 DEPOSIT_TERM_STATUS_NAMES = {
     "active": "存續中",
     "matured": "已到期",
