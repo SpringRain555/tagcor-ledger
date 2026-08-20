@@ -29,11 +29,24 @@ python -m pip install -e ".[dev]"
 
 ## 驗證
 
+**平常一律跑 `Verify.ps1`**，它把路徑漂移檢查、ruff、mypy --strict 與 pytest 串在一起：
+
+```powershell
+.\Verify.ps1          # 不含 tests\ui
+.\Verify.ps1 -Ui      # 含 tests\ui（改過 UI 就用這個）
+.\Verify.ps1 -Performance   # 20 萬筆的效能測試
+```
+
+要單獨跑某一段時：
+
 ```powershell
 python -m ruff check --no-cache .
 python -m mypy --no-incremental src
 python -m pytest -q
 python -m tagcor_ledger --data-dir .\.local-data-check --init-data --json
 ```
+
+`tests\ui` 需要 `QT_QPA_PLATFORM=offscreen`；**要看實機畫面**（截圖驗收）時改用
+`windows`，offscreen 沒有中文字型，中文會渲染成豆腐塊。
 
 Python 版本固定為 3.12。GUI dependency 為 Conda 版 PySide6，不應重新加入 PyQt6，也不要用 pip 在此環境升級 `PySide6`。

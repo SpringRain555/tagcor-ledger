@@ -53,7 +53,7 @@ Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snap
 
 - v1：核心帳務表、舊 payee schema、FTS、settings、audit。
 - v2：`transactions.replaces_transaction_id`。
-- v3：模板、週期排程、待確認項目。
+- v3：模板、定期收支（`recurring_schedules`）、待確認項目。
 - v4：`balance_snapshots`。
 - v5：移除 payee schema、重建 FTS、移除啟動備份設定。
 - v6：`deposit_contracts`、`deposit_terms`、`deposit_events` 三張表與各自的索引。
@@ -79,3 +79,14 @@ Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snap
 - 交易依 `(occurred_at DESC, transaction_id DESC)` keyset pagination。
 - 帳戶、類別、狀態、日期與盤點查詢有索引。
 - 文字搜尋走 FTS5，不一次載入所有交易。
+- **所有帳戶的餘額是一句查詢算完的**（`AccountStore.account_balances()`：一次
+  `LEFT JOIN` ＋ `GROUP BY`）。舊版對每個帳戶各跑一次，而每次呼叫都開一條新連線
+  ＋ 4 個 PRAGMA —— 列一次帳戶等於 1+N 條連線。20 萬筆下實測 77ms。
+- **`account_balances()` 的 SQL 刻意不用表格別名。** `EXPLAIN QUERY PLAN` 報的是
+  查詢裡寫的名字，`FROM accounts a` 的計畫會寫成 `SCAN a`，而
+  `tests/integration/test_query_plans.py` 是照**表名**判斷哪些表會長大的 ——
+  加了別名等於讓守門什麼都認不出來。
+
+新增熱查詢時要在 `test_query_plans.py` 加一條，並且**實際拿掉索引驗證它會紅**。
+那份守門有前科：它上線時比對的是表名，而 SQLite 報的是別名，所以七個測試
+「什麼都沒檢查而通過」（`docs/lessons.md` 2026-08-18）。

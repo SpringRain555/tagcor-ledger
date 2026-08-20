@@ -30,11 +30,12 @@
 - 重製目前記帳資料，不刪除備份。
 - 帳戶、類別、項目支援刪除未使用。
 - UI 用詞統一為「類別／項目」。
-- 移除 payee/對象商家欄位與 FTS 依賴。
+- 移除 payee／對象商家欄位。**FTS 沒有移除**，只是拿掉 payee 那一欄之後重建
+  （schema v5）；文字搜尋至今仍走 `transaction_fts`。
 
 ### Phase 4.1：深色主題、UI 可讀性與文件重整
 
-- PySide6 介面統一為專業深藍深色主題。
+- PySide6 介面統一為專業深藍深色主題。**（v0.12.0 已換成中性純灰，見下方 UI-2。）**
 - 新增 `apply_dark_theme(app)` 作為主題入口，統一設定 `Fusion` style、字體、palette 與 QSS。
 - 補齊分頁、下拉選單、表格、清單、狀態列、訊息框、捲軸與按鈕角色樣式。
 - 側邊欄與一般清單分離：側邊欄使用 `sidebarNavigation`，備份清單使用 `backupList`，避免全域 `QListWidget` 樣式污染。

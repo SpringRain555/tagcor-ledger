@@ -54,9 +54,9 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 
 ## 架構邊界
 
-- `domain/`：Money、帳戶、類別、交易、模板、排程、餘額盤點模型；**不得依賴 Qt 或 SQLite**，也不得 import 其他任何一層。
+- `domain/`：Money、帳戶、類別、交易、模板、定期收支、餘額盤點、定存模型；**不得依賴 Qt 或 SQLite**，也不得 import 其他任何一層。
 - `application/`：use case、Result、設定、備份/還原/重製協調；**不得直接寫 UI**。
-- `infrastructure/`：SQLite migration、store、backup、CSV export。store 依聚合切在 `infrastructure/stores/`，`LedgerStore` 在 `sqlite_store.py` 把它們組起來。
+- `infrastructure/`：SQLite migration、store、backup、CSV export。store 依聚合切在 `infrastructure/stores/`，`LedgerStore` 在 `sqlite_store.py` 把五個聚合組起來。（例外：`automation_store.py` 還留在 `infrastructure/` 根目錄，是這條規則寫下來之前就存在的 —— **不要照它的樣子新增第二個**。）
 - `ui/`：PySide6 視圖與 controller；**不得直接撰寫 SQL**。一個檔案一個畫面放在 `ui/pages/`，頁面之間不互相 import，跨頁連動一律集中在 `ui/main_window.py`。
 - 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔（資料庫路徑本身不能可靠地存在資料庫裡）。
 
@@ -74,6 +74,7 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - 還原/重製前的保護備份必須由使用者明確勾選。
 - 刪除設定項只允許未被任何歷史資料引用；否則使用封存。
 - 盤點不建立交易、不建立 posting、不改變帳戶餘額。
+- **禁止把資料撈進 Python 再排序或搜尋。** 篩選、排序、分頁、加總一律在 SQL 裡做 —— 帳本會長大，而「先全部載入」的寫法在資料少的時候完全看不出問題。新增常用查詢時先看 `EXPLAIN QUERY PLAN`，並在 `tests/integration/test_query_plans.py` 加一條。
 - **`ledger_dir`、`backup_dir` 必須都在 `data_root` 底下**，且彼此不得相同或互相包含。違反時丟 `PATH_OUTSIDE_DATA_ROOT` / `LEDGER_BACKUP_PATH_SAME` / `LEDGER_BACKUP_PATH_NESTED`。
 - **搬移資料的順序不可調換**：先複製到新位置 → 確認成功 → 寫指標檔 → 才刪舊檔。反過來會在搬移失敗時留下「指標指向新位置、資料還在舊位置」，下次啟動就在新位置建一個空資料庫，看起來像資料全部消失。
 - 「從外部檔案還原」會讀取使用者從對話框挑選的任意路徑。這是**刻意保留**的例外（否則無法從外接硬碟還原），由使用者主動觸發。

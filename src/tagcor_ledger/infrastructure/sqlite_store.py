@@ -3,10 +3,14 @@
 `LedgerStore` 是 application 層唯一該認得的 store。實作依聚合切在
 `tagcor_ledger.infrastructure.stores` 底下，這裡只負責組起來。
 
-**為什麼是繼承而不是委派？** 這四個 store 共用同一份 `AppPaths`、同一套「每次呼叫
+**為什麼是繼承而不是委派？** 這五個 store 共用同一份 `AppPaths`、同一套「每次呼叫
 自己開連線」的模型，對外也一直是單一物件。用繼承組裝時，拆檔就只是「這個 `def` 放
 在哪個檔案」，方法本體與簽章一個字都不用改；換成委派則要手寫三十幾個轉發方法，在一
 個「行為零改變」的重構裡等於多開三十幾個出錯的機會。
+
+**`AutomationStore` 不在這裡面。** 它由 `AutomationService` 自己持有，檔案也還在
+`infrastructure/` 根目錄。那是這套切法定下來之前就存在的，不是刻意的例外 ——
+新增 store 請照 `stores/<聚合>.py` 的樣子放。
 """
 
 from __future__ import annotations

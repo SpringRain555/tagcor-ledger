@@ -1,44 +1,34 @@
 # 維護者筆記
 
-## 驗證 Python
+**這一份沒有任何獨立規則。** 它是查詢表：想知道某件事的規則寫在哪，從這裡找過去。
 
-優先使用 `tagcor-ledger` Conda 環境。PySide6 由 `environment.yaml` 的 Conda dependency 管理，不能放回 `pyproject.toml` 讓 pip 安裝或升級；Windows 下混用 Conda/Pip PySide6 會造成 Qt DLL 載入失敗。若環境已混裝，直接重建環境最乾淨。
+> 2026-08-20 之前它是**第二份規格** —— conda/PySide6、workspace hygiene、UI 主題、
+> 到期產生、餘額盤點全部各抄一段。抄過來的那幾段沒有人在維護，於是慢慢跟正本對不上。
+> `docs/index.md` 的原則是「一件事只在一個地方是權威的」，這一份現在照那條原則寫。
 
-## Workspace Hygiene
+## 我要找的規則在哪
 
-- `.local-data*`、SQLite smoke data、cache、build 與 dist 不提交。
-- 不提交使用者帳務資料、備份、匯出或絕對機器路徑。
-- schema 變更必須新增 migration，不可直接假設新資料庫。
+| 我想知道 | 去哪 |
+|---|---|
+| 動手前的硬規則、架構邊界、禁令 | [`AGENTS.md`](../AGENTS.md) —— **正本，先讀這份** |
+| 資料放哪、`data_root` 約束、備份格式、`window.json` | [storage-layout](architecture/storage-layout.md) |
+| 表、欄位、索引、migration 版本 | [data-model](architecture/data-model.md) |
+| 有哪些狀態、哪些轉移合法 | [state-machines](architecture/state-machines.md) |
+| 每個錯誤碼的成因與處理 | [error-codes](architecture/error-codes.md) |
+| 什麼該叫什麼、**不該叫什麼** | [glossary](architecture/glossary.md) |
+| 側邊欄順序、每一頁回答什麼問題、版面規則 | [ui-workflows](architecture/ui-workflows.md) |
+| 分層、檔案地圖、守著邊界的那幾條測試 | [overview](architecture/overview.md) |
+| 建環境、更新環境、混裝 PySide6 怎麼救 | [environment](environment.md) |
+| 發版前要檢查什麼 | [release checklist](release_checklist.md) |
+| 踩過的坑與「不要再做」 | [lessons](lessons.md) —— **動 migration 或路徑之前必讀** |
+| 某個決定為什麼是這樣 | `docs/decisions/ADR-XXXX`。**決定改了要新增 ADR，不要改舊的** |
 
-## 文件與編碼
+## 三件最容易踩的
 
-- README 是使用者入口；`docs/index.md` 是完整規格入口；`AGENTS.md` 是維護規則入口（正本）。
-- Markdown 一律使用 UTF-8，避免使用會造成 Big5/CP950 轉碼問題的工具覆寫文件。
-- 目前規格應放在 requirements、architecture、roadmap、changelog；`docs/archive/phase-0-2/` 只保留歷史，不再修正文案。
-- 若功能或 UI 行為改變，需同步更新 README、AGENTS、Roadmap、Changelog 與相關 requirement/architecture 文件。
-
-## UI 主題
-
-- 深色主題由 `apply_dark_theme(app)` 套用，不要在個別頁面重複讀取 QSS。
-- 不同用途的 Qt 元件需用 objectName 分層；避免用全域 selector 造成側邊欄、一般清單、備份清單互相污染。
-- 新增危險操作按鈕時使用 `dangerButton`；主要提交或產生操作使用 `primaryButton`。
-
-## 效能
-
-禁止以 Python 載入全部交易後排序或搜尋。新增常用篩選時先確認 query plan 與索引。
-
-## 已移除相容層
-
-舊 PyQt6、TagPath、CSV/JSON runtime 與 importer 不得重新加入。若需處理 0.1.x 資料，使用 0.2.0 做一次性 SQLite 轉換。
-
-## 排程
-
-- 不建立背景程序或 Windows 工作排程。
-- 產生 occurrence 時必須遵守 366 期上限與唯一 `(schedule_id, due_date)`。
-- 確認 occurrence 與帳務寫入必須在同一 SQLite transaction。
-
-## 餘額盤點
-
-- 盤點是實際金額 snapshot，不是交易、調整或對帳完成狀態。
-- 不得讓盤點寫入 `account_postings`；差額必須依查詢時的有效交易重新計算。
-- 若未來加入「轉成調整交易」，必須作為獨立使用者動作並保留 audit。
+1. **PySide6 由 conda 管理，不能放回 `pyproject.toml`。** Windows 下混裝 conda/pip 的
+   PySide6 會讓 Qt DLL 載入失敗。已經混裝的話重建環境最乾淨。
+2. **不要用 PATH 上的 `python`。** 一律完整路徑呼叫
+   `<conda-root>\envs\tagcor-ledger\python.exe` ——
+   工具 shell 不載入 profile，`conda activate` 會回報成功卻什麼都沒換。
+3. **schema 變更一定要新增 migration**，不可假設是新資料庫。改舊的 migration 對已經
+   跑過那一版的資料庫毫無效果。

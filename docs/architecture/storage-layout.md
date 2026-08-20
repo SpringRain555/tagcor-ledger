@@ -6,6 +6,29 @@
 
 指標檔 `system_paths.json` 存在使用者設定目錄（`%LOCALAPPDATA%\TagCor\TagCorLedger\`），不放在 ledger SQLite 內 —— 程式必須先找到指標，才知道資料庫在哪。
 
+## 設定目錄（`config_dir`）
+
+```text
+%LOCALAPPDATA%\TagCor\TagCorLedger\
+├── system_paths.json    指標檔：data_root / ledger_dir / backup_dir
+└── window.json          上次的視窗大小與位置
+```
+
+**這個目錄裡沒有帳務資料，所以它不在 `data_root` 底下，也不進備份。**
+`platformdirs.user_config_dir` 在 Windows 預設回傳 LOCALAPPDATA（不是 Roaming），
+所以它與舊版的資料樹會落在同一個父目錄 —— 清理舊資料樹時**只刪六個子資料夾，
+不要整棵刪**，否則會把剛寫好的指標檔一起刪掉（`docs/lessons.md` 2026-08-18）。
+
+`window.json` 是 **UI 狀態不是帳務資料**：
+
+- 內容是 `x` / `y` / `width` / `height` 四個整數。
+- **讀不到、格式壞掉、數字不合理，一律當成沒有設定過**，回退到 1280×760。
+  這個檔案壞掉不該讓程式開不起來。
+- 寫不進去也不報錯 —— 那不值得打斷關閉流程。
+- **不進 `ledger.sqlite3`**：帳務資料庫的每一次 schema 變動都要寫 migration，
+  為了「上次視窗多大」付那個代價不划算，而且它也不該出現在還原的語意裡
+  （從三個月前的備份還原，不該把視窗變回三個月前的大小）。
+
 ## 一般使用
 
 ```text

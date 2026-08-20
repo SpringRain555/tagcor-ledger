@@ -36,6 +36,7 @@
 | ADR-XXXX | 該決定的理由與後果。**決定改了要新增 ADR，不要改舊的** |
 | [失敗紀錄](lessons.md) | 踩過的坑。append-only |
 | [研究](research/market-scan.md) | 市面產品的判讀，**附抓取日期** |
+| [維護者筆記](maintainer_notes.md) | **對什麼都沒有權威。** 它是「這件事的規則寫在哪」的查詢表 |
 
 ## 快速入口
 
@@ -43,7 +44,7 @@
 - [九月上線 runbook](operations/go-live-2026-09.md)
 - [Roadmap](roadmap.md)｜[Changelog](changelog.md)｜[Release checklist](release_checklist.md)
 - [失敗紀錄](lessons.md) —— 踩過的坑與「不要再做」清單
-- [維護者筆記](maintainer_notes.md)｜[環境](environment.md)
+- [維護者筆記](maintainer_notes.md)（規則在哪的查詢表）｜[環境](environment.md)
 
 ## Requirements
 
