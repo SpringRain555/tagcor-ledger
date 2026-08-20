@@ -2,7 +2,7 @@ from pathlib import Path
 import sqlite3
 
 from tagcor_ledger.app.paths import resolve_app_paths
-from tagcor_ledger.application.catalogs import AccountService
+from tagcor_ledger.application.catalogs import AccountService, CategoryService
 from tagcor_ledger.application.transaction_service import (
     AddTransaction,
     AddTransactionRequest,
@@ -233,3 +233,79 @@ def test_listing_accounts_opens_a_constant_number_of_connections(tmp_path: Path)
     assert len(store.list_accounts()) == 8
 
     assert connections() == baseline
+
+
+def test_listing_the_category_tree_opens_a_constant_number_of_connections(
+    tmp_path: Path,
+) -> None:
+    """類別再多，列一次類別樹開的連線數不變。
+
+    舊的 UI 是先列出所有類別，再對**每一個類別**各查一次子項目 —— 每一次都開一條
+    新連線。這條測試量的是斜率，不是絕對值。
+
+    **不加進 `test_query_plans.py`。** 那裡守的是「會長大的表有沒有被掃」，而
+    `categories` 的筆數等於你分了幾類，跟記了幾年無關；而且這句是自我 join，
+    計畫報的一定是別名（`node` / `parent`），照表名判斷的守門本來就認不出來。
+    """
+    paths = resolve_app_paths(tmp_path / "ledger-data")
+    store = LedgerStore(paths)
+    service = CategoryService(paths, store)
+
+    def connections() -> int:
+        opened = 0
+        original = sqlite3.connect
+
+        def counted(*args: object, **kwargs: object) -> sqlite3.Connection:
+            nonlocal opened
+            opened += 1
+            return original(*args, **kwargs)  # type: ignore[arg-type]
+
+        sqlite3.connect = counted  # type: ignore[assignment]
+        try:
+            service.list_tree(include_archived=True)
+        finally:
+            sqlite3.connect = original  # type: ignore[assignment]
+        return opened
+
+    baseline = connections()
+    assert baseline > 0, "沒有攔截到任何連線，量測方式壞了"
+
+    for index in range(6):
+        parent = service.create(name=f"類別 {index}")
+        assert parent.success
+        for child in range(3):
+            assert service.create(
+                name=f"項目 {index}-{child}",
+                parent_id=str(parent.details["category_id"]),
+            ).success
+
+    nodes = service.list_tree(include_archived=True).details["categories"]
+    assert len(nodes) == 26, "測試資料沒建起來，這條測試等於沒作用"
+    assert connections() == baseline
+
+
+def test_the_category_tree_carries_the_parent_name_and_item_count(tmp_path: Path) -> None:
+    """`parent_name` 與 `item_count` 必須是同一句查出來的，而且值要對。
+
+    「伙食」有子項目，所以它**必須有自己的一列** —— 舊的 UI 就是漏了這一列，
+    導致類別改不了名。
+    """
+    paths = resolve_app_paths(tmp_path / "ledger-data")
+    store = LedgerStore(paths)
+    service = CategoryService(paths, store)
+    assert service.create(name="早餐店", parent_id="cat_food").success
+    assert service.create(name="交通").success
+
+    nodes = {
+        str(node["category_id"]): node
+        for node in service.list_tree(include_archived=True).details["categories"]
+    }
+    assert nodes["cat_food"]["level"] == 1
+    assert nodes["cat_food"]["parent_name"] is None
+    assert nodes["cat_food"]["item_count"] == 2
+    assert nodes["cat_food_711"]["level"] == 2
+    assert nodes["cat_food_711"]["parent_name"] == "伙食"
+    assert nodes["cat_food_711"]["item_count"] == 0
+    # 沒有子項目的類別也在，而且數字是 0 不是漏掉。
+    transport = next(node for node in nodes.values() if node["name"] == "交通")
+    assert transport["item_count"] == 0

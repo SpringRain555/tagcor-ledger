@@ -16,6 +16,29 @@
 
 ---
 
+## 2026-08-20 用 `isVisible()` 過濾要檢查的 widget，整條守門變成空的
+
+**情境**：Stage 4 把操作設定拆成六個分頁，要加一條「每個分頁的內容都貼著上緣」的守門。
+第一版寫成先過濾 `child.isVisible()`，結果**一個 widget 都收不到**。
+
+**為什麼失敗**：`QStackedWidget` 底下那一頁在 offscreen 平台上**永遠**回報
+`isVisible() == False`，即使版面已經算好、geometry 都是對的。
+
+真正的代價不在新測試，而在既有的那條：`test_shrink_wrapped_tables_are_never_clipped`
+用的是 `if not table.isVisible(): continue` —— 所以它**從加進來的那天起就沒有檢查過
+任何一張表**。這正好解釋了 Stage 2 那次「把 `sizeHintForColumn` 退回 `sectionSize`
+卻沒有變紅」：當時歸因成「offscreen 的中文字型寬度對不起來」，其實是那一圈根本沒跑。
+
+**結論**：UI 測試要量的是 **geometry**，不是可見性。版面計算不需要 widget 真的
+顯示出來，`x()`／`y()`／`width()`／`height()` 在 offscreen 一樣是對的。
+需要過濾時用「這個 widget 存不存在」而不是「看不看得到」。
+
+**不要再做**：測試裡不要用 `isVisible()` 當過濾條件。**每一個帶 `continue` 或
+`if` 的檢查迴圈都要有一條陽性對照**（`assert checked >= N`），否則條件寫錯時
+它會安靜地全部跳過，然後一路綠燈。
+
+---
+
 ## 2026-08-20 UI 測試量的是「有沒有設定」，畫面上的兩個毛病照樣過關
 
 **情境**：Stage 3 做完資產總覽，11 條版面測試與 6 條頁面測試全綠，才去截實機的圖。

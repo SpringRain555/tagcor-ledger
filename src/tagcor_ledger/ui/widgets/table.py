@@ -142,6 +142,15 @@ def fit_to_contents(table: QTableView) -> None:
     table.setMaximumWidth(width + 2 * table.frameWidth())
 
 
+SETTINGS_TABLE_ROWS = 14
+"""操作設定裡每張表最多長到幾列，超過就自己捲。
+
+這些表只有三四欄（`fit_content` 已經把寬度收掉），若再讓高度吃滿視窗，三列資料就會
+變成一條又窄又高、幾乎全是空框線的長條 —— 2026-08-20 實機截圖上的「類別」分頁就是
+那個樣子。14 列在 760 px 高的視窗裡放得下，也足夠讓「有很多項目」看起來像一張表。
+"""
+
+
 def fit_to_rows(table: QTableView, *, limit: int) -> None:
     """把表格的**高度**收到實際列數，最多 `limit` 列。
 

@@ -180,6 +180,14 @@ class LedgerController:
         )
         return list(result.details.get("categories", []))
 
+    def category_tree(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
+        """兩層類別攤成一份列表，每一列都帶著上層名稱與子項目數。
+
+        「類別」與「項目」兩個分頁各自從這一份濾出自己要的 `level`。
+        """
+        result = self.categories.list_tree(include_archived=include_archived)
+        return list(result.details.get("categories", []))
+
     def submit(
         self,
         *,

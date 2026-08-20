@@ -1,7 +1,7 @@
-"""模板與週期排程。
+"""模板與定期收支共用的編輯對話框。
 
-**排程不會自動入帳。** 「產生到期待確認項目」只是把到期的期次放進待確認頁，要不要成
-為交易由使用者按下確認決定。`DraftDialog` 同時服務模板與排程，差別只在多出週期欄位。
+同一份表單服務兩件事，差別只在**多出四列週期欄位**（週期、間隔倍數、開始日期、
+結束日期）。兩份幾乎一樣的表單各自維護，遲早會有一邊漏掉某個欄位的驗證。
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from PySide6.QtCore import QDate, Signal
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,180 +17,17 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
-    QPushButton,
     QSpinBox,
-    QTabWidget,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
 
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import (
-    ENTRY_NAMES,
-    FREQUENCY_NAMES,
-    minor_text,
-    result_message,
-    schedule_values,
-    template_values,
-)
+from tagcor_ledger.ui.formatting import ENTRY_NAMES, FREQUENCY_NAMES, minor_text
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
-from tagcor_ledger.ui.widgets.table import (
-    RowsModel,
-    bind_selection,
-    set_button_role,
-    setup_table,
-)
-
-
-class AutomationPage(QWidget):
-    apply_requested = Signal(dict)
-    changed = Signal()
-
-    def __init__(self, controller: LedgerController) -> None:
-        super().__init__()
-        self.controller = controller
-        self.templates = QTableView()
-        self.template_model = RowsModel(
-            ["名稱", "類型", "金額（TWD）", "備註"],
-            template_values,
-            amount_column=2,
-        )
-        self.schedules = QTableView()
-        self.schedule_model = RowsModel(
-            ["名稱", "類型", "週期", "下次日期", "結束日期"],
-            schedule_values,
-        )
-        self._build()
-        self.refresh()
-
-    def _build(self) -> None:
-        tabs = QTabWidget()
-        tabs.setObjectName("contentTabs")
-        template_tab = QWidget()
-        template_buttons = QHBoxLayout()
-        needs_template_selection: list[QPushButton] = []
-        for label, handler in (
-            ("新增模板", lambda: self.edit_template(None)),
-            ("編輯模板", self.edit_selected_template),
-            ("套用到記帳", self.apply_template),
-            ("封存模板", self.archive_template),
-        ):
-            button = QPushButton(label)
-            if label.startswith(("新增", "套用")):
-                set_button_role(button, "primary")
-            if label.startswith("封存"):
-                set_button_role(button, "danger")
-            if not label.startswith("新增"):
-                needs_template_selection.append(button)
-            button.clicked.connect(handler)
-            template_buttons.addWidget(button)
-        template_buttons.addStretch()
-        setup_table(self.templates, self.template_model, fit_content=True)
-        bind_selection(self.templates, *needs_template_selection)
-        template_layout = QVBoxLayout(template_tab)
-        template_layout.addLayout(template_buttons)
-        template_layout.addWidget(self.templates)
-
-        schedule_tab = QWidget()
-        schedule_buttons = QHBoxLayout()
-        needs_schedule_selection: list[QPushButton] = []
-        for label, handler in (
-            ("新增排程", lambda: self.edit_schedule(None)),
-            ("編輯排程", self.edit_selected_schedule),
-            ("封存排程", self.archive_schedule),
-            ("產生到期待確認項目", self.generate_due),
-        ):
-            button = QPushButton(label)
-            if label.startswith(("新增", "產生")):
-                set_button_role(button, "primary")
-            if label.startswith("封存"):
-                set_button_role(button, "danger")
-            if label.startswith(("編輯", "封存")):
-                needs_schedule_selection.append(button)
-            button.clicked.connect(handler)
-            schedule_buttons.addWidget(button)
-        schedule_buttons.addStretch()
-        setup_table(self.schedules, self.schedule_model, fit_content=True)
-        bind_selection(self.schedules, *needs_schedule_selection)
-        schedule_layout = QVBoxLayout(schedule_tab)
-        schedule_layout.addLayout(schedule_buttons)
-        schedule_layout.addWidget(self.schedules)
-        tabs.addTab(template_tab, "模板")
-        tabs.addTab(schedule_tab, "週期排程")
-        layout = QVBoxLayout(self)
-        layout.addWidget(tabs)
-
-    def refresh(self) -> None:
-        self.template_model.replace_rows(self.controller.list_templates())
-        self.schedule_model.replace_rows(self.controller.list_schedules())
-
-    def edit_selected_template(self) -> None:
-        self.edit_template(self.template_model.selected_item(self.templates))
-
-    def edit_template(self, item: dict[str, Any] | None) -> None:
-        dialog = DraftDialog(
-            self.controller,
-            schedule=False,
-            current=item,
-            parent=self,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        result = self.controller.save_template(dialog.saved_value)
-        self._finish(result)
-
-    def apply_template(self) -> None:
-        item = self.template_model.selected_item(self.templates)
-        if item is not None:
-            self.apply_requested.emit(item)
-
-    def archive_template(self) -> None:
-        item = self.template_model.selected_item(self.templates)
-        if item is not None:
-            self._finish(self.controller.archive_template(str(item["template_id"])))
-
-    def edit_selected_schedule(self) -> None:
-        self.edit_schedule(self.schedule_model.selected_item(self.schedules))
-
-    def edit_schedule(self, item: dict[str, Any] | None) -> None:
-        dialog = DraftDialog(
-            self.controller,
-            schedule=True,
-            current=item,
-            parent=self,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        result = self.controller.save_schedule(dialog.saved_value)
-        self._finish(result)
-
-    def archive_schedule(self) -> None:
-        item = self.schedule_model.selected_item(self.schedules)
-        if item is not None:
-            self._finish(self.controller.archive_schedule(str(item["schedule_id"])))
-
-    def generate_due(self) -> None:
-        result = self.controller.generate_due()
-        if result.success:
-            generated = int(result.details.get("generated", 0))
-            suffix = "，仍有更多漏期可繼續產生" if result.details.get("has_more") else ""
-            QMessageBox.information(self, "產生完成", f"已產生 {generated} 期待確認項目{suffix}。")
-            self.changed.emit()
-        else:
-            QMessageBox.warning(self, "產生失敗", result_message(result))
-
-    def _finish(self, result: Any) -> None:
-        if not result.success:
-            QMessageBox.warning(self, "操作失敗", result_message(result))
-            return
-        self.refresh()
-        self.changed.emit()
 
 
 class DraftDialog(QDialog):
@@ -225,7 +62,7 @@ class DraftDialog(QDialog):
         self._load()
 
     def _build(self) -> None:
-        self.setWindowTitle("排程" if self.schedule else "模板")
+        self.setWindowTitle("定期收支" if self.schedule else "模板")
         for key in ("expense", "income", "transfer"):
             self.flow.addItem(ENTRY_NAMES[key], key)
         for key in ("daily", "weekly", "monthly", "yearly"):

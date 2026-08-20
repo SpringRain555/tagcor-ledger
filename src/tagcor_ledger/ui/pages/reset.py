@@ -33,7 +33,8 @@ COUNT_LABELS = {
     "accounts": "帳戶",
     "categories": "類別與項目",
     "transaction_templates": "模板",
-    "recurring_schedules": "週期排程",
+    # 鍵是**表名**、值是**使用者看到的名字**，兩者刻意不同：改 UI 用詞不動 schema。
+    "recurring_schedules": "定期收支",
 }
 
 

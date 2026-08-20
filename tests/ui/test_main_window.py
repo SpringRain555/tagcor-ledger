@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QTabWidget
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.infrastructure.clock import TAIPEI
@@ -697,3 +697,167 @@ def test_the_snapshot_reminder_lives_on_the_page_not_the_status_bar(
     window.show_page(PageId.OVERVIEW)
     assert not page.snapshot_note.isVisible()
     assert not page.snapshot_button.isVisible()
+
+
+def test_a_category_with_items_can_be_selected_and_renamed(qtbot, tmp_path: Path, monkeypatch) -> None:
+    """**有子項目的類別必須有自己的一列。**
+
+    舊的 `CatalogPage` 只在類別「沒有」子項目時才把它自己加成一列，所以「伙食」永遠
+    不會出現 —— 畫面上看到的那個「伙食」是項目那一列的第一欄。於是改名、封存、刪除
+    對類別**全部失效**：你選到的一直是項目。
+
+    這裡不能只斷言「畫面上有『伙食』兩個字」—— 那在壞掉的版本裡照樣成立。
+    要比對的是**那一列的 category_id**。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    page = window.operation_settings.categories
+    page.refresh()
+    rows = [page.model.items[index] for index in range(page.model.rowCount())]
+    ids = [str(row["category_id"]) for row in rows]
+    assert "cat_food" in ids, f"「伙食」有子項目，但列表裡沒有它自己的列：{ids}"
+
+    # 選到它，改名，然後確認改的是類別而不是項目。
+    row_index = ids.index("cat_food")
+    page.table.selectRow(row_index)
+    monkeypatch.setattr(
+        "PySide6.QtWidgets.QInputDialog.getText",
+        lambda *args, **kwargs: ("伙食費", True),
+    )
+    page.rename_selected()
+
+    names = {
+        str(item["category_id"]): str(item["name"])
+        for item in controller.category_options()
+    }
+    assert names["cat_food"] == "伙食費"
+    assert names.get("cat_food_711") is None  # 項目不在第一層
+    children = {
+        str(item["category_id"]): str(item["name"])
+        for item in controller.category_options("cat_food")
+    }
+    assert children["cat_food_711"] == "7-11", "改到的是項目，不是類別"
+
+    # 舊交易要跟著顯示新名字。
+    controller.submit(
+        occurred_at="2026-08-19T10:00:00+08:00",
+        entry_type="expense",
+        amount="85",
+        account_id="acct_cash",
+        destination_account_id=None,
+        category_id="cat_food_711",
+        description="午餐",
+    )
+    window.transactions.first_page()
+    assert window.transactions.model.index(0, 3).data() == "伙食費 / 7-11"
+
+
+def test_operation_settings_has_six_tabs_in_the_agreed_order(qtbot, tmp_path: Path) -> None:
+    """**順序本身就是分組**：前四個是記帳會用到的名冊，後兩個是會自己到期的東西。
+
+    所以這裡連順序一起釘住，不只是「有沒有這六個」。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
+    assert tabs is not None
+    assert [tabs.tabText(index) for index in range(tabs.count())] == [
+        "帳戶",
+        "類別",
+        "項目",
+        "模板",
+        "定期收支",
+        "定存",
+    ]
+    # 分頁與屬性必須是同一個物件，不然 refresh() 會刷到沒有顯示出來的那一份。
+    page = window.operation_settings
+    assert [tabs.widget(index) for index in range(tabs.count())] == [
+        page.accounts,
+        page.categories,
+        page.items,
+        page.templates,
+        page.recurring,
+        page.deposits,
+    ]
+
+
+def test_the_word_schedule_no_longer_appears_in_the_ui(qtbot, tmp_path: Path) -> None:
+    """「週期排程」是實作的名字，使用者想的是「每個月會自動扣款的那些」。
+
+    程式識別字 `recurring_schedules` / `schedule_id` **不動** —— 那是 schema，
+    改它要 migration，而使用者看不到它。這條只掃畫面上的字。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    texts = [
+        button.text() for button in window.operation_settings.findChildren(QPushButton)
+    ]
+    tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
+    assert tabs is not None
+    texts += [tabs.tabText(index) for index in range(tabs.count())]
+
+    assert "定期收支" in texts
+    offenders = [text for text in texts if "排程" in text]
+    assert not offenders, f"畫面上還有「排程」：{offenders}"
+
+
+def test_items_page_filters_by_category(qtbot, tmp_path: Path) -> None:
+    """項目一多就找不到自己要的那一個，所以「項目」分頁上方有類別篩選。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    transport = controller.create_category("交通")
+    assert transport.success
+    transport_id = str(transport.details["category_id"])
+    assert controller.create_category("電子票證儲值", transport_id).success
+    assert controller.create_category("早餐店", "cat_food").success
+
+    page = window.operation_settings.items
+    page.refresh()
+    assert {page.model.index(row, 1).data() for row in range(page.model.rowCount())} == {
+        "7-11",
+        "早餐店",
+        "電子票證儲值",
+    }
+
+    index = page.parent_filter.findData(transport_id)
+    assert index > 0, "篩選下拉裡沒有「交通」"
+    page.parent_filter.setCurrentIndex(index)
+    rows = [
+        (page.model.index(row, 0).data(), page.model.index(row, 1).data())
+        for row in range(page.model.rowCount())
+    ]
+    assert rows == [("交通", "電子票證儲值")]
+
+    # 篩選在重新整理之後要保住 —— 新增一個項目不該把畫面跳回「全部」。
+    assert controller.create_category("加油", transport_id).success
+    page.refresh()
+    assert page.parent_filter.currentData() == transport_id
+    assert page.model.rowCount() == 2
+
+
+def test_categories_page_counts_its_items(qtbot, tmp_path: Path) -> None:
+    """「項目數」是一起查出來的，不是每個類別再查一次。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    assert window.controller.create_category("早餐店", "cat_food").success
+    assert window.controller.create_category("交通").success
+
+    page = window.operation_settings.categories
+    page.refresh()
+    counts = {
+        page.model.index(row, 0).data(): page.model.index(row, 1).data()
+        for row in range(page.model.rowCount())
+    }
+    assert counts["伙食"] == "2 項"
+    assert counts["交通"] == "0 項"

@@ -44,6 +44,21 @@ class Category:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryNode:
+    """類別樹的一列：類別本身 ＋ 顯示需要的兩個衍生欄位。
+
+    `parent_name` 與 `item_count` 不是 `categories` 表的欄位，是同一句查詢一起算出來的。
+    分開查就是 1+N —— 舊的做法是先列出所有類別，再對每一個類別各查一次子項目。
+
+    比照 `BalanceGap`：組合原本的 dataclass，不是把欄位攤平複製一份。
+    """
+
+    category: Category
+    parent_name: str | None
+    item_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class TransactionRecord:
     transaction_id: str
     revision: int

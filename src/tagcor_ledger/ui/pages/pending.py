@@ -50,7 +50,7 @@ class PendingPage(QWidget):
         self.controller = controller
         self.table = QTableView()
         self.model = RowsModel(
-            ["到期日", "排程", "類型", "金額（TWD）", "狀態說明"],
+            ["到期日", "名稱", "類型", "金額（TWD）", "狀態說明"],
             occurrence_values,
             amount_column=3,
         )

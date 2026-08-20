@@ -9,7 +9,7 @@ from dataclasses import asdict
 import sqlite3
 from uuid import uuid4
 
-from tagcor_ledger.domain.models import Category
+from tagcor_ledger.domain.models import Category, CategoryNode
 from tagcor_ledger.infrastructure.clock import now_iso
 from tagcor_ledger.infrastructure.database import connect_database, database_transaction
 from tagcor_ledger.infrastructure.stores.base import (
@@ -38,6 +38,54 @@ class CategoryStore(StoreBase):
                 (parent_id,),
             ).fetchall()
         return [Category(**dict(row)) for row in rows]
+
+    def list_category_tree(self, *, include_archived: bool = False) -> list[CategoryNode]:
+        """一句話取回兩層類別、上層名稱與子項目數。
+
+        舊的做法是先 `list_categories()` 拿到所有類別，再對**每一個**類別各呼叫一次
+        `list_categories(parent_id=...)` —— 而每一次都開一條新連線。
+
+        排序刻意讓項目跟在自己的類別後面：先照上層（沒有上層就照自己）的
+        `sort_order` 與名稱，再照 `level`。這樣同一份結果既能給「類別」分頁
+        （濾 level 1）也能給「項目」分頁（濾 level 2）用。
+        """
+        status_clause = "" if include_archived else "AND node.status = 'active'"
+        item_status = "" if include_archived else "AND item.status = 'active'"
+        with connect_database(self.paths.database_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT node.category_id, node.name, node.parent_id, node.level,
+                       node.status, node.sort_order,
+                       parent.name AS parent_name,
+                       (
+                           SELECT COUNT(*) FROM categories AS item
+                           WHERE item.parent_id = node.category_id {item_status}
+                       ) AS item_count
+                FROM categories AS node
+                LEFT JOIN categories AS parent ON parent.category_id = node.parent_id
+                WHERE 1 = 1 {status_clause}
+                ORDER BY COALESCE(parent.sort_order, node.sort_order),
+                         COALESCE(parent.name, node.name) COLLATE NOCASE,
+                         node.level,
+                         node.sort_order,
+                         node.name COLLATE NOCASE
+                """
+            ).fetchall()
+        return [
+            CategoryNode(
+                category=Category(
+                    category_id=str(row["category_id"]),
+                    name=str(row["name"]),
+                    parent_id=row["parent_id"],
+                    level=int(row["level"]),
+                    status=str(row["status"]),
+                    sort_order=int(row["sort_order"]),
+                ),
+                parent_name=row["parent_name"],
+                item_count=int(row["item_count"]),
+            )
+            for row in rows
+        ]
 
     def create_category(self, *, name: str, parent_id: str | None = None) -> Category:
         clean_name = name.strip()

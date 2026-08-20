@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QTableView, QTabWidget
+from PySide6.QtWidgets import QApplication, QTableView, QTabWidget, QWidget
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.app.window_state import (
@@ -171,17 +171,20 @@ def test_shrink_wrapped_tables_are_never_clipped(qtbot, tmp_path: Path) -> None:
     tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
     assert tabs is not None
 
+    checked = 0
     for index in range(tabs.count()):
         tabs.setCurrentIndex(index)
         QApplication.processEvents()
         QApplication.processEvents()
         for table in tabs.widget(index).findChildren(QTableView):
-            if not table.isVisible():
-                continue
+            # **不要用 `isVisible()` 過濾。** `QStackedWidget` 底下的頁在 offscreen
+            # 平台上永遠回報 False，於是這一圈什麼都不檢查就通過 —— 2026-08-20 加
+            # 分頁時才發現這條守門一直是空的。版面已經算好了，量 geometry 就對。
             header = table.horizontalHeader()
             columns = sum(header.sectionSize(i) for i in range(header.count()))
             assert table.width() >= columns, (tabs.tabText(index), table.width(), columns)
-            assert not table.horizontalScrollBar().isVisible(), tabs.tabText(index)
+            checked += 1
+    assert checked >= tabs.count(), f"只檢查了 {checked} 張表，過濾條件把它們濾光了"
 
 
 def test_long_tables_still_fill_the_width(qtbot, tmp_path: Path) -> None:
@@ -312,3 +315,43 @@ def test_todo_lines_do_not_wrap_while_there_is_room_to_spare(qtbot, tmp_path: Pa
         # 標籤在垂直方向被拉滿，所以高度看不出有沒有斷行。
         needed = label.fontMetrics().horizontalAdvance(label.text())
         assert label.width() >= needed, (label.text(), label.width(), needed)
+
+
+def test_settings_tabs_keep_their_content_at_the_top(qtbot, tmp_path: Path) -> None:
+    """操作設定每一個分頁的內容都貼著上緣，不會散開撐滿整頁。
+
+    表格改成固定高度（`fit_rows`）之後，`QVBoxLayout` 會把多出來的高度**平均塞進
+    每個 widget 之間** —— 按鈕列跑到分頁中間、表格浮在下面，中間一大片空白
+    （2026-08-20 實機截圖）。每個分頁最後都要有一個 `addStretch()` 吃掉那段高度。
+    """
+    window = _open(qtbot, tmp_path, size=(1600, 900))
+    window.show_page(PageId.OPERATION_SETTINGS)
+    tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
+    assert tabs is not None
+
+    for index in range(tabs.count()):
+        tabs.setCurrentIndex(index)
+        QApplication.processEvents()
+        QApplication.processEvents()
+        page = tabs.widget(index)
+        # 直接子 widget 的 geometry。**不用 `isVisible()` 過濾** —— `QStackedWidget`
+        # 底下的頁在 offscreen 平台上永遠回報 False，過濾完會一個都不剩。
+        children = [
+            child for child in page.findChildren(QWidget) if child.parent() is page
+        ]
+        assert children, tabs.tabText(index)
+        label = tabs.tabText(index)
+        assert min(child.y() for child in children) < 40, (
+            f"{label}：內容從 y={min(child.y() for child in children)} 才開始，沒有貼著上緣"
+        )
+
+        # **量的是元件之間的空隙，不是內容總高度。** 定存分頁本來就有兩張表與四個
+        # 標題，內容佔掉大半個分頁是正常的；被 layout 撐開的樣子是「每個元件之間
+        # 都多出一大段」。同一列的按鈕 y 範圍互相重疊，算出來是負的，不影響。
+        bands = sorted((child.y(), child.y() + child.height()) for child in children)
+        reach = bands[0][1]
+        worst = 0
+        for band_top, band_bottom in bands[1:]:
+            worst = max(worst, band_top - reach)
+            reach = max(reach, band_bottom)
+        assert worst < 40, f"{label}：元件之間空出 {worst} px，多半是少了 addStretch()"

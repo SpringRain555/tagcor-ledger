@@ -137,6 +137,30 @@ class CategoryService:
             },
         )
 
+    def list_tree(self, *, include_archived: bool = False) -> Result:
+        """兩層類別 ＋ 上層名稱 ＋ 子項目數，**一句查詢**。
+
+        「類別」與「項目」兩個分頁看的是同一份結果的不同切片，所以不要各查一次。
+        """
+        nodes = self.store.list_category_tree(include_archived=include_archived)
+        return Result.ok(
+            "類別已載入。",
+            details={
+                "categories": [
+                    {
+                        "category_id": node.category.category_id,
+                        "name": node.category.name,
+                        "parent_id": node.category.parent_id,
+                        "level": node.category.level,
+                        "status": node.category.status,
+                        "parent_name": node.parent_name,
+                        "item_count": node.item_count,
+                    }
+                    for node in nodes
+                ]
+            },
+        )
+
     def create(self, *, name: str, parent_id: str | None = None) -> Result:
         try:
             category = self.store.create_category(name=name, parent_id=parent_id)

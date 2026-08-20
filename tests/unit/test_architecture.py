@@ -148,3 +148,63 @@ def test_no_module_grows_back_into_a_monolith() -> None:
             f"以下模組超過 {MAX_MODULE_LINES} 行，先確認它是不是裝了不只一件事：\n"
             + "\n".join(oversized)
         )
+
+
+# UI 上不該再出現的字，以及該用的字。
+# **鍵是實作的名字，值是使用者腦子裡的名字。** 程式識別字（`recurring_schedules`、
+# `schedule_id`）不在此限 —— 那是 schema，改它要 migration，而使用者看不到它。
+RETIRED_UI_WORDS = {
+    "排程": "定期收支",
+    "快速記帳": "記帳",
+}
+
+
+def _value_strings(path: Path) -> list[str]:
+    """這個模組裡**當成值用**的字串常數。
+
+    裸的字串陳述式（module／class／def 的 docstring，以及常數底下那種說明字串）
+    一律不算 —— 那是寫給開發者看的，本來就該用實作的名字討論實作。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    documentation = {
+        id(node.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    }
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in documentation
+    ]
+
+
+def test_extractor_separates_documentation_from_values() -> None:
+    """陽性對照：抽取邏輯壞掉時這裡先失敗，而不是讓底下的檢查靜默通過。"""
+    page = SOURCE_ROOT / "ui" / "pages" / "recurring.py"
+    values = _value_strings(page)
+    assert "新增定期收支" in values, "抓不到按鈕文字，抽取器壞了"
+    assert not any("為什麼改叫" in value for value in values), "docstring 被當成值抓進來了"
+
+
+def test_ui_does_not_use_retired_wording() -> None:
+    """UI 的字串常數不得出現已經淘汰的用詞。
+
+    這條攔的是**漏改**。2026-08-20 把「週期排程」改成「定期收支」時，分頁標籤與按鈕都
+    改了，但重製確認框裡那份 `COUNT_LABELS` 差點漏掉 —— 那一行只有在按下「重製」時
+    才看得到，實機點過去的機率很低。
+    """
+    offenders: list[str] = []
+    for path in _modules("ui"):
+        for value in _value_strings(path):
+            for retired, replacement in RETIRED_UI_WORDS.items():
+                if retired in value:
+                    offenders.append(
+                        f"  {path.relative_to(PROJECT_ROOT)}：{value!r}"
+                        f"（「{retired}」應為「{replacement}」）"
+                    )
+    if offenders:
+        pytest.fail("UI 字串裡還有淘汰的用詞：\n" + "\n".join(offenders))

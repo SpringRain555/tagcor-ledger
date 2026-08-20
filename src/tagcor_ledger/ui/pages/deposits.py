@@ -48,6 +48,7 @@ from tagcor_ledger.ui.formatting import (
 )
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
 from tagcor_ledger.ui.widgets.table import (
+    SETTINGS_TABLE_ROWS,
     RowsModel,
     bind_selection,
     set_button_role,
@@ -119,8 +120,8 @@ class DepositsPage(QWidget):
         term_row.addWidget(edit_term_button)
         term_row.addStretch()
 
-        setup_table(self.contracts, self.contract_model, fit_content=True)
-        setup_table(self.terms, self.term_model, fit_content=True)
+        setup_table(self.contracts, self.contract_model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
+        setup_table(self.terms, self.term_model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
         bind_selection(self.contracts, edit_button, delete_button)
         bind_selection(self.terms, edit_term_button)
 
@@ -136,6 +137,9 @@ class DepositsPage(QWidget):
         layout.addWidget(terms_title)
         layout.addLayout(term_row)
         layout.addWidget(self.terms)
+        # 表格現在是固定高度（`fit_rows`），沒有這一行的話 QVBoxLayout 會把多餘的
+        # 高度平均塞進每個 widget 之間 —— 按鈕與表格會浮在分頁中間。
+        layout.addStretch()
 
         add_button.clicked.connect(self.add_contract)
         edit_button.clicked.connect(self.edit_contract)
