@@ -15,7 +15,13 @@ class AccountService:
         self.store = store or LedgerStore(paths)
 
     def list(self, *, include_archived: bool = False) -> Result:
+        """列出帳戶與餘額。
+
+        餘額**一次查完**（`account_balances`），不是每個帳戶各查一次 —— 後者會開
+        1+N 條連線，而這個方法在記帳頁、交易紀錄篩選、餘額盤點與資產總覽上都會被呼叫。
+        """
         accounts = self.store.list_accounts(include_archived=include_archived)
+        balances = self.store.account_balances()
         return Result.ok(
             "帳戶已載入。",
             details={
@@ -26,7 +32,7 @@ class AccountService:
                         "account_type": account.account_type,
                         "currency": account.currency,
                         "opening_balance_minor": account.opening_balance_minor,
-                        "balance_minor": self.store.account_balance_minor(account.account_id),
+                        "balance_minor": balances[account.account_id],
                         "status": account.status,
                     }
                     for account in accounts

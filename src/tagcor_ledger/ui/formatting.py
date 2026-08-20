@@ -141,6 +141,15 @@ def account_values(item: dict[str, Any]) -> list[str]:
     ]
 
 
+def overview_account_values(item: dict[str, Any]) -> list[str]:
+    """資產總覽只列名稱與餘額。
+
+    **不重複「狀態」欄** —— 那一頁只顯示使用中的帳戶，每一列都寫「使用中」等於沒說。
+    封存帳戶的餘額另外用一句話交代（見 `overview.py`）。
+    """
+    return [str(item["name"]), group_digits(item["balance_minor"])]
+
+
 def category_values(item: dict[str, Any]) -> list[str]:
     return [
         str(item.get("parent_name", "")),

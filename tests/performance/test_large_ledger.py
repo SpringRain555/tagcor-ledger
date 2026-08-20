@@ -7,6 +7,7 @@ import pytest
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.application.balance import BalanceSnapshotService
+from tagcor_ledger.application.catalogs import AccountService
 from tagcor_ledger.application.transaction_service import AddTransaction, AddTransactionRequest
 from tagcor_ledger.domain.models import CreateBalanceSnapshotRequest, TransactionFilter
 from tagcor_ledger.infrastructure.database import database_transaction
@@ -64,6 +65,13 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     latest_gap = balance.latest_gap("acct_cash")
     gap_elapsed = perf_counter() - started
 
+    # 資產總覽是開啟程式的第一頁，而它的地基就是「一次算完所有帳戶餘額」。
+    # 這一筆量的是那句彙總在 20 萬筆下要多久 —— 它會走過該帳戶的每一筆分錄，
+    # 所以是**唯一一個成本真的跟資料量成正比**的常用查詢。
+    started = perf_counter()
+    accounts = AccountService(paths, store).list()
+    accounts_elapsed = perf_counter() - started
+
     print(
         "performance:",
         f"add={add_elapsed * 1000:.2f}ms",
@@ -71,7 +79,9 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
         f"filter={filter_elapsed * 1000:.2f}ms",
         f"snapshot={snapshot_elapsed * 1000:.2f}ms",
         f"gap={gap_elapsed * 1000:.2f}ms",
+        f"accounts={accounts_elapsed * 1000:.2f}ms",
     )
+    assert accounts.success
     assert result.success
     assert snapshot.success
     assert latest_gap.success
@@ -82,6 +92,9 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     assert filter_elapsed < 0.5
     assert snapshot_elapsed < 0.5
     assert gap_elapsed < 0.5
+    # 實測 113ms（2026-08-20，20 萬筆）。門檻比照盤點與差額那兩筆的 0.5s ——
+    # 它們同樣要走過整段分錄，量級也相近。
+    assert accounts_elapsed < 0.5
 
 
 def _seed_transactions(paths, count: int) -> None:

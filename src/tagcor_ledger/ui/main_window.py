@@ -6,6 +6,10 @@
 
 **導覽用 `PageId`，不用顯示文字。** 以前是 `show_page("快速記帳")` ——
 改一個字就會噴 `KeyError`。頁面身分與顯示文字現在分開，見 `ui/navigation.py`。
+
+**資產總覽是唯一的例外**：它不靠 `_..._changed` 通知，而是**切過去就重算**。
+它讀的東西橫跨帳戶、定存、排程與盤點，要在每個 `_..._changed` 各記一筆的話，
+遲早會漏掉一項 —— 而漏掉的症狀是總資產停在舊數字，看起來像算錯帳。
 """
 
 from __future__ import annotations
@@ -25,9 +29,10 @@ from tagcor_ledger.app import window_state
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.app.window_state import WindowGeometry, load_geometry, save_geometry
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.navigation import ALL_PAGES, PageId
+from tagcor_ledger.ui.navigation import ALL_PAGES, LANDING_PAGE, PageId
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
+from tagcor_ledger.ui.pages.overview import OverviewPage
 from tagcor_ledger.ui.pages.pending import PendingPage
 from tagcor_ledger.ui.pages.quick_entry import QuickEntryPage
 from tagcor_ledger.ui.pages.reference import ReferencePage
@@ -42,6 +47,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = LedgerController(paths)
         self.pages = QStackedWidget()
+        self.overview = OverviewPage(self.controller)
         self.quick = QuickEntryPage(self.controller)
         self.balance = BalanceSnapshotPage(self.controller)
         self.pending = PendingPage(self.controller)
@@ -51,7 +57,6 @@ class MainWindow(QMainWindow):
         self.system_settings = SystemSettingsPage(self.controller, paths)
         self._build(paths)
         self.refresh_pending_badge()
-        self._show_balance_snapshot_reminder()
 
     def _build(self, paths: AppPaths) -> None:
         self.setWindowTitle("TagCor Ledger")
@@ -61,6 +66,7 @@ class MainWindow(QMainWindow):
             apply_dark_theme(cast(QApplication, app))
 
         self._page_widgets: dict[PageId, QWidget] = {
+            PageId.OVERVIEW: self.overview,
             PageId.ENTRY: self.quick,
             PageId.INBOX: self.pending,
             PageId.TRANSACTIONS: self.transactions,
@@ -91,8 +97,10 @@ class MainWindow(QMainWindow):
         content.setObjectName("appShell")
         content.setLayout(layout)
         self.setCentralWidget(content)
-        self.show_page(PageId.ENTRY)
+        self.show_page(LANDING_PAGE)
 
+        self.overview.inbox_requested.connect(lambda: self.show_page(PageId.INBOX))
+        self.overview.balance_requested.connect(lambda: self.show_page(PageId.BALANCE))
         self.quick.saved.connect(self._transaction_changed)
         self.balance.changed.connect(self._balance_changed)
         self.balance.record_transaction_requested.connect(self._focus_new)
@@ -147,7 +155,12 @@ class MainWindow(QMainWindow):
     # --- 導覽 -----------------------------------------------------------------
 
     def _navigate(self, page_value: str) -> None:
-        self.pages.setCurrentWidget(self._page_widgets[PageId(page_value)])
+        page = PageId(page_value)
+        if page is PageId.OVERVIEW:
+            # **切過去就重算**，不在每個 `_..._changed` 各記一筆 —— 那種清單一定會漏掉
+            # 一項，而漏掉的症狀是總資產停在舊數字，看起來像算錯帳。
+            self.overview.refresh()
+        self.pages.setCurrentWidget(self._page_widgets[page])
 
     def show_page(self, page: PageId) -> None:
         """跳到某一頁。走側邊欄，讓選取狀態與畫面永遠是同一個真相。"""
@@ -185,7 +198,6 @@ class MainWindow(QMainWindow):
         self.quick.apply_defaults()
         self.transactions.first_page()
         self.balance.reload_accounts()
-        self._show_balance_snapshot_reminder()
 
     def _restored(self) -> None:
         # 狀態列只放**暫時**訊息。資料庫路徑常駐在這裡吃掉一整行，而它是一年看兩次的
@@ -201,12 +213,9 @@ class MainWindow(QMainWindow):
         self.system_settings.reload()
 
     def refresh_pending_badge(self) -> None:
-        """待確認的數字直接畫在側邊欄右側，不必點進去才知道有沒有事情要處理。"""
-        self.sidebar.set_badge(PageId.INBOX, len(self.controller.list_pending()))
+        """待確認的數字直接畫在側邊欄右側，不必點進去才知道有沒有事情要處理。
 
-    def _show_balance_snapshot_reminder(self) -> None:
-        if self.controller.refresh_balance_snapshot_reminder_due():
-            self.statusBar().showMessage(
-                "提醒：今天尚未記錄預設帳戶的目前金額，可到「餘額盤點」新增盤點。",
-                10000,
-            )
+        走 `controller.inbox_count()`，與資產總覽同一個來源 —— 兩邊各自算就會出現
+        「側邊欄說 2、總覽說 3」，而使用者沒有辦法知道哪一個才對。
+        """
+        self.sidebar.set_badge(PageId.INBOX, self.controller.inbox_count())

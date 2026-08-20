@@ -63,6 +63,15 @@ QLabel#hintLabel {
     background-color: transparent;
 }
 
+/* 總資產：資產總覽唯一的主角。字級要明顯大過 pageTitle，
+ * 不然它只是「另一個標題」，而這一頁存在的理由就是讓這個數字一眼可見。 */
+QLabel#totalAmount {
+    color: #E8E8EA;
+    font-size: 30pt;
+    font-weight: 600;
+    padding: 0 0 6px 0;
+}
+
 /* 狀態訊息：同一個標籤既報成功也報失敗，靠 state 屬性換色。
  * 舊版把「交易已儲存。」寫進紅色的 errorLabel，成功長得像失敗。 */
 QLabel#statusLabel {

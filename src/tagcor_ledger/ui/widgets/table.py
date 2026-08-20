@@ -142,12 +142,29 @@ def fit_to_contents(table: QTableView) -> None:
     table.setMaximumWidth(width + 2 * table.frameWidth())
 
 
+def fit_to_rows(table: QTableView, *, limit: int) -> None:
+    """把表格的**高度**收到實際列數，最多 `limit` 列。
+
+    跟 `fit_to_contents` 是同一個毛病的另一半：三列資料佔滿一整塊高度時，最後一列
+    底下留著一大片有框線卻沒有內容的空白 —— 2026-08-20 資產總覽的實機截圖上就是
+    那個樣子，看起來像資料還沒載完。
+
+    `limit` 是為了不讓帳戶一多就把底下的定存與待辦推出畫面；超過就讓表格自己捲。
+    """
+    model = table.model()
+    rows = min(model.rowCount() if model is not None else 0, limit)
+    header = table.horizontalHeader().sizeHint().height()
+    body = rows * table.verticalHeader().defaultSectionSize()
+    table.setFixedHeight(header + body + 2 * table.frameWidth())
+
+
 def setup_table(
     table: QTableView,
     model: RowsModel,
     *,
     stretch_column: int | None = None,
     fit_content: bool = False,
+    fit_rows: int | None = None,
 ) -> None:
     """套用共用外觀。
 
@@ -158,6 +175,9 @@ def setup_table(
     `fit_content=True` 讓整張表收到欄寬總和（見 `fit_to_contents`）。
     欄位少的設定用表格用它；欄位多的長表（交易紀錄、待確認）維持滿寬並指定
     `stretch_column`。**兩者不會同時用** —— 收寬之後就沒有多餘寬度可以給誰吃。
+
+    `fit_rows` 另外把**高度**也收到實際列數（見 `fit_to_rows`）。只有摘要用的小表
+    需要它；一張表是某一頁的主角時，讓它長滿高度才對。
     """
     if fit_content and stretch_column is not None:
         raise ValueError("fit_content 與 stretch_column 不能同時指定")
@@ -186,6 +206,11 @@ def setup_table(
         # 拿得到最終值，不必等版面階段。
         model.modelReset.connect(lambda: fit_to_contents(table))
         fit_to_contents(table)
+
+    if fit_rows is not None:
+        rows_limit = fit_rows
+        model.modelReset.connect(lambda: fit_to_rows(table, limit=rows_limit))
+        fit_to_rows(table, limit=rows_limit)
 
 
 def bind_selection(table: QTableView, *buttons: QPushButton) -> None:

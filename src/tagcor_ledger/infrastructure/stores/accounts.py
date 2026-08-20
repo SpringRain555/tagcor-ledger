@@ -201,6 +201,42 @@ class AccountStore(StoreBase):
                 details={},
             )
 
+    def account_balances(self) -> dict[str, int]:
+        """一句話算完**所有**帳戶的餘額。
+
+        `account_balance_minor` 一次只算一個，而 `connect_database` 每次呼叫都開一條
+        新連線並跑四個 PRAGMA —— 列一次帳戶就是 1+N 條連線。帳戶數不大，但這條路徑
+        在記帳頁、交易紀錄篩選、餘額盤點與資產總覽上各走一次，切頁就付一次成本。
+
+        SQL 與單一帳戶那句一模一樣，只是拿掉 `WHERE`。**兩句必須同時改** ——
+        `test_account_balances_match_the_single_account_query` 守住這件事。
+
+        **不用表格別名。** `EXPLAIN QUERY PLAN` 報的是查詢裡寫的名字，所以
+        `FROM accounts a` 的計畫會寫成 `SCAN a` —— `tests/integration/test_query_plans.py`
+        的守門是照表名判斷哪些表會長大的，別名讓它什麼都認不出來。寫全名囉唆，
+        但那份計畫是給人讀的。
+        """
+        with connect_database(self.paths.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT accounts.account_id,
+                       accounts.opening_balance_minor
+                       + COALESCE(
+                           SUM(
+                               CASE WHEN transactions.status = 'active'
+                                    THEN account_postings.amount_minor ELSE 0 END
+                           ), 0
+                         ) AS balance
+                FROM accounts
+                LEFT JOIN account_postings
+                       ON account_postings.account_id = accounts.account_id
+                LEFT JOIN transactions
+                       ON transactions.transaction_id = account_postings.transaction_id
+                GROUP BY accounts.account_id
+                """
+            ).fetchall()
+        return {str(row["account_id"]): int(row["balance"]) for row in rows}
+
     def account_balance_minor(self, account_id: str) -> int:
         with connect_database(self.paths.database_path) as connection:
             row = connection.execute(

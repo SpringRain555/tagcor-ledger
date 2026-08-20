@@ -34,6 +34,7 @@ class PageId(StrEnum):
     不是實作的檔名。
     """
 
+    OVERVIEW = "overview"
     ENTRY = "entry"
     INBOX = "inbox"
     TRANSACTIONS = "transactions"
@@ -44,12 +45,20 @@ class PageId(StrEnum):
 
 
 DAILY_PAGES: tuple[PageId, ...] = (
+    PageId.OVERVIEW,
     PageId.ENTRY,
     PageId.INBOX,
     PageId.TRANSACTIONS,
     PageId.BALANCE,
 )
 """每天會用到的頁，排在側邊欄上半。順序的唯一正本。"""
+
+LANDING_PAGE: PageId = PageId.OVERVIEW
+"""開啟程式停在哪一頁。
+
+**是資產總覽不是記帳。** 記帳是「我要做一件事」，總覽回答的是「我現在是什麼狀況」——
+打開程式的當下多半還沒決定要做什麼，先看狀況才合理；真的要記帳，`Ctrl+N` 一鍵就到。
+"""
 
 SETTINGS_PAGES: tuple[PageId, ...] = (
     PageId.REFERENCE,
@@ -59,6 +68,7 @@ SETTINGS_PAGES: tuple[PageId, ...] = (
 """偶爾才動的頁，沉在側邊欄最底。順序的唯一正本。"""
 
 LABELS: dict[PageId, str] = {
+    PageId.OVERVIEW: "資產總覽",
     PageId.ENTRY: "記帳",
     PageId.INBOX: "待確認",
     PageId.TRANSACTIONS: "交易紀錄",

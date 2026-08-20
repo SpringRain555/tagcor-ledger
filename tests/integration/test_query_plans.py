@@ -32,7 +32,12 @@ ALLOWED_SCAN_MARKERS = (
 )
 
 # 大小不隨使用時間增長的小表，掃它們無所謂。
-SMALL_FIXED_TABLES = {"settings", "schema_migrations", "sqlite_master"}
+#
+# `accounts` 是照「記帳越久會不會變多」判定的：它的筆數等於你有幾個銀行帳戶，
+# 是 O(10) 而且**跟記了幾年沒有關係**。列出所有帳戶餘額本來就得走過每一列
+# （`list_accounts` 也一樣），所以那個 SCAN 不是退化。
+# 真正要守的是它 JOIN 過去的 `account_postings` 與 `transactions` —— 那兩張會長大。
+SMALL_FIXED_TABLES = {"settings", "schema_migrations", "sqlite_master", "accounts"}
 
 
 @pytest.fixture
@@ -181,6 +186,23 @@ def test_account_balance_does_not_scan(store: LedgerStore) -> None:
     account_id = store.list_accounts()[0].account_id
     _assert_no_growing_table_scan(
         store, lambda: store.account_balance_minor(account_id)
+    )
+
+
+def test_all_account_balances_do_not_scan_the_growing_tables(store: LedgerStore) -> None:
+    """一次算完所有帳戶時，交易與分錄仍然要走索引。
+
+    這一句是資產總覽的地基（開啟程式第一眼就跑它）。天真的寫法是拿掉 `WHERE` 之後
+    順手把 JOIN 也改成子查詢或 `IN`，那會變成每算一個帳戶就掃一次 `account_postings`。
+    """
+    steps = _assert_no_growing_table_scan(store, store.account_balances)
+    assert any("idx_postings_account_transaction" in step for step in steps), (
+        "餘額彙總沒有用到 (account_id, transaction_id) 索引"
+    )
+    # 計畫必須認得出表名。這句刻意不用別名，否則 `SCAN accounts` 會變成 `SCAN a`，
+    # 上面那圈就什麼都判斷不了（見 `ALLOWED_SCAN_MARKERS` 的說明）。
+    assert any(step.startswith("SCAN accounts") for step in steps), (
+        "計畫裡看不到 accounts —— 多半是有人在 SQL 裡加了表格別名"
     )
 
 

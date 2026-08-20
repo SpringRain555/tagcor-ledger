@@ -93,6 +93,81 @@ class LedgerController:
         result = self.accounts.list(include_archived=include_archived)
         return list(result.details.get("accounts", []))
 
+    def overview_snapshot(self) -> dict[str, Any]:
+        """資產總覽要顯示的每一項，一次組好。
+
+        **頁面不自己拼這些規則。** 「總資產只加總使用中帳戶」、「封存帳戶餘額不為 0
+        要另外講」這種判斷屬於「這個帳本現在是什麼狀況」，不屬於「怎麼擺 widget」。
+
+        封存的意思是**不出現在選單**，不是錢消失了。所以總資產不算它，但也不能默默
+        不提 —— 否則使用者會拿畫面上的數字去對存摺，然後對不起來。
+        """
+        accounts = self.account_options(include_archived=True)
+        active = [item for item in accounts if item["status"] == "active"]
+        settings = self.get_settings()
+        default_account = next(
+            (
+                item
+                for item in accounts
+                if str(item["account_id"]) == settings.default_account_id
+            ),
+            None,
+        )
+        return {
+            "total_minor": sum(int(item["balance_minor"]) for item in active),
+            "accounts": active,
+            "archived_with_balance": [
+                item
+                for item in accounts
+                if item["status"] != "active" and int(item["balance_minor"]) != 0
+            ],
+            "deposit": self._next_deposit_term(),
+            "inbox_count": self.inbox_count(),
+            # 提醒是**現算**的，不讀 `balance_snapshot_reminder_due` 那個快取值：
+            # 那個值只在啟動與存設定時更新，於是「剛盤點完，提醒還在」。
+            "snapshot_due_account": (
+                str(default_account["name"])
+                if default_account is not None
+                and self.refresh_balance_snapshot_reminder_due()
+                else None
+            ),
+            "latest_gap": (
+                self.latest_balance_gap(settings.default_account_id)
+                if default_account is not None
+                else None
+            ),
+        }
+
+    def _next_deposit_term(self) -> dict[str, Any] | None:
+        """最近一期會到期的定存。沒有存續中的合約就回傳 None（整段不顯示）。"""
+        contracts = {
+            str(contract["contract_id"]): contract
+            for contract in self.list_deposit_contracts()
+        }
+        terms = [
+            term
+            for term in self.list_deposit_terms()
+            if term["status"] == "active" and str(term["contract_id"]) in contracts
+        ]
+        if not terms:
+            return None
+        nearest = min(terms, key=lambda term: str(term["maturity_date"]))
+        return {
+            "contract_name": str(contracts[str(nearest["contract_id"])]["name"]),
+            "maturity_date": str(nearest["maturity_date"]),
+            "principal_minor": int(nearest["principal_minor"]),
+            "total_principal_minor": sum(int(term["principal_minor"]) for term in terms),
+            "contract_count": len(terms),
+        }
+
+    def inbox_count(self) -> int:
+        """待確認的總筆數 —— **排程與定存一起算**。
+
+        側邊欄的數字與資產總覽的數字都走這一個方法。兩邊各自算就會出現「側邊欄說 2、
+        總覽說 3」，而使用者沒有辦法知道哪一個才對。
+        """
+        return len(self.list_pending()) + len(self.list_deposit_pending())
+
     def category_options(
         self,
         parent_id: str | None = None,

@@ -125,8 +125,11 @@ class QuickEntryPage(QWidget):
     # --- 選項 -----------------------------------------------------------------
 
     def reload_options(self) -> None:
-        fill_combo(self.account, self.controller.account_options(), "name", "account_id")
-        fill_combo(self.destination, self.controller.account_options(), "name", "account_id")
+        # 帳戶只查一次填兩個下拉。以前是連呼叫兩次 `account_options()`，
+        # 而那個方法會去算每個帳戶的餘額 —— 等於整段成本白付兩遍。
+        accounts = self.controller.account_options()
+        fill_combo(self.account, accounts, "name", "account_id")
+        fill_combo(self.destination, accounts, "name", "account_id")
         fill_combo(self.category, self.controller.category_options(), "name", "category_id")
         self._reload_details()
 
