@@ -1,32 +1,46 @@
-"""SQLite persistence for templates and recurring schedules."""
+"""模板、定期收支與待確認項目的 SQLite 持久化。
+
+## 為什麼確認入帳不自己寫一份「建立交易」
+
+`confirm_occurrence` 要在**同一個 SQLite transaction** 內做兩件事：建立交易、把那一期
+標成 `confirmed`。分開做會出現「狀態是 confirmed 但交易沒建出來」，那是帳本層級的錯誤。
+
+2026-08 之前的做法是自己重寫一份寫入路徑（transactions 列 ＋ postings ＋ allocation
+＋ FTS，約 70 行），因為 `create_transaction()` 會自己開一個 transaction，沒辦法塞進
+外層。代價是兩份實作，而且**已經分岔**：兩份 `_refresh_fts` 的 SQL 一字不差，
+但只有一份會先 `DELETE`；兩份 `_audit` 只有一份收 `correlation_id`。
+
+現在共用的是 `StoreBase._write_transaction()` / `_write_transfer()` —— 它們**收**
+`connection` 而不是自己開，所以「就寫這一筆」與「建交易＋改狀態」兩種情境都成立。
+"""
 
 from __future__ import annotations
 
 import calendar
 from dataclasses import asdict
 from datetime import date, timedelta
-import json
 import sqlite3
 from uuid import uuid4
 
-from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.domain.models import (
     RecurringSchedule,
     ScheduledOccurrence,
     TransactionTemplate,
 )
+from tagcor_ledger.domain.money import Money
 from tagcor_ledger.infrastructure.clock import now_iso, today_taipei
-from tagcor_ledger.infrastructure.database import (
-    connect_database,
-    database_transaction,
-    initialize_database,
-)
+from tagcor_ledger.infrastructure.database import connect_database, database_transaction
+from tagcor_ledger.infrastructure.stores.base import StoreBase
 
 
-class AutomationStore:
-    def __init__(self, paths: AppPaths) -> None:
-        self.paths = paths
-        initialize_database(paths)
+def _new_correlation_id() -> str:
+    """一次操作一個。**不要在寫稽核列的時候才生** —— 那樣同一次操作的每一列都會拿到
+    不同的值，而 `correlation_id` 存在的唯一目的就是把它們串起來。"""
+    return f"corr_{uuid4().hex}"
+
+
+class AutomationStore(StoreBase):
+    """模板／定期收支／待確認三個聚合。由 `LedgerStore` 組進去，不自己開 migration。"""
 
     def list_templates(self, *, include_archived: bool = False) -> list[TransactionTemplate]:
         where = "" if include_archived else "WHERE status = 'active'"
@@ -78,12 +92,13 @@ class AutomationStore:
                     timestamp,
                 ),
             )
-            _audit(
+            self._audit(
                 connection,
-                "template.save",
-                "template",
-                template.template_id,
-                asdict(template),
+                correlation_id=_new_correlation_id(),
+                action="template.save",
+                entity_type="template",
+                entity_id=template.template_id,
+                details=asdict(template),
             )
         return template
 
@@ -98,7 +113,14 @@ class AutomationStore:
             ).rowcount
             if changed == 0:
                 raise ValueError("TEMPLATE_NOT_FOUND")
-            _audit(connection, "template.archive", "template", template_id, {})
+            self._audit(
+                connection,
+                correlation_id=_new_correlation_id(),
+                action="template.archive",
+                entity_type="template",
+                entity_id=template_id,
+                details={},
+            )
 
     def list_schedules(self, *, include_archived: bool = False) -> list[RecurringSchedule]:
         where = "" if include_archived else "WHERE status = 'active'"
@@ -166,12 +188,13 @@ class AutomationStore:
                     timestamp,
                 ),
             )
-            _audit(
+            self._audit(
                 connection,
-                "schedule.save",
-                "schedule",
-                schedule.schedule_id,
-                asdict(schedule),
+                correlation_id=_new_correlation_id(),
+                action="schedule.save",
+                entity_type="schedule",
+                entity_id=schedule.schedule_id,
+                details=asdict(schedule),
             )
         return schedule
 
@@ -186,7 +209,14 @@ class AutomationStore:
             ).rowcount
             if changed == 0:
                 raise ValueError("SCHEDULE_NOT_FOUND")
-            _audit(connection, "schedule.archive", "schedule", schedule_id, {})
+            self._audit(
+                connection,
+                correlation_id=_new_correlation_id(),
+                action="schedule.archive",
+                entity_type="schedule",
+                entity_id=schedule_id,
+                details={},
+            )
 
     def generate_due_occurrences(
         self,
@@ -316,12 +346,13 @@ class AutomationStore:
             ).rowcount
             if changed == 0:
                 raise ValueError("OCCURRENCE_NOT_PENDING")
-            _audit(
+            self._audit(
                 connection,
-                "occurrence.update",
-                "scheduled_occurrence",
-                occurrence_id,
-                {"amount_minor": amount_minor},
+                correlation_id=_new_correlation_id(),
+                action="occurrence.update",
+                entity_type="scheduled_occurrence",
+                entity_id=occurrence_id,
+                details={"amount_minor": amount_minor},
             )
 
     def confirm_occurrence(self, occurrence_id: str) -> str:
@@ -338,91 +369,51 @@ class AutomationStore:
             if row["amount_minor"] is None or int(row["amount_minor"]) <= 0:
                 raise ValueError("OCCURRENCE_AMOUNT_REQUIRED")
             transaction_id = f"txn_{uuid4().hex}"
-            correlation_id = f"corr_{uuid4().hex}"
-            timestamp = now_iso()
-            connection.execute(
-                """
-                INSERT INTO transactions(
-                    transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, description, source, correlation_id
-                ) VALUES (?, 1, 'active', ?, ?, ?, ?, ?, 'schedule', ?)
-                """,
-                (
-                    transaction_id,
-                    row["entry_type"],
-                    f"{row['due_date']}T12:00:00+08:00",
-                    timestamp,
-                    timestamp,
-                    row["description"],
-                    correlation_id,
-                ),
-            )
-            amount = int(row["amount_minor"])
+            # 這一次操作只有一個 correlation_id：交易列、transaction.create 稽核列與
+            # occurrence.confirm 稽核列全部共用它，這樣才串得回去。
+            correlation_id = _new_correlation_id()
+            occurred_at = f"{row['due_date']}T12:00:00+08:00"
+            money = Money(int(row["amount_minor"]), str(row["currency"]))
             if row["entry_type"] == "transfer":
-                connection.executemany(
-                    """
-                    INSERT INTO account_postings(
-                        posting_id, transaction_id, account_id, amount_minor, currency, sequence
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    [
-                        (
-                            f"post_{uuid4().hex}",
-                            transaction_id,
-                            row["account_id"],
-                            -amount,
-                            row["currency"],
-                            1,
-                        ),
-                        (
-                            f"post_{uuid4().hex}",
-                            transaction_id,
-                            row["destination_account_id"],
-                            amount,
-                            row["currency"],
-                            2,
-                        ),
-                    ],
+                self._write_transfer(
+                    connection,
+                    transaction_id=transaction_id,
+                    occurred_at=occurred_at,
+                    money=money,
+                    source_account_id=str(row["account_id"]),
+                    destination_account_id=str(row["destination_account_id"]),
+                    description=str(row["description"]),
+                    source="schedule",
+                    correlation_id=correlation_id,
                 )
             else:
-                signed = amount if row["entry_type"] == "income" else -amount
-                connection.execute(
-                    """
-                    INSERT INTO account_postings(
-                        posting_id, transaction_id, account_id, amount_minor, currency, sequence
-                    ) VALUES (?, ?, ?, ?, ?, 1)
-                    """,
-                    (
-                        f"post_{uuid4().hex}",
-                        transaction_id,
-                        row["account_id"],
-                        signed,
-                        row["currency"],
-                    ),
+                self._write_transaction(
+                    connection,
+                    transaction_id=transaction_id,
+                    entry_type=str(row["entry_type"]),
+                    occurred_at=occurred_at,
+                    money=money,
+                    account_id=str(row["account_id"]),
+                    category_id=str(row["category_id"]),
+                    description=str(row["description"]),
+                    source="schedule",
+                    correlation_id=correlation_id,
                 )
-                connection.execute(
-                    """
-                    INSERT INTO category_allocations(
-                        allocation_id, transaction_id, category_id, amount_minor, sequence
-                    ) VALUES (?, ?, ?, ?, 1)
-                    """,
-                    (f"alloc_{uuid4().hex}", transaction_id, row["category_id"], amount),
-                )
-            _refresh_fts(connection, transaction_id)
             connection.execute(
                 """
                 UPDATE scheduled_occurrences
                 SET status = 'confirmed', confirmed_transaction_id = ?, updated_at = ?
                 WHERE occurrence_id = ?
                 """,
-                (transaction_id, timestamp, occurrence_id),
+                (transaction_id, now_iso(), occurrence_id),
             )
-            _audit(
+            self._audit(
                 connection,
-                "occurrence.confirm",
-                "scheduled_occurrence",
-                occurrence_id,
-                {"transaction_id": transaction_id},
+                correlation_id=correlation_id,
+                action="occurrence.confirm",
+                entity_type="scheduled_occurrence",
+                entity_id=occurrence_id,
+                details={"transaction_id": transaction_id},
             )
         return transaction_id
 
@@ -437,12 +428,13 @@ class AutomationStore:
             ).rowcount
             if changed == 0:
                 raise ValueError("OCCURRENCE_NOT_PENDING")
-            _audit(
+            self._audit(
                 connection,
-                "occurrence.skip",
-                "scheduled_occurrence",
-                occurrence_id,
-                {},
+                correlation_id=_new_correlation_id(),
+                action="occurrence.skip",
+                entity_type="scheduled_occurrence",
+                entity_id=occurrence_id,
+                details={},
             )
 
     @staticmethod
@@ -527,63 +519,3 @@ def _occurrence_invalid_reason(connection: sqlite3.Connection, row: sqlite3.Row)
         if category is None or category["status"] != "active":
             return "CATEGORY_NOT_ACTIVE"
     return None
-
-
-def _refresh_fts(connection: sqlite3.Connection, transaction_id: str) -> None:
-    row = connection.execute(
-        """
-        SELECT t.description,
-               COALESCE(GROUP_CONCAT(DISTINCT c.name), '') || ' ' ||
-               COALESCE(GROUP_CONCAT(DISTINCT pc.name), '') AS category_names,
-               COALESCE(GROUP_CONCAT(DISTINCT a.name), '') AS account_names
-        FROM transactions t
-        LEFT JOIN category_allocations ca ON ca.transaction_id = t.transaction_id
-        LEFT JOIN categories c ON c.category_id = ca.category_id
-        LEFT JOIN categories pc ON pc.category_id = c.parent_id
-        LEFT JOIN account_postings p ON p.transaction_id = t.transaction_id
-        LEFT JOIN accounts a ON a.account_id = p.account_id
-        WHERE t.transaction_id = ?
-        GROUP BY t.transaction_id
-        """,
-        (transaction_id,),
-    ).fetchone()
-    if row is None:
-        return
-    connection.execute(
-        """
-        INSERT INTO transaction_fts(transaction_id, description, category, account)
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            transaction_id,
-            row["description"],
-            row["category_names"],
-            row["account_names"],
-        ),
-    )
-
-
-def _audit(
-    connection: sqlite3.Connection,
-    action: str,
-    entity_type: str,
-    entity_id: str,
-    details: dict[str, object],
-) -> None:
-    connection.execute(
-        """
-        INSERT INTO audit_events(
-            audit_id, occurred_at, correlation_id, action,
-            entity_type, entity_id, result, details_json
-        ) VALUES (?, ?, ?, ?, ?, ?, 'success', ?)
-        """,
-        (
-            f"aud_{uuid4().hex}",
-            now_iso(),
-            f"corr_{uuid4().hex}",
-            action,
-            entity_type,
-            entity_id,
-            json.dumps(details, ensure_ascii=False, sort_keys=True),
-        ),
-    )

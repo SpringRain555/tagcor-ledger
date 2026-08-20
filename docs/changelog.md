@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.14.1 - 交易只剩一個寫入點
+
+架構檢視找到的一塊沒收乾淨的東西，以及它已經造成的一個實際缺陷。
+
+**`infrastructure/automation_store.py` 是唯一不在 `stores/` 底下、也不是 `LedgerStore`
+一部分的 store。** 它的 `confirm_occurrence` 自己重寫了一份「建立交易」——
+transactions 列 ＋ postings ＋ allocation ＋ FTS，約 70 行。
+
+當初那樣寫是有理由的：確認入帳要在**同一個 SQLite transaction** 內建交易並把那一期標成
+`confirmed`（否則會出現「狀態是 confirmed 但交易沒建出來」），而
+`create_transaction()` 會自己開一個 transaction，塞不進外層。**錯的不是那個取捨，
+是停在那裡** —— 兩份實作放著不動就會各自漂，而它們真的漂了：
+
+- 兩份 `_refresh_fts` 的 SQL 一字不差，但**只有一份會先 `DELETE`**。
+- 兩份 `_audit` **只有一份收 `correlation_id`**，另一份自己 `uuid4()` 生一個新的。
+
+### 修好的缺陷
+
+**`occurrence.confirm` 的稽核列與它建立的交易帶著兩個不相干的 `correlation_id`。**
+那一欄存在的唯一目的就是把同一次操作在不同表留下的列串起來 —— 拿著交易查稽核查不到，
+拿著稽核查交易也查不到。現在確認入帳的三張表（`transactions`、`scheduled_occurrences`、
+`audit_events`）共用同一個。
+
+順帶：定期收支確認出來的交易現在也會留下 `transaction.create` 稽核列，與手動記帳一致。
+
+### 做法：改簽章，不是選一邊
+
+共用的部分抽成 `StoreBase._write_transaction()` / `_write_transfer()`，它們**收
+`connection` 而不是自己開**。「就寫這一筆」的呼叫者自己包一層 transaction，
+「建交易＋改狀態」的呼叫者直接傳自己的進去 —— 兩種情境同一份實作，原子性也保住了。
+
+`replace_transfer` 那第三份寫入路徑一併收編（多一個 `replaces_transaction_id` 參數）。
+`automation_store.py` 搬到 `stores/automation.py` 並成為 `LedgerStore` 的第六個聚合；
+`AutomationService` 的簽章改成跟其他 service 一樣收一個可選的 store（以前自己 new 一個，
+所以 controller 沒辦法分享，`initialize_database` 也多跑一次）。
+
+**淨減 74 行**（`automation.py` 562→487、`transactions.py` 406→280、`base.py` 211→338）。
+
+### 順手補上一條從來沒被測過的行為
+
+注入驗證時把 `_refresh_fts` 的 `DELETE` 拿掉，預期會紅 —— 結果 **128 個測試照樣全綠**。
+`transaction_fts` 是另一張表，少了 `DELETE` 就會留下過期索引，症狀是**改過備註的交易
+用舊關鍵字還搜得到**，而且每改一次多長一列。這個行為從專案有 FTS 那天起就沒有測過。
+
+補了 `test_editing_a_transaction_leaves_no_stale_row_in_the_search_index`，再跑一次注入
+就紅了，訊息正好是使用者會看到的症狀。
+
+**注入之後沒有變紅，不是「這段程式不重要」，是「這裡沒有測試」。**
+
+### 新的守門（各注入驗證過會紅）
+
+- `test_only_one_module_writes_a_transaction` —— `transactions`、`transaction_fts`、
+  `audit_events` 各只能有一個寫入點（`migrations.py` 除外，重建索引是 schema 演進）。
+- `test_every_store_lives_in_the_stores_package` —— store 一律放 `infrastructure/stores/`。
+- `test_confirming_an_occurrence_shares_one_correlation_id_with_its_transaction`
+- `test_confirming_an_occurrence_goes_through_the_same_transaction_writer`
+
 ## 0.14.0 - UI 結構重整
 
 **這一版沒有新的帳務功能。** 八個症狀有同一個成因：這個專案從來沒有寫下

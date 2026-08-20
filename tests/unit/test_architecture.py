@@ -33,8 +33,8 @@ SQL_PATTERNS = [
 # 但一個檔案長到這個地步時，值得停下來問「它是不是裝了兩件事」。
 #
 # 門檻怎麼來的：2026-08 拆檔前 `main_window_phase12.py` 是 2,114 行、
-# `sqlite_store.py` 是 1,381 行，兩個都是無聲長大的。拆完之後最大的檔案是 589 行
-# （`automation_store.py`，這次沒動它），所以 700 留了一點餘裕又遠低於出事的量級。
+# `sqlite_store.py` 是 1,381 行，兩個都是無聲長大的。拆完之後最大的檔案是 589 行，
+# 所以 700 留了一點餘裕又遠低於出事的量級。目前最大的是 `application/deposits.py`。
 MAX_MODULE_LINES = 700
 
 
@@ -123,6 +123,90 @@ def test_nothing_below_the_ui_imports_the_ui() -> None:
             offenders.append(f"  {path.relative_to(PROJECT_ROOT)}")
     if offenders:
         pytest.fail("依賴方向只能由外往內，ui 不得被下層 import：\n" + "\n".join(offenders))
+
+
+# 「一筆交易長什麼樣」只能有一個地方說了算。key 是那段 SQL 的特徵，
+# value 是**唯一**允許寫它的模組（相對 SOURCE_ROOT）。三者都在 `stores/base.py`：
+# 交易列、FTS 索引與稽核列是同一次寫入的三個部分，拆開放就會像以前那樣各自分岔。
+SINGLE_WRITER_TABLES = {
+    "INSERT INTO transactions(": "infrastructure/stores/base.py",
+    "INSERT INTO transaction_fts(": "infrastructure/stores/base.py",
+    "INSERT INTO audit_events(": "infrastructure/stores/base.py",
+}
+
+# migration 會在建表與改表時重建 FTS 索引（v5 拿掉 payee 欄位之後就重灌了一次）。
+# 那是 schema 演進，不是執行期的寫入路徑，兩者不該混為一談。
+SINGLE_WRITER_EXEMPT = {"infrastructure/migrations.py"}
+
+
+def test_only_one_module_writes_a_transaction() -> None:
+    """交易、FTS 索引與稽核列各只有一個寫入點。
+
+    2026-08 之前有兩個：`automation_store.py` 自己重寫了一份「建立交易」
+    —— transactions 列 ＋ postings ＋ allocation ＋ FTS，約 70 行。代價不是重複，
+    是**分岔**：兩份 `_refresh_fts` 的 SQL 一字不差，但只有一份會先 `DELETE`；
+    兩份 `_audit` 只有一份收 `correlation_id`，另一份自己 `uuid4()` 生一個新的，
+    於是 `occurrence.confirm` 的稽核列與它建立的交易串不起來。
+
+    **這條守門比「不要複製貼上」有用的地方在於它擋的是後果**：schema 改一次要改
+    幾個地方，答案必須是一。
+    """
+    offenders: list[str] = []
+    seen = 0
+    for path in _modules("infrastructure"):
+        relative = path.relative_to(SOURCE_ROOT).as_posix()
+        if relative in SINGLE_WRITER_EXEMPT:
+            continue
+        source = path.read_text(encoding="utf-8")
+        for needle, owner in SINGLE_WRITER_TABLES.items():
+            if needle not in source:
+                continue
+            seen += 1
+            if relative != owner:
+                offenders.append(f"  {relative} 寫了 {needle.rstrip('(')} —— 只有 {owner} 可以")
+    assert seen >= len(SINGLE_WRITER_TABLES), (
+        f"連正主都沒掃到（只找到 {seen} 處），比對字串或掃描路徑寫錯了"
+    )
+    if offenders:
+        pytest.fail(
+            "這些表只能有一個寫入點：\n"
+            + "\n".join(offenders)
+            + "\n要寫交易就呼叫 StoreBase 的共用寫入器，不要再開一條路。"
+        )
+
+
+def test_every_store_lives_in_the_stores_package() -> None:
+    """store 一律放在 `infrastructure/stores/`，不要散在 `infrastructure/` 根目錄。
+
+    `automation_store.py` 曾經是唯一的例外，而它同時也是唯一一個沒有被
+    `LedgerStore` 組起來、自己重寫建交易路徑的 store。**位置跑掉與行為跑掉是同一件事**
+    —— 沒有跟兄弟放在一起的東西，也不會跟兄弟用同一套做法。
+    """
+    # `LedgerStore` 是刻意的例外：它不是聚合，只負責把聚合組起來。
+    allowed_outside = {"infrastructure/sqlite_store.py": {"LedgerStore"}}
+
+    found: list[str] = []
+    strays: list[str] = []
+    for path in _modules("infrastructure"):
+        relative = path.relative_to(SOURCE_ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef) or not node.name.endswith("Store"):
+                continue
+            found.append(f"{relative}::{node.name}")
+            if path.parent.name == "stores":
+                continue
+            if node.name in allowed_outside.get(relative, set()):
+                continue
+            strays.append(f"  {relative}::{node.name}")
+
+    assert len(found) >= 6, f"掃描路徑寫錯了，只找到 {found}"
+    if strays:
+        pytest.fail(
+            "store 一律放在 infrastructure/stores/：\n"
+            + "\n".join(strays)
+            + "\n（唯一例外是 sqlite_store.py 的 LedgerStore，它只負責組裝。）"
+        )
 
 
 def test_ui_layer_contains_no_sql() -> None:

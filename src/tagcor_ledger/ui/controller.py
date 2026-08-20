@@ -62,7 +62,7 @@ class LedgerController:
         self.accounts = AccountService(self.paths, self.store)
         self.categories = CategoryService(self.paths, self.store)
         self.settings = SettingsService(self.paths)
-        self.automation = AutomationService(self.paths)
+        self.automation = AutomationService(self.paths, self.store)
         self.balance = BalanceSnapshotService(self.paths, self.store)
         self.maintenance = MaintenanceService(self.paths)
         self.diagnostics = DiagnosticsService(self.paths)

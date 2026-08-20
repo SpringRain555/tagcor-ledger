@@ -45,8 +45,8 @@ src/tagcor_ledger/
 │   ├── migrations.py   v1 → v7 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
-│   ├── stores/         base ＋ accounts／categories／transactions／balance／deposits
-│   ├── automation_store.py  模板／定期收支／待確認 ← **唯一不在 stores/ 底下的 store**
+│   ├── stores/         base ＋ accounts／categories／transactions／balance／
+│   │                   deposits／automation
 │   ├── maintenance.py  備份、驗證、還原、重製、CSV 匯出
 │   └── clock.py        台北時區的「今天」
 ├── ui/
@@ -62,18 +62,32 @@ src/tagcor_ledger/
                         logging_setup、single_instance、startup、resources
 ```
 
-### 兩件跟目錄結構有關的事
+### 交易只有一個寫入點
 
-**`LedgerStore` 用繼承把 `stores/` 底下五個聚合組起來，不是委派。**
-理由寫在 `sqlite_store.py` 的 module docstring：五個 store 共用同一份 `AppPaths` 與
+**`LedgerStore` 用繼承把 `stores/` 底下六個聚合組起來，不是委派。**
+理由寫在 `sqlite_store.py` 的 module docstring：六個 store 共用同一份 `AppPaths` 與
 同一套「每次呼叫自己開連線」的模型，對外一直是單一物件；用繼承組裝時拆檔只是
 「這個 `def` 放在哪個檔案」，換成委派要手寫三十幾個轉發方法。
 
-**`AutomationStore` 是例外，而且是還沒收乾淨的例外。** 它不是 `LedgerStore` 的一部分
-（`AutomationService` 直接持有它），檔案也還留在 `infrastructure/` 根目錄而不是
-`stores/`。它一個檔案裝三個聚合（模板、定期收支、待確認），562 行。
-`AGENTS.md` 的規則是「新增 store 方法放在對應的 `infrastructure/stores/<聚合>.py`」——
-**這個檔案是那條規則寫下來之前就存在的，不是它的反例。**
+**「一筆交易長什麼樣」的知識集中在 `StoreBase._write_transaction()` /
+`_write_transfer()`。** 它們寫 transactions 一列、posting（轉帳兩列）、allocation、
+FTS 索引與稽核列，然後就結束 —— **收 `connection`，不自己開 transaction。**
+
+那個簽章是重點。有兩種呼叫情境：
+
+| 情境 | 誰 | 為什麼 |
+|---|---|---|
+| 「就寫這一筆」 | `TransactionStore.create_transaction()` | 自己開一個 transaction 包住寫入器 |
+| 「建交易 ＋ 改別的表的狀態」 | `AutomationStore.confirm_occurrence()` | 兩件事必須同一個 transaction，否則會出現「狀態是 confirmed 但交易沒建出來」 |
+
+2026-08-21 之前 `AutomationStore` 站在 `stores/` 外面，也**自己重寫了一份寫入路徑**
+（約 70 行），原因就是舊的 `create_transaction()` 會自己開 transaction、塞不進外層。
+代價不是重複而是**分岔**：兩份 `_refresh_fts` 的 SQL 一字不差，只有一份會先 `DELETE`；
+兩份 `_audit` 只有一份收 `correlation_id`。詳情見 [失敗紀錄](../lessons.md)。
+
+現在 `transactions`、`transaction_fts`、`audit_events` **各只有一個寫入點**，
+由 `test_only_one_module_writes_a_transaction` 守著（`migrations.py` 除外 ——
+它重建索引是 schema 演進，不是執行期的寫入路徑）。
 
 ## 頁面之間怎麼連動
 
@@ -95,6 +109,8 @@ src/tagcor_ledger/
 | `test_only_the_ui_layer_knows_about_qt` | 只有 `ui/` 可以 import PySide6 |
 | `test_nothing_below_the_ui_imports_the_ui` | 依賴方向只能由外往內 |
 | `test_ui_layer_contains_no_sql` | `ui/` 的字串常數不得出現 SQL |
+| `test_only_one_module_writes_a_transaction` | 交易、FTS 索引與稽核列各只有一個寫入點 |
+| `test_every_store_lives_in_the_stores_package` | store 一律放在 `infrastructure/stores/` |
 | `test_no_module_grows_back_into_a_monolith` | 單一模組不得超過 700 行 |
 | `test_extractor_separates_documentation_from_values` | **陽性對照**：純字串陳述算文件、不算值 |
 | `test_ui_does_not_use_retired_wording` | `ui/` 的字串常數不得出現已淘汰的 UI 用詞 |

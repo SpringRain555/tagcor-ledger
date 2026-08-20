@@ -16,6 +16,70 @@
 
 ---
 
+## 2026-08-21 一份實作放錯地方，久了它的行為就跟正本不一樣了
+
+**情境**：`infrastructure/automation_store.py` 是唯一不在 `stores/` 底下、也不是
+`LedgerStore` 一部分的 store。檔案位置看起來只是整齊問題。
+
+**做了什麼**：它的 `confirm_occurrence` 要在**同一個 SQLite transaction** 內做兩件事
+——建立交易、把那一期標成 `confirmed`。而 `TransactionStore.create_transaction()`
+會自己開一個 transaction，塞不進外層。於是當時的做法是**自己重寫一份寫入路徑**：
+transactions 列 ＋ postings ＋ allocation ＋ FTS，約 70 行。
+
+**為什麼失敗**：那個取捨在當下是合理的（不能為了共用而破壞原子性），錯的是**停在那裡**。
+兩份實作放著不動，就會各自漂：
+
+| | `stores/base.py` | `automation_store.py` |
+|---|---|---|
+| `_refresh_fts` | 25 行 SQL **一字不差**，先 `DELETE` 再 `INSERT` | 同樣 25 行，**只有 `INSERT`** |
+| `_audit` | `correlation_id` 是必填參數 | **自己 `uuid4()` 生一個新的** |
+
+後果是 `occurrence.confirm` 的稽核列與它建立的那筆交易帶著**兩個不相干的
+`correlation_id`** —— 而那一欄存在的唯一目的就是把同一次操作串起來。
+
+**真正的解法是改簽章，不是選一邊。** 共用的部分抽成
+`StoreBase._write_transaction()` / `_write_transfer()`，它們**收 `connection`
+而不是自己開** —— 「就寫這一筆」的呼叫者自己包一層 transaction，「建交易＋改狀態」
+的呼叫者直接傳自己的進去。兩種情境同一份實作，原子性也保住了。
+`replace_transfer` 那第三份寫入路徑一併收編（多一個 `replaces_transaction_id` 參數）。
+淨減 74 行。
+
+**結論**：`transactions`、`transaction_fts`、`audit_events` 各只有一個寫入點，由
+`test_only_one_module_writes_a_transaction` 守著；store 一律放 `stores/`，由
+`test_every_store_lives_in_the_stores_package` 守著。**位置跑掉與行為跑掉是同一件事**
+——沒有跟兄弟放在一起的東西，也不會跟兄弟用同一套做法。
+
+**不要再做**：發現「共用會破壞某個保證」時，不要直接複製一份了事。**先問那個保證是被
+什麼擋住的** —— 這次是「函式自己開 transaction」，把它改成收 `connection` 就同時成立了。
+複製出去的那一份不會有人記得要同步。
+
+---
+
+## 2026-08-21 把 `DELETE` 拿掉，整包測試照樣全綠
+
+**情境**：上面那筆的注入驗證。要證明「`_refresh_fts` 少一個 `DELETE`」是真的有害，
+所以把 `stores/base.py` 的那一行刪掉，跑整包 integration。
+
+**做了什麼**：預期會紅。結果 **128 passed**。
+
+**為什麼失敗**：`transaction_fts` 是另一張表，不會因為 `transactions.description` 改了
+就自己跟著改。少了 `DELETE`，舊索引留在原地 —— 症狀是「改過備註的交易，用**舊**關鍵字
+還搜得到」，而且每改一次就多長一列。**這個行為從專案有 FTS 那天起就沒有被測過**，
+所以那一行 `DELETE` 一直是靠寫的人記得，不是靠任何東西守著。
+
+值得注意的是發現的時機：這條缺口不是「讀程式讀出來的」，是**注入驗證沒有變紅**逼出來的。
+如果當時看到綠燈就當作「那行不重要」，會直接把它刪掉。
+
+**結論**：補 `test_editing_a_transaction_leaves_no_stale_row_in_the_search_index` ——
+改備註之後舊關鍵字搜不到、新關鍵字搜得到，而且 FTS 裡**只有一列**。
+再跑一次注入，這次紅了，訊息正好是使用者會看到的症狀：搜「舊備註」回傳一筆
+description 是「新備註」的交易。
+
+**不要再做**：注入之後沒有變紅，**不要當成「這段程式不重要」，要當成「這裡沒有測試」**。
+兩者長得一模一樣，而結論完全相反。
+
+---
+
 ## 2026-08-20 用「程度差異」讓一個字看起來不能點，失敗兩次
 
 **情境**：側邊欄要把八個項目分成「每天用」與「設定與查閱」兩組，於是把組名做成清單裡

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import uuid4
 
 from tagcor_ledger.domain.models import TransactionFilter, TransactionRecord
 from tagcor_ledger.domain.money import Money
@@ -34,53 +33,18 @@ class TransactionStore(StoreBase):
         source: str,
         correlation_id: str,
     ) -> TransactionRecord:
-        timestamp = now_iso()
-        posting_amount = money.amount_minor if entry_type == "income" else -money.amount_minor
         with database_transaction(self.paths.database_path) as connection:
-            self._require_active_account(connection, account_id, money.currency)
-            self._require_active_category(connection, category_id)
-            connection.execute(
-                """
-                INSERT INTO transactions(
-                    transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, description, source, correlation_id
-                ) VALUES (?, 1, 'active', ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    transaction_id,
-                    entry_type,
-                    occurred_at,
-                    timestamp,
-                    timestamp,
-                    description.strip(),
-                    source,
-                    correlation_id,
-                ),
-            )
-            connection.execute(
-                """
-                INSERT INTO account_postings(
-                    posting_id, transaction_id, account_id, amount_minor, currency, sequence
-                ) VALUES (?, ?, ?, ?, ?, 1)
-                """,
-                (f"post_{uuid4().hex}", transaction_id, account_id, posting_amount, money.currency),
-            )
-            connection.execute(
-                """
-                INSERT INTO category_allocations(
-                    allocation_id, transaction_id, category_id, amount_minor, sequence
-                ) VALUES (?, ?, ?, ?, 1)
-                """,
-                (f"alloc_{uuid4().hex}", transaction_id, category_id, money.amount_minor),
-            )
-            self._refresh_fts(connection, transaction_id)
-            self._audit(
+            self._write_transaction(
                 connection,
+                transaction_id=transaction_id,
+                entry_type=entry_type,
+                occurred_at=occurred_at,
+                money=money,
+                account_id=account_id,
+                category_id=category_id,
+                description=description,
+                source=source,
                 correlation_id=correlation_id,
-                action="transaction.create",
-                entity_type="transaction",
-                entity_id=transaction_id,
-                details={"entry_type": entry_type, "amount_minor": money.amount_minor},
             )
         return self.get_transaction(transaction_id)
 
@@ -95,65 +59,17 @@ class TransactionStore(StoreBase):
         description: str,
         correlation_id: str,
     ) -> TransactionRecord:
-        if source_account_id == destination_account_id:
-            raise ValueError("TRANSFER_SAME_ACCOUNT")
-        timestamp = now_iso()
         with database_transaction(self.paths.database_path) as connection:
-            self._require_active_account(connection, source_account_id, money.currency)
-            self._require_active_account(connection, destination_account_id, money.currency)
-            connection.execute(
-                """
-                INSERT INTO transactions(
-                    transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, description, source, correlation_id
-                ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, 'manual', ?)
-                """,
-                (
-                    transaction_id,
-                    occurred_at,
-                    timestamp,
-                    timestamp,
-                    description.strip(),
-                    correlation_id,
-                ),
-            )
-            connection.executemany(
-                """
-                INSERT INTO account_postings(
-                    posting_id, transaction_id, account_id, amount_minor, currency, sequence
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        f"post_{uuid4().hex}",
-                        transaction_id,
-                        source_account_id,
-                        -money.amount_minor,
-                        money.currency,
-                        1,
-                    ),
-                    (
-                        f"post_{uuid4().hex}",
-                        transaction_id,
-                        destination_account_id,
-                        money.amount_minor,
-                        money.currency,
-                        2,
-                    ),
-                ],
-            )
-            self._refresh_fts(connection, transaction_id)
-            self._audit(
+            self._write_transfer(
                 connection,
+                transaction_id=transaction_id,
+                occurred_at=occurred_at,
+                money=money,
+                source_account_id=source_account_id,
+                destination_account_id=destination_account_id,
+                description=description,
+                source="manual",
                 correlation_id=correlation_id,
-                action="transaction.transfer",
-                entity_type="transaction",
-                entity_id=transaction_id,
-                details={
-                    "source_account_id": source_account_id,
-                    "destination_account_id": destination_account_id,
-                    "amount_minor": money.amount_minor,
-                },
             )
         return self.get_transaction(transaction_id)
 
@@ -183,51 +99,19 @@ class TransactionStore(StoreBase):
                 raise NotFoundError("TRANSFER_NOT_FOUND")
             if original["status"] != "active":
                 raise ValueError("TRANSFER_NOT_ACTIVE")
-            self._require_active_account(connection, source_account_id, money.currency)
-            self._require_active_account(connection, destination_account_id, money.currency)
-            connection.execute(
-                """
-                INSERT INTO transactions(
-                    transaction_id, revision, status, entry_type, occurred_at,
-                    recorded_at, updated_at, description, source, correlation_id,
-                    replaces_transaction_id
-                ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, 'manual', ?, ?)
-                """,
-                (
-                    new_transaction_id,
-                    occurred_at,
-                    timestamp,
-                    timestamp,
-                    description.strip(),
-                    correlation_id,
-                    original_transaction_id,
-                ),
+            self._write_transfer(
+                connection,
+                transaction_id=new_transaction_id,
+                occurred_at=occurred_at,
+                money=money,
+                source_account_id=source_account_id,
+                destination_account_id=destination_account_id,
+                description=description,
+                source="manual",
+                correlation_id=correlation_id,
+                replaces_transaction_id=original_transaction_id,
             )
-            connection.executemany(
-                """
-                INSERT INTO account_postings(
-                    posting_id, transaction_id, account_id, amount_minor, currency, sequence
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        f"post_{uuid4().hex}",
-                        new_transaction_id,
-                        source_account_id,
-                        -money.amount_minor,
-                        money.currency,
-                        1,
-                    ),
-                    (
-                        f"post_{uuid4().hex}",
-                        new_transaction_id,
-                        destination_account_id,
-                        money.amount_minor,
-                        money.currency,
-                        2,
-                    ),
-                ],
-            )
+            # 建新的與作廢舊的在同一個 transaction 內 —— 不會出現兩筆都有效或兩筆都沒有。
             connection.execute(
                 """
                 UPDATE transactions
@@ -235,15 +119,6 @@ class TransactionStore(StoreBase):
                 WHERE transaction_id = ?
                 """,
                 (timestamp, original_transaction_id),
-            )
-            self._refresh_fts(connection, new_transaction_id)
-            self._audit(
-                connection,
-                correlation_id=correlation_id,
-                action="transaction.transfer_replace",
-                entity_type="transaction",
-                entity_id=new_transaction_id,
-                details={"replaces_transaction_id": original_transaction_id},
             )
         return self.get_transaction(new_transaction_id)
 

@@ -126,6 +126,173 @@ class StoreBase:
         if row is None or row["status"] != "active":
             raise ValueError("CATEGORY_NOT_ACTIVE")
 
+    @classmethod
+    def _write_transaction(
+        cls,
+        connection: sqlite3.Connection,
+        *,
+        transaction_id: str,
+        entry_type: str,
+        occurred_at: str,
+        money: Money,
+        account_id: str,
+        category_id: str,
+        description: str,
+        source: str,
+        correlation_id: str,
+    ) -> None:
+        """在**呼叫者的 transaction 內**寫出一筆收入或支出。
+
+        「一筆交易長什麼樣」只能有一個地方說了算：transactions 一列、posting 一列
+        （支出為負）、allocation 一列，然後重建 FTS 索引與稽核。
+
+        **為什麼收 `connection` 而不是自己開一個？** 因為有兩種呼叫情境：
+        `create_transaction()` 是「就寫這一筆」，而定期收支的確認是「建交易 ＋ 把那一期
+        標成已確認」，兩件事必須在同一個 SQLite transaction 內完成 —— 不然會出現
+        「狀態變成 confirmed 但交易沒建出來」。自己開連線就做不到後者，而那正是
+        `automation_store` 當初自己另寫一份的原因。收 `connection` 兩種情境都成立。
+        """
+        timestamp = now_iso()
+        posting_amount = money.amount_minor if entry_type == "income" else -money.amount_minor
+        cls._require_active_account(connection, account_id, money.currency)
+        cls._require_active_category(connection, category_id)
+        connection.execute(
+            """
+            INSERT INTO transactions(
+                transaction_id, revision, status, entry_type, occurred_at,
+                recorded_at, updated_at, description, source, correlation_id
+            ) VALUES (?, 1, 'active', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                transaction_id,
+                entry_type,
+                occurred_at,
+                timestamp,
+                timestamp,
+                description.strip(),
+                source,
+                correlation_id,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO account_postings(
+                posting_id, transaction_id, account_id, amount_minor, currency, sequence
+            ) VALUES (?, ?, ?, ?, ?, 1)
+            """,
+            (f"post_{uuid4().hex}", transaction_id, account_id, posting_amount, money.currency),
+        )
+        connection.execute(
+            """
+            INSERT INTO category_allocations(
+                allocation_id, transaction_id, category_id, amount_minor, sequence
+            ) VALUES (?, ?, ?, ?, 1)
+            """,
+            (f"alloc_{uuid4().hex}", transaction_id, category_id, money.amount_minor),
+        )
+        cls._refresh_fts(connection, transaction_id)
+        cls._audit(
+            connection,
+            correlation_id=correlation_id,
+            action="transaction.create",
+            entity_type="transaction",
+            entity_id=transaction_id,
+            details={"entry_type": entry_type, "amount_minor": money.amount_minor},
+        )
+
+    @classmethod
+    def _write_transfer(
+        cls,
+        connection: sqlite3.Connection,
+        *,
+        transaction_id: str,
+        occurred_at: str,
+        money: Money,
+        source_account_id: str,
+        destination_account_id: str,
+        description: str,
+        source: str,
+        correlation_id: str,
+        replaces_transaction_id: str | None = None,
+    ) -> None:
+        """在**呼叫者的 transaction 內**寫出一筆轉帳：一筆交易、兩筆 posting。
+
+        來源為負（`sequence = 1`）、目的為正（`sequence = 2`）。順序是有意義的 ——
+        `_transaction_select()` 靠 `sequence` 分辨哪一邊是來源。
+
+        `replaces_transaction_id` 給替換轉帳用（轉帳不能原地編輯，只能建新的、作廢舊的）。
+        作廢舊的那一步留在呼叫端 —— 這裡只負責「新的那一筆長什麼樣」。
+        """
+        if source_account_id == destination_account_id:
+            raise ValueError("TRANSFER_SAME_ACCOUNT")
+        timestamp = now_iso()
+        cls._require_active_account(connection, source_account_id, money.currency)
+        cls._require_active_account(connection, destination_account_id, money.currency)
+        connection.execute(
+            """
+            INSERT INTO transactions(
+                transaction_id, revision, status, entry_type, occurred_at,
+                recorded_at, updated_at, description, source, correlation_id,
+                replaces_transaction_id
+            ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                transaction_id,
+                occurred_at,
+                timestamp,
+                timestamp,
+                description.strip(),
+                source,
+                correlation_id,
+                replaces_transaction_id,
+            ),
+        )
+        connection.executemany(
+            """
+            INSERT INTO account_postings(
+                posting_id, transaction_id, account_id, amount_minor, currency, sequence
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    f"post_{uuid4().hex}",
+                    transaction_id,
+                    source_account_id,
+                    -money.amount_minor,
+                    money.currency,
+                    1,
+                ),
+                (
+                    f"post_{uuid4().hex}",
+                    transaction_id,
+                    destination_account_id,
+                    money.amount_minor,
+                    money.currency,
+                    2,
+                ),
+            ],
+        )
+        cls._refresh_fts(connection, transaction_id)
+        details: dict[str, Any] = {
+            "source_account_id": source_account_id,
+            "destination_account_id": destination_account_id,
+            "amount_minor": money.amount_minor,
+        }
+        if replaces_transaction_id is not None:
+            details["replaces_transaction_id"] = replaces_transaction_id
+        cls._audit(
+            connection,
+            correlation_id=correlation_id,
+            action=(
+                "transaction.transfer"
+                if replaces_transaction_id is None
+                else "transaction.transfer_replace"
+            ),
+            entity_type="transaction",
+            entity_id=transaction_id,
+            details=details,
+        )
+
     @staticmethod
     def _refresh_fts(connection: sqlite3.Connection, transaction_id: str) -> None:
         rows = connection.execute(

@@ -15,6 +15,8 @@ from tagcor_ledger.application.transaction_service import (
     VoidTransaction,
 )
 from tagcor_ledger.domain.models import TransactionFilter
+from tagcor_ledger.domain.money import Money
+from tagcor_ledger.infrastructure.database import connect_database
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -46,6 +48,65 @@ def test_transfer_is_balanced_and_atomic(tmp_path: Path) -> None:
 
     assert AccountService(paths, store).rename(destination_id, "主要銀行").success
     assert store.list_accounts()[1].name == "主要銀行"
+
+
+def test_editing_a_transaction_leaves_no_stale_row_in_the_search_index(
+    tmp_path: Path,
+) -> None:
+    """改備註之後，**舊的字搜不到、新的字搜得到，而且只有一列**。
+
+    FTS 是另一張表，不會因為 `transactions.description` 改了就自己跟著改 —— 要靠
+    `_refresh_fts()` 先 `DELETE` 再 `INSERT`。少了那個 `DELETE`，舊索引留在原地，
+    症狀是「改過的交易用舊關鍵字還搜得到」，而且每改一次就多長一列。
+
+    這條測試是 2026-08-21 收編 `automation_store` 時補的：當時發現兩份
+    `_refresh_fts` 只有一份會 `DELETE`，而**把 `DELETE` 拿掉整包測試照樣全綠** ——
+    也就是說這個行為從來沒有被測過。
+    """
+    paths = resolve_app_paths(tmp_path / "ledger")
+    store = LedgerStore(paths)
+    created = store.create_transaction(
+        transaction_id="txn_fts",
+        entry_type="expense",
+        occurred_at="2026-06-24T12:00:00+08:00",
+        money=Money(120),
+        account_id="acct_cash",
+        category_id="cat_food_711",
+        description="舊備註",
+        source="manual",
+        correlation_id="corr_fts_1",
+    )
+
+    found, _ = store.list_transactions(limit=10, transaction_filter=TransactionFilter(search="舊備註"))
+    assert [item.transaction_id for item in found] == ["txn_fts"]
+
+    store.update_transaction(
+        transaction_id="txn_fts",
+        expected_revision=created.revision,
+        occurred_at="2026-06-24T12:00:00+08:00",
+        money=Money(120),
+        account_id="acct_cash",
+        category_id="cat_food_711",
+        description="新備註",
+        correlation_id="corr_fts_2",
+    )
+
+    stale, _ = store.list_transactions(
+        limit=10, transaction_filter=TransactionFilter(search="舊備註")
+    )
+    assert stale == [], "改過備註之後，舊關鍵字還搜得到 —— FTS 留下了過期的索引列"
+
+    fresh, _ = store.list_transactions(
+        limit=10, transaction_filter=TransactionFilter(search="新備註")
+    )
+    assert [item.transaction_id for item in fresh] == ["txn_fts"]
+
+    with connect_database(paths.database_path) as connection:
+        rows = connection.execute(
+            "SELECT COUNT(*) AS n FROM transaction_fts WHERE transaction_id = ?",
+            ("txn_fts",),
+        ).fetchone()
+    assert int(rows["n"]) == 1, "一筆交易在 FTS 裡只能有一列，改幾次都一樣"
 
 
 def test_keyset_pagination_search_and_void(tmp_path: Path) -> None:

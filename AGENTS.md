@@ -56,7 +56,8 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 
 - `domain/`：Money、帳戶、類別、交易、模板、定期收支、餘額盤點、定存模型；**不得依賴 Qt 或 SQLite**，也不得 import 其他任何一層。
 - `application/`：use case、Result、設定、備份/還原/重製協調；**不得直接寫 UI**。
-- `infrastructure/`：SQLite migration、store、backup、CSV export。store 依聚合切在 `infrastructure/stores/`，`LedgerStore` 在 `sqlite_store.py` 把五個聚合組起來。（例外：`automation_store.py` 還留在 `infrastructure/` 根目錄，是這條規則寫下來之前就存在的 —— **不要照它的樣子新增第二個**。）
+- `infrastructure/`：SQLite migration、store、backup、CSV export。**store 一律放在 `infrastructure/stores/`**，`LedgerStore` 在 `sqlite_store.py` 把六個聚合組起來（唯一的例外是 `LedgerStore` 自己，它只負責組裝）。有測試守著。
+- **「一筆交易長什麼樣」只有一個地方說了算**：`StoreBase._write_transaction()` / `_write_transfer()`。它們收 `connection` 而不是自己開，所以「就寫這一筆」與「建交易＋改別的表的狀態」兩種情境都能用同一份實作。`transactions`、`transaction_fts`、`audit_events` 三張表**只能有一個寫入點**（`stores/base.py`），`tests/unit/test_architecture.py` 會擋。要寫交易就呼叫那兩個，不要再開一條路 —— 分岔過一次，代價寫在 `docs/lessons.md`。
 - `ui/`：PySide6 視圖與 controller；**不得直接撰寫 SQL**。一個檔案一個畫面放在 `ui/pages/`，頁面之間不互相 import，跨頁連動一律集中在 `ui/main_window.py`。
 - 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔（資料庫路徑本身不能可靠地存在資料庫裡）。
 

@@ -13,12 +13,14 @@ from tagcor_ledger.domain.models import (
     ScheduledOccurrence,
     TransactionTemplate,
 )
-from tagcor_ledger.infrastructure.automation_store import AutomationStore
+from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
 class AutomationService:
-    def __init__(self, paths: AppPaths) -> None:
-        self.store = AutomationStore(paths)
+    def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
+        # 簽章跟其他 service 一樣收一個可選的 store。以前是自己 `AutomationStore(paths)`，
+        # 於是 controller 沒辦法把同一個 store 分給它，`initialize_database` 也多跑一次。
+        self.store = store or LedgerStore(paths)
 
     def list_templates(self, *, include_archived: bool = False) -> Result:
         return Result.ok(

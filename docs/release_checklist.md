@@ -25,6 +25,9 @@
   依賴方向、`ui/` 無 SQL）與 700 行模組上限。
 - 新增頁面放在 `ui/pages/`，跨頁連動只寫在 `ui/main_window.py`。
 - 新增 store 方法放在對應的 `infrastructure/stores/<聚合>.py`，不要塞回 `sqlite_store.py`。
+- **要建立交易就呼叫 `StoreBase._write_transaction()` / `_write_transfer()`**，
+  不要自己寫 `INSERT INTO transactions`。需要跟別的表同一個 transaction 時把
+  `connection` 傳進去就好 —— 那正是那兩個函式收 `connection` 而不是自己開的原因。
 
 ## Schema
 
