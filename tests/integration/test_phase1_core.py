@@ -238,7 +238,12 @@ def test_archived_accounts_and_categories_can_be_restored_with_clear_rules(
     assert categories.archive(parent).success
     restore_child = categories.restore(child)
     assert not restore_child.success
-    assert restore_child.details["reason"] == "CATEGORY_PARENT_NOT_ACTIVE"
+    # 這件事以前是 `error_code="CATEGORY_RESTORE_FAILED"` ＋
+    # `details["reason"]="CATEGORY_PARENT_NOT_ACTIVE"`，畫面上印成
+    # 「類別／項目無法恢復；…（CATEGORY_PARENT_NOT_ACTIVE）」。現在碼就是那件事本身。
+    assert restore_child.error_code == "CATEGORY_PARENT_NOT_ACTIVE"
+    assert "上層類別" in restore_child.message
+    assert "reason" not in restore_child.details
     assert categories.restore(parent).success
     assert categories.restore(child).success
 

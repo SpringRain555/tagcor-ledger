@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
+from tagcor_ledger.application.failures import failure
 from tagcor_ledger.application.result import Result, new_correlation_id
 from tagcor_ledger.domain.models import TransactionFilter, TransactionRecord
 from tagcor_ledger.domain.money import Money, MoneyError
@@ -112,17 +113,17 @@ class AddTransaction:
                 correlation_id=correlation_id,
             )
         except (MoneyError, ValueError) as exc:
-            return Result.fail(
-                _error_code(exc, "VALIDATION_FAILED"),
-                "請檢查交易內容。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="VALIDATION_FAILED",
+                fallback_message="交易內容有問題但認不出原因。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         except (sqlite3.Error, OSError) as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "交易無法儲存，資料庫未變更。",
-                details={"reason": str(exc)},
+                "交易無法儲存，資料庫未變更。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -151,17 +152,17 @@ class AddTransfer:
                 correlation_id=correlation_id,
             )
         except (MoneyError, ValueError) as exc:
-            return Result.fail(
-                _error_code(exc, "VALIDATION_FAILED"),
-                "請檢查轉帳內容。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="VALIDATION_FAILED",
+                fallback_message="轉帳內容有問題但認不出原因。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "轉帳無法儲存，兩個帳戶皆未變更。",
-                details={"reason": str(exc)},
+                "轉帳無法儲存，兩個帳戶皆未變更。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -191,17 +192,17 @@ class UpdateTransaction:
                 correlation_id=correlation_id,
             )
         except (MoneyError, ValueError, NotFoundError) as exc:
-            return Result.fail(
-                _error_code(exc, "TRANSACTION_UPDATE_FAILED"),
-                "交易無法更新。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="TRANSACTION_UPDATE_FAILED",
+                fallback_message="交易無法更新，原因認不出來。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "交易無法更新，資料庫未變更。",
-                details={"reason": str(exc)},
+                "交易無法更新，資料庫未變更。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -231,17 +232,17 @@ class ReplaceTransfer:
                 correlation_id=correlation_id,
             )
         except (MoneyError, ValueError, NotFoundError) as exc:
-            return Result.fail(
-                _error_code(exc, "TRANSFER_REPLACE_FAILED"),
-                "轉帳無法重新建立，原交易未變更。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="TRANSFER_REPLACE_FAILED",
+                fallback_message="轉帳無法重新建立，原交易未變更。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "轉帳無法重新建立，原交易未變更。",
-                details={"reason": str(exc)},
+                "轉帳無法重新建立，原交易未變更。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -256,17 +257,17 @@ class VoidTransaction:
             self.store.void_transaction(transaction_id, correlation_id)
             return Result.ok("交易已作廢。", correlation_id=correlation_id)
         except NotFoundError as exc:
-            return Result.fail(
-                "TRANSACTION_NOT_FOUND",
-                "找不到可作廢的交易。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="TRANSACTION_NOT_FOUND",
+                fallback_message="找不到可作廢的交易。請重新整理交易紀錄。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "交易無法作廢，資料庫未變更。",
-                details={"reason": str(exc)},
+                "交易無法作廢，資料庫未變更。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -307,10 +308,10 @@ class ListTransactions:
                 },
             )
         except (ValueError, sqlite3.Error) as exc:
-            return Result.fail(
-                "LIST_TRANSACTIONS_FAILED",
-                "交易列表無法載入。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="LIST_TRANSACTIONS_FAILED",
+                fallback_message="交易列表無法載入。請匯出診斷資訊回報。",
             )
 
 
@@ -368,8 +369,3 @@ def transaction_to_dict(transaction: TransactionRecord) -> dict[str, Any]:
         "correlation_id": transaction.correlation_id,
         "replaces_transaction_id": transaction.replaces_transaction_id,
     }
-
-
-def _error_code(exc: Exception, fallback: str) -> str:
-    text = str(exc).strip()
-    return text if text.isupper() and " " not in text else fallback

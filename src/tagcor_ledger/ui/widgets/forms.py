@@ -5,8 +5,11 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, cast
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, Qt
+from PySide6.QtGui import QColor, QTextCharFormat
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QCalendarWidget,
     QComboBox,
     QDateEdit,
     QDateTimeEdit,
@@ -16,7 +19,27 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.infrastructure.clock import TAIPEI
+from tagcor_ledger.ui import colors
 from tagcor_ledger.ui.widgets.layout import FORM_WIDTH
+
+CALENDAR_ROWS = 7
+"""日曆格線的列數：一列星期標題 ＋ 六列日期。**六列是上限不是常態** ——
+某些月份（1 號在週六、31 天）真的會用到第六列，少算一列就是最後一排被切掉。"""
+
+CALENDAR_ROW_PADDING = 6
+"""每一格在文字高度之外留的呼吸空間（px）。跟著字型算，不寫死列高。"""
+
+MIN_YEAR = 2000
+"""日期欄的下限。沒有下限時年份可以一路跑到 9999 —— 那不是任何人想輸入的值。"""
+
+FUTURE_YEARS = 60
+"""日期欄的上限：今年再往後幾年。
+
+**這是防手滑的護欄，不是業務規則**，所以寧可寬也不要窄 —— 上限訂得太緊會把一個
+合法的日期**無聲地夾**成別的值，那比讓年份跑到 9999 更糟。
+定存的期長最長是 600 個月（`deposits.py` 的 `setRange(1, 600)`）＝ 50 年，
+所以下限就是 50；留到 60 是給起存日本身也在未來的情況一點餘裕。
+"""
 
 
 def form_panel(form: QLayout, *, max_width: int = FORM_WIDTH) -> QWidget:
@@ -93,11 +116,85 @@ def date_field(value: QDate | None = None) -> QDateEdit:
 
     記帳需要的精度就是「哪一天」—— 午餐是 12:07 還是 12:31 不會影響任何一個數字，
     但每記一筆都要面對一個時分欄位，那是每天都要付的成本。
+
+    **每一個日期欄都必須從這裡生出來**，不要自己 `QDateEdit(...)`。底下處理的那個
+    誤觸問題是 Qt 與 QSS 交互作用的結果，繞過工廠的欄位就完全沒有被保護到 ——
+    `tests/unit/test_architecture.py` 有一條守著。
     """
     widget = QDateEdit(value or QDate.currentDate())
     widget.setCalendarPopup(True)
     widget.setDisplayFormat("yyyy/MM/dd")
+
+    # **關掉上下鍵，否則點欄位任何一處都會改掉年份。**
+    #
+    # `QStyle::SubControl` 有兩組列舉值是**同一個數字**：
+    #     SC_ComboBoxFrame     == SC_SpinBoxUp   == 0x1
+    #     SC_ComboBoxEditField == SC_SpinBoxDown == 0x2
+    #
+    # `QDateTimeEdit` 在 `calendarPopup` 模式下用 **CC_ComboBox** 做命中測試，命中結果
+    # 不是 `SC_ComboBoxArrow` 時就轉給 `QAbstractSpinBox::mousePressEvent`，而後者拿
+    # 同一個數字去比 `SC_SpinBoxUp` / `SC_SpinBoxDown`。於是：
+    #
+    # | 點在哪 | 命中回傳 | spinbox 讀成 | 結果 |
+    # |---|---|---|---|
+    # | 內距那一圈（框線與文字之間） | `SC_ComboBoxFrame` 0x1 | 上箭頭 | 年份 **+1** |
+    # | 文字上 | `SC_ComboBoxEditField` 0x2 | 下箭頭 | 年份 **−1** |
+    #
+    # 平常那一圈只有 1 px 所以碰不到，但本專案的 QSS 給輸入欄 `padding: 7px 10px`
+    # —— 那一圈變成 7～10 px，就在使用者伸手去點右邊箭頭的路徑上。
+    # 而 `displayFormat` 以 `yyyy` 開頭，`currentSection` 預設就是年，所以動到的是年份。
+    # 2026-08-21 實測：點上緣、下緣、左緣內距都是 +1，點文字正中是 −1。
+    #
+    # `QAbstractSpinBox::mousePressEvent` 在 `buttonSymbols == NoButtons` 時直接把
+    # `stepEnabled()` 當成 `StepNone`，整條路就斷了。**日曆箭頭不受影響** ——
+    # 它是 `CC_ComboBox` 畫的，也在轉交之前就先處理掉了。
+    widget.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+
+    # 鍵盤上下鍵與滾輪仍然可用，讓它們預設動「日」而不是「年」。
+    widget.setCurrentSection(QDateEdit.Section.DaySection)
+
+    today = QDate.currentDate()
+    widget.setDateRange(QDate(MIN_YEAR, 1, 1), today.addYears(FUTURE_YEARS))
+    _style_calendar(widget.calendarWidget())
     return widget
+
+
+def _style_calendar(calendar: QCalendarWidget | None) -> None:
+    """日曆彈出視窗裡 QSS 碰不到、或碰了也沒用的那幾件事。
+
+    - **週數欄拿掉。** 記帳用不到第幾週，那一欄只是雜訊。
+    - **格線拿掉**，維持整個介面「用留白分隔、不用線」的做法。
+    - **週末不上紅字。** Qt 預設把週六日畫成紅色，但在這個程式裡紅色是「支出」的意思
+      （見 `AGENTS.md` 的 UI 樣式規範）。日曆上多一抹紅只會讓那條規則變得沒有意義。
+      星期標題與日期的顏色一律走色票。
+    - **高度要放得下六列日期。** 有些月份真的會用到第六列，而 QSS 改了列高之後
+      `QCalendarPopup` 算出來的高度會少一截 —— 2026-08-21 實測最後一排被切掉 7 px。
+      這裡照字型現算，不寫死列高。
+    """
+    if calendar is None:
+        return
+    calendar.setVerticalHeaderFormat(
+        QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader
+    )
+    calendar.setGridVisible(False)
+
+    neutral = QTextCharFormat()
+    neutral.setForeground(QColor(colors.TEXT))
+    for day in (
+        Qt.DayOfWeek.Monday,
+        Qt.DayOfWeek.Tuesday,
+        Qt.DayOfWeek.Wednesday,
+        Qt.DayOfWeek.Thursday,
+        Qt.DayOfWeek.Friday,
+        Qt.DayOfWeek.Saturday,
+        Qt.DayOfWeek.Sunday,
+    ):
+        calendar.setWeekdayTextFormat(day, neutral)
+
+    navigation = calendar.findChild(QWidget, "qt_calendar_navigationbar")
+    header = navigation.sizeHint().height() if navigation is not None else 0
+    row = calendar.fontMetrics().height() + CALENDAR_ROW_PADDING
+    calendar.setMinimumHeight(header + CALENDAR_ROWS * row)
 
 
 def iso_from_date(widget: QDateEdit, *, keep_time_from: str | None = None) -> str:

@@ -1,5 +1,166 @@
 # Changelog
 
+## 0.16.0 - 錯誤訊息說中文，而且說的是真正發生的那件事
+
+0.15.0 修掉了 `CategoryService.create` 一處「一個錯誤碼代表三件事」，並記下同樣的寫法
+還有 50 處。**這一版把它們全部處理完**（實際是 51 處），外加六個 UI 直接印
+`str(exc)` 的出處（待確認頁兩處、模板對話框、維護頁三處、重製頁）。
+
+### 使用者看得到的差別
+
+| 操作 | 以前畫面上的字 | 現在 |
+|---|---|---|
+| 刪掉預設帳戶 | 帳戶無法刪除；預設帳戶或已有歷史資料的帳戶請改用封存。（`ACCOUNT_IS_DEFAULT`） | 這是預設帳戶，不能刪除。請先到「操作設定」把預設帳戶改成別的，再回來刪。 |
+| 刪掉有交易的帳戶 | （同上那一句，一字不差） | 這個帳戶已經有交易紀錄，不能刪除。請改用「封存」—— 歷史交易會留著，帳戶則不再出現在選單裡。 |
+| 金額填 `0` | 請檢查交易內容。（`Amount must be greater than zero.`） | 金額要大於 0。 |
+| 金額填 `1,200` | 請檢查交易內容。（`Amount must be a plain Decimal string without commas or exponent.`） | 金額只能填數字，不要加逗號、單位或空白。 |
+| 搬移資料夾但目標已有帳本 | 資料路徑設定無法儲存，請確認兩個路徑分開、都在資料根目錄底下且可寫入。（`TARGET_LEDGER_ALREADY_EXISTS`） | 目標資料夾裡已經有一個帳本檔了。請換一個空資料夾，或先處理掉那一份。 |
+| 還原一份被改過的備份 | `BACKUP_CHECKSUM_MISMATCH` | 這個備份的檔案內容與清單裡記的雜湊對不起來 —— 檔案在備份之後被改過或損毀了。請不要還原它，改用別的備份。 |
+
+前兩列是重點：**那是兩件不同的事、兩種不同的處理方式，以前共用一句話**，
+差別只寫在括號裡的英文碼。
+
+### 根因不是那串英文難看
+
+是**畫面上唯一講清楚失敗原因的東西只有那串英文**。中文句子太籠統，只好把底層的碼
+原封不動印出來讓人自己判斷 —— `details["reason"]` 那個括號是在補償「一個錯誤碼代表
+好幾件事」。所以順序不能顛倒：**先拆碼，才能拿掉括號**。只拿掉括號會讓訊息更糟。
+
+### 怎麼做的
+
+新增 [`application/failures.py`](../src/tagcor_ledger/application/failures.py)：
+
+- `ERROR_MESSAGES` —— 錯誤碼 → 中文說法，**一個碼的句子只寫在這一個地方**。
+- `failure(exc, fallback_code=…, fallback_message=…)` —— 寫入層丟的碼認得出來就用
+  **那個碼**與它的句子；認不出來（`sqlite3.Error` 的原文、還沒收錄的碼）才退回
+  `*_FAILED`，原文放 `details["detail"]`（**不顯示**）。
+- 情境需要不同說法時用 `overrides=`。例如恢復撞名的帳戶時，該改名的是**另外那一個**。
+
+連帶的：
+
+- `domain/money.py` 的 `MoneyError` 改帶錯誤碼而不是英文散文（`AMOUNT_NOT_POSITIVE`、
+  `AMOUNT_FORMAT_INVALID`、`CURRENCY_UNSUPPORTED`、`CURRENCY_FRACTION_UNSUPPORTED`、
+  `AMOUNT_NOT_A_STRING`）。
+- `result_message()` 不再接 `details["reason"]`，`details["reason"]` 整個廢除。
+- UI 自己 `except` 的六處（待確認頁兩處、模板對話框、維護頁三處、重製頁）改走
+  `ui/formatting.error_text()`，不再直接印 `str(exc)`。**維護頁那三處最嚴重** ——
+  還原一份壞掉的備份時，畫面上就是一句 `BACKUP_CHECKSUM_MISMATCH`。
+- `maintenance.py` 的 `raise RuntimeError(f"BACKUP_INTEGRITY_FAILED:{integrity}")`
+  拿掉後綴。有後綴就查不到表，於是又會走回「印原文」那條路。
+- 刪掉 `transaction_service.py` 與 `balance.py` 各自一份的 `_error_code()`
+  —— 同一個函式抄了兩遍，而且它只看 `text.isupper()`，不查表。
+- `application/deposits.py` 少掉兩個手寫的特例分支
+  （`if str(exc) == "DEPOSIT_CONTRACT_IN_USE"`、`except NotFoundError:` 一律當成
+  「不可編輯」）—— 有了對照表，那種「把唯一值得講清楚的失敗特別挑出來」的分支就多餘了。
+
+### 順手發現並修掉的
+
+**`AMOUNT_NEGATIVE` 永遠不會發生。** `DECIMAL_RE` 不收正負號，所以 `-5` 在格式那一關
+就退掉了，底下那個 `if allow_zero and amount < 0` 分支跑不到。刪掉分支與錯誤碼，
+`allow_zero` 現在名副其實只管 0。
+
+**改一期定存時，「這一期不存在」被講成「這一期不能改」。** store 的 UPDATE 帶
+`WHERE term_id = ? AND status = 'active'`，改到 0 列就一律丟
+`DEPOSIT_TERM_NOT_EDITABLE` —— 但 0 列有兩種原因，而它們該給的建議完全不同
+（「重新整理」對上「這一期已經產生過交易」）。現在 0 列時多問一句這一期在不在。
+**這是同一個病的第三個變種**：一個碼代表兩件事，只是這次發生在寫入層而不是應用層。
+
+**七個錯誤碼從來沒被記錄過。** `DESTINATION_ACCOUNT_NOT_ACTIVE` 與六個 `BACKUP_*`
+都是 `return` 出來再轉成例外的，`test_error_codes.py` 只掃 `raise` 的常數參數，
+所以整組漏掉 —— 而它們照樣會印到畫面上。掃描器現在也讀 `ERROR_MESSAGES` 的 key，
+文件補上一整節「備份」。
+
+### 新增的守門
+
+`tests/unit/test_failure_messages.py`：
+
+- 底層 `raise` 的每一個碼都要有中文說法（啟動階段那兩個有豁免，而豁免本身也要
+  驗證 `app/startup.py` 真的處理了它們）。
+- 對照表裡不能有沒人丟的碼。
+- 每一句都要有中文，不能是英文，也不能只是把碼抄一遍。
+- **任何地方寫 `details={"reason": …}` 就紅。** 這條最重要 —— 那是加一行就會回來的
+  錯誤，51 個出處全都是「照著上面抄」的結果。
+
+十一個修正各自做過陽性對照（把修正還原，確認對應測試會紅；還原前後各跑一次，
+確認不是碰巧）。其中一條第一版**沒有鑑別力** —— 關掉抽取器的一半路徑它照樣綠，
+是陽性對照本身跑出來才發現的，後來改成兩條路徑各驗一個只有它抽得到的句子。
+
+## 0.15.0 - 三個「畫面停在舊數字」的缺口、日期欄不再誤改年份、名冊可搜尋排序、轉帳分三種對象
+
+這一版分兩批：**先修 bug，再改版**。
+
+### 修掉的（依嚴重度）
+
+**跨頁連動掉了線，三處畫面顯示過期數字。** 三者是同一個病：動作改了帳務，但沒有人被通知。
+
+| 症狀 | 根因 |
+|---|---|
+| 從交易紀錄作廢一筆帳，餘額盤點的未解釋差額還是舊的 | `TransactionsPage` **從頭到尾沒有對外發過訊號** |
+| 在待確認按「確認入帳」，交易紀錄裡找不到那一筆 | `inbox.changed` 只接到側邊欄徽章 |
+| 「複製到記帳」把項目換成該類別的第一個 | `apply_draft` 把**父類別 id** 餵給要**項目 id** 的 `_select_category()` |
+
+`MainWindow` 多了一個 `_ledger_changed()`，記帳、交易紀錄、待確認三個來源接同一個方法
+（不是三個「差不多」的方法 —— 那份清單就是下一個會漏的地方），並刪掉從 v0.14.0 起
+就沒被接上的死碼 `_automation_changed()`。
+
+**日期欄點一下就改年份。** 根因不是 QSS 把箭頭畫歪，是 `QStyle::SubControl` 有兩組
+列舉值**數字相同**（`SC_ComboBoxFrame == SC_SpinBoxUp == 0x1`）。`QDateTimeEdit` 在
+`calendarPopup` 模式下用 CC_ComboBox 命中測試，非箭頭的結果轉給 `QAbstractSpinBox`，
+而它拿同一個數字去比 spinbox 的上下鍵 —— 點內距 +1，**點文字 −1**。
+QSS 的 `padding: 7px 10px` 把那一圈從 1 px 撐成 7～10 px，正好在伸手去點箭頭的路徑上。
+修法是 `setButtonSymbols(NoButtons)`，日曆箭頭不受影響。
+
+**日曆彈窗的日期全部顯示成「...」。** 這個症狀 2026-08-18 修過一次但沒修對：當時清的是
+view 的 padding，真正吃掉日期的是 `QTableView::item { padding: 7px 8px }` —— 日曆的日期格
+就是一個 `QTableView`。量出來格子 33x21 但文字矩形只剩 **17x7**，是**高度**不夠。
+順便補上六列日期的最小高度（最後一排本來被切掉 7 px）與星期標題的中性配色。
+
+**七個日期欄繞過 `date_field()`**（交易紀錄 2、定存 3、模板／定期收支 2），所以上面兩個
+修正本來只會修到記帳頁那一個。全部收回工廠，並加一條 AST 守門擋住下一次。
+
+其餘：轉帳兩個下拉預設同一個帳戶（新開程式選轉帳按儲存**必定**撞 `TRANSFER_SAME_ACCOUNT`）、
+修改定存合約每次都把備註寫成空字串、修改合約時起存日顯示成「今天」（那是「期」的欄位，
+合約沒有值可回填，改成整列收起來並指路到「修改所選期」）、
+「資料路徑」看不到資料根目錄（而 `PATH_OUTSIDE_DATA_ROOT` 講的正是那個值）。
+
+### 改版
+
+- **類別／項目的檢視面板**：名稱搜尋、狀態（使用中／已封存／全部）、所屬類別篩選，
+  點欄位標題排序。**全部下推到 SQL**（`CategoryTreeFilter`），連 `level` 都不再用
+  Python 濾。排序**不用** `setSortingEnabled(True)` —— 那會讓 `QTableView` 自己在
+  Python 裡排；表頭只負責可點與箭頭，真正的排序是把 `sort_key` 送回 SQL。
+  `sort_key` 只能是白名單裡的值，那是唯一一處把字串拼進 `ORDER BY` 的地方。
+  項目的搜尋**也吃類別名**：打「交通」列出交通底下的每一項。
+- **新增與重新命名改成一張表單**：以前是兩個連續的 `QInputDialog`，取消第二個會把
+  第一個輸入的東西靜靜丟掉。新的 `SimpleFormDialog` 在必填欄空白時停用「確定」。
+  「上層類別」改成**「所屬類別」**（列表表頭一直都是這個字），「名稱」改成
+  「帳戶名稱」／「類別名稱」／「項目名稱」。
+- **轉帳分三種對象**：我的帳戶之間／別人轉入／轉出給別人。**不新增 `entry_type`** ——
+  對外的兩種存成收入與支出，因為錢真的離開或進入了總資產。理由與被否決的兩個替代方案
+  （新增列舉值、建「外部」虛擬帳戶）寫在 [ADR-0010](decisions/ADR-0010-external-transfers.md)。
+- **文件加上 10 張 mermaid 圖**：分層與交易寫入路徑、四張狀態機、頁面地圖、記帳決策、
+  跨頁連動、資料表關聯。**圖是加在轉移表旁邊，不是取代它** —— 「從 A 能不能到 B」
+  只有表格答得出來。同一份原始碼另外算成 SVG 進版控（`docs/architecture/diagrams/`），
+  由 `tools/diagrams/Render-Diagrams.ps1` 產生，`tests/unit/test_diagrams_drift.py`
+  比對 SHA-256 擋漂移（**不需要 node**）。
+
+### 錯誤碼
+
+`CategoryService.create` 本來把三種失敗塌成一個 `CATEGORY_CREATE_FAILED`，還把
+`str(exc)` 放進 `details["reason"]` —— 而 `result_message()` 會把它印在畫面上，
+直接違反 `AGENTS.md` 那條「一個錯誤碼只能代表一件事」。拆成
+`CATEGORY_NAME_REQUIRED` / `CATEGORY_PARENT_INVALID` / `CATEGORY_ACTIVE_NAME_CONFLICT`。
+
+> **同樣的寫法在別處還有 50 處**（`details={"reason": str(exc)}`）。這一版只修了
+> 這一個，其餘沒動 —— 那是一次獨立的整理，不該夾在改版裡順手做掉。
+> 那次整理是 **0.16.0**。
+
+### 新增的守門
+
+`ui/` 不得直接建 `QDateEdit`、系統設定四個分頁名納入文件漂移比對、
+類別樹查詢不得掃到會長大的表、mermaid 與 SVG 的 SHA-256 比對，
+以及三條走**真正按鈕路徑**的跨頁連動測試（不是自己 `emit`）。
+
 ## 0.14.4 - 記帳那一頁終於叫記帳（行為零改變）
 
 v0.14.0 把 UI 上的「快速記帳」改成「記帳」時，**檔名與類別名留在原地** ——

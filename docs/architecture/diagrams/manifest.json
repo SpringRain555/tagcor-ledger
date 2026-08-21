@@ -1,0 +1,65 @@
+{
+    "note":  "產生物。改了 .md 裡的 mermaid 就重跑 tools/diagrams/Render-Diagrams.ps1。",
+    "diagrams":  [
+                     {
+                         "document":  "data-model.md",
+                         "index":  1,
+                         "svg":  "data-model-1.svg",
+                         "sha256":  "06509c908d804228d271b84b2806f8a1ff8b28db8b9bb16e9b514b2ccd5f5862"
+                     },
+                     {
+                         "document":  "overview.md",
+                         "index":  1,
+                         "svg":  "overview-1.svg",
+                         "sha256":  "ec7fcbb3e9495fe3767b0d1c91478c9a9fa80778720935a6aef94da01ab73ed8"
+                     },
+                     {
+                         "document":  "overview.md",
+                         "index":  2,
+                         "svg":  "overview-2.svg",
+                         "sha256":  "36a7fa9974ebfba1d8a2bf95c81b59064eb1b721b5f973b16130753d120f7c64"
+                     },
+                     {
+                         "document":  "state-machines.md",
+                         "index":  1,
+                         "svg":  "state-machines-1.svg",
+                         "sha256":  "3e63c64c36ff65e47aabeadf0aa8dddc015462efdb2d5862bf1d0d549eed164e"
+                     },
+                     {
+                         "document":  "state-machines.md",
+                         "index":  2,
+                         "svg":  "state-machines-2.svg",
+                         "sha256":  "4a0c3676fac405156cb563226044460b8bc3f70b1d7dc9b05a64df5e7506e93b"
+                     },
+                     {
+                         "document":  "state-machines.md",
+                         "index":  3,
+                         "svg":  "state-machines-3.svg",
+                         "sha256":  "2fe72e9b7f105d6e6657a5b06bb23a1c976bbec431ac302bbc264dba9461550d"
+                     },
+                     {
+                         "document":  "state-machines.md",
+                         "index":  4,
+                         "svg":  "state-machines-4.svg",
+                         "sha256":  "266ab76b66c12d45ca04c3e4b5968a0447915c3312285693bd6c3617ffb4284c"
+                     },
+                     {
+                         "document":  "ui-workflows.md",
+                         "index":  1,
+                         "svg":  "ui-workflows-1.svg",
+                         "sha256":  "3f0d9b7d07570460cee4e1b7a793e2482048c6676b3a29bf46045a1f0fb30aa2"
+                     },
+                     {
+                         "document":  "ui-workflows.md",
+                         "index":  2,
+                         "svg":  "ui-workflows-2.svg",
+                         "sha256":  "a9accfea91b0e3d319ee40585729c3049f189bb9b2d4df873286f8aa4ce4fd76"
+                     },
+                     {
+                         "document":  "ui-workflows.md",
+                         "index":  3,
+                         "svg":  "ui-workflows-3.svg",
+                         "sha256":  "7b66dbbfdc2f37c3b703fb8b79c1ffe29bcb22cdc2b589d0ad192ac5214bd4f2"
+                     }
+                 ]
+}

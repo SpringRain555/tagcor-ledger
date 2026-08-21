@@ -1,19 +1,34 @@
 import ast
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, QPoint, Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QPushButton, QTableView, QTabWidget
+from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
+    QDateTimeEdit,
+    QDialogButtonBox,
+    QMessageBox,
+    QPushButton,
+    QStyle,
+    QStyleOptionViewItem,
+    QTableView,
+    QTabWidget,
+)
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui import colors
 from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.navigation import DAILY_PAGES, LABELS, SETTINGS_PAGES, PageId
+from tagcor_ledger.ui.theme import apply_dark_theme
 from tagcor_ledger.ui.pages.deposits import DepositContractDialog
+from tagcor_ledger.ui.widgets import forms
 from tagcor_ledger.ui.widgets.forms import date_field, iso_from_date
 from tagcor_ledger.ui.widgets.sidebar import BADGE_ROLE
+from tagcor_ledger.ui.widgets.simple_form import SimpleFormDialog, TextField
 
 
 def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(qtbot, tmp_path: Path) -> None:
@@ -611,8 +626,8 @@ def test_adding_an_account_that_already_exists_just_selects_it(
     warnings: list[str] = []
     infos: list[str] = []
     monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.deposits.QInputDialog.getText",
-        staticmethod(lambda *a, **k: ("郵局定存", True)),
+        "tagcor_ledger.ui.pages.deposits.ask_form",
+        lambda *a, **k: {"name": "郵局定存", "balance": "0"},
     )
     monkeypatch.setattr(
         "tagcor_ledger.ui.pages.deposits.QMessageBox.warning",
@@ -873,8 +888,8 @@ def test_a_category_with_items_can_be_selected_and_renamed(qtbot, tmp_path: Path
     row_index = ids.index("cat_food")
     page.table.selectRow(row_index)
     monkeypatch.setattr(
-        "PySide6.QtWidgets.QInputDialog.getText",
-        lambda *args, **kwargs: ("伙食費", True),
+        "tagcor_ledger.ui.pages.catalog.ask_form",
+        lambda *args, **kwargs: {"name": "伙食費"},
     )
     page.rename_selected()
 
@@ -1206,3 +1221,767 @@ def test_generate_button_only_shows_up_when_there_is_more_to_generate(
     page.refresh()
     assert page.more_button.isVisibleTo(page)
     assert "漏期" in page.more_hint.text()
+
+
+# --- 跨頁連動：改動帳務的動作必須讓餘額盤點重算 ---------------------------------
+#
+# 這一組守的是 2026-08-21 找到的三個缺口。它們的共通點是「動作做了、資料庫也對了，
+# 但畫面上另一頁還停在舊數字」—— 分層測試與整合測試全部都是綠的，因為**少接一條
+# 訊號線不會讓任何一層失敗**。所以守門只能寫在這一層。
+
+
+def _amount_in_summary(text: str) -> str:
+    """從餘額盤點的摘要裡取出「未解釋差額」那一段，用來比對它有沒有變。"""
+    marker = "未解釋差額"
+    index = text.find(marker)
+    assert index >= 0, f"摘要裡沒有未解釋差額：{text!r}"
+    return text[index:]
+
+
+def test_voiding_a_transaction_recalculates_the_balance_gap(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    """從交易紀錄作廢一筆帳，餘額盤點的未解釋差額要跟著變。
+
+    未解釋差額 ＝ 盤點金額 － 期間內 posting 加總，所以任何一筆交易的增減都會改變它。
+    以前 `TransactionsPage` 只重刷自己那張表、不對外發訊號，於是作廢一筆錯帳之後
+    切到餘額盤點，差額還是舊的 —— 而那個數字正是那一頁存在的唯一理由。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    window.balance.amount.setText("0")
+    window.balance.create_snapshot()
+    before = _amount_in_summary(window.balance.summary.text())
+
+    window.entry.select_entry_type("expense")
+    window.entry.amount.setText("85")
+    window.entry.submit()
+    after_entry = _amount_in_summary(window.balance.summary.text())
+    assert after_entry != before, "記帳之後差額就該變了"
+
+    page = window.transactions
+    page.first_page()
+    page.table.selectRow(0)
+    selected = page.model.selected_item(page.table)
+    assert selected is not None and selected["status"] == "active"
+
+    # 走真正的按鈕路徑（`void_selected`），不要自己 emit —— 這條測試要驗的正是
+    # 「那顆按鈕有沒有通知別人」。
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.transactions.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    page.void_selected()
+
+    assert _amount_in_summary(window.balance.summary.text()) == before, (
+        "作廢之後差額應該回到記帳前的值 —— 沒回去就代表餘額盤點沒有被通知"
+    )
+
+
+def test_confirming_an_inbox_item_refreshes_the_transaction_list(
+    qtbot, tmp_path: Path
+) -> None:
+    """待確認按下確認入帳會建立**真的交易**，所以交易紀錄與側邊欄數字都要跟著動。
+
+    以前 `inbox.changed` 只接到側邊欄徽章，於是確認完房租切到交易紀錄，那一筆不在那裡。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    schedule = controller.new_schedule(
+        name="房租",
+        entry_type="expense",
+        account_id="acct_cash",
+        destination_account_id=None,
+        category_id="cat_food_711",
+        amount_minor=12_000,
+        description="每月房租",
+        frequency="yearly",
+        interval_count=1,
+        start_date="2026-01-01",
+        end_date="2026-01-01",
+    )
+    assert controller.save_schedule(schedule).success
+    assert controller.generate_due().success
+    window.inbox.refresh()
+
+    occurrence = controller.list_pending()[0]
+    badge_before = window.sidebar.item_for(PageId.INBOX).data(BADGE_ROLE)
+    assert badge_before, "先要有一件待確認，否則這條測試什麼都沒驗到"
+    assert window.transactions.model.rowCount() == 0
+
+    assert controller.confirm_occurrence(str(occurrence["occurrence_id"])).success
+    window.inbox.refresh()
+
+    assert window.transactions.model.rowCount() == 1, (
+        "確認入帳會建立交易，交易紀錄必須重載 —— 沒有就代表 inbox 只通知了徽章"
+    )
+    assert not window.sidebar.item_for(PageId.INBOX).data(BADGE_ROLE)
+
+
+def test_duplicating_a_transaction_keeps_the_original_item(qtbot, tmp_path: Path) -> None:
+    """「複製到記帳」要帶回**原本那個項目**，不是該類別的第一個。
+
+    交易紀錄送出的 dict 裡 `category_id` 是類別（第一層）、`subcategory_id` 才是項目，
+    而記帳頁的 `_select_category()` 要的是項目 id。以前餵的是父層，比對必然落空，
+    結果類別對了、項目卻被靜靜換成第一個 —— 而 README 明寫會帶入「類別/項目」。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    created = controller.create_category("早餐", "cat_food")
+    assert created.success, created.message
+    breakfast_id = str(created.details["category_id"])
+    window.entry.reload_options()
+
+    # 「7-11」是種子資料、`sort_order` 10；新建的項目是 100，所以第一個子項目是 7-11。
+    # 這條測試要有意義，原本選的就必須**不是**第一個。
+    children = controller.category_options("cat_food")
+    assert [str(item["category_id"]) for item in children][0] != breakfast_id
+
+    window.entry.select_entry_type("expense")
+    window.entry._select_category(breakfast_id)
+    window.entry.amount.setText("85")
+    window.entry.submit()
+
+    # **表單要先離開「早餐」，否則這條測試會假性通過。** `clear_form()` 不動下拉，
+    # 所以存完之後項目還停在早餐；不先切走的話，就算 `apply_draft` 什麼都沒選對，
+    # 畫面上看起來也是對的。切到同一個類別底下的另一個項目，才驗得到「有沒有選回來」。
+    window.entry._select_category(str(children[0]["category_id"]))
+    assert str(window.entry.detail.currentData()) != breakfast_id
+
+    page = window.transactions
+    page.first_page()
+    page.table.selectRow(0)
+    page.duplicate_selected()
+
+    assert window.pages.currentWidget() is window.entry
+    assert str(window.entry.detail.currentData()) == breakfast_id, (
+        "項目被換掉了 —— 複製到記帳送的是父類別 id 而不是項目 id"
+    )
+    assert str(window.entry.category.currentData()) == "cat_food"
+
+
+# --- 日期欄與日曆彈出視窗 -------------------------------------------------------
+
+
+def test_clicking_inside_the_date_field_never_changes_the_year(qtbot) -> None:
+    """**點日期欄的任何一處都不該改到日期。**
+
+    `QStyle::SubControl` 有兩組列舉值是同一個數字：`SC_ComboBoxFrame == SC_SpinBoxUp`
+    （0x1）、`SC_ComboBoxEditField == SC_SpinBoxDown`（0x2）。`QDateTimeEdit` 在
+    `calendarPopup` 模式下用 CC_ComboBox 命中測試，非箭頭的結果會轉給
+    `QAbstractSpinBox::mousePressEvent`，而它拿同一個數字去比 spinbox 的上下鍵。
+
+    平常那圈框線只有 1 px，但本專案的 QSS 給輸入欄 `padding: 7px 10px` —— 那圈變成
+    7～10 px，正好在使用者伸手去點右邊箭頭的路徑上。而 `displayFormat` 以 `yyyy`
+    開頭，所以動到的是**年份**：點內距 +1，點文字 −1。
+
+    這裡量的是行為不是設定值：真的送滑鼠事件進去，看日期有沒有變。
+    """
+    field = date_field()
+    qtbot.addWidget(field)
+    field.show()
+    original = field.date()
+    rect = field.rect()
+
+    checked = 0
+    for name, point in (
+        ("上緣內距", QPoint(60, 3)),
+        ("下緣內距", QPoint(60, rect.height() - 4)),
+        ("左緣內距", QPoint(3, rect.height() // 2)),
+        ("文字正中", QPoint(60, rect.height() // 2)),
+    ):
+        qtbot.mouseClick(field, Qt.MouseButton.LeftButton, pos=point)
+        assert field.date() == original, (
+            f"點「{name}」把日期改成了 {field.date().toString('yyyy/MM/dd')}"
+            f"（原本 {original.toString('yyyy/MM/dd')}）"
+        )
+        checked += 1
+    assert checked == 4
+
+
+def test_the_date_field_keeps_the_calendar_popup_arrow(qtbot) -> None:
+    """關掉上下鍵之後，**日曆還是要打得開** —— 否則就只是把功能拿掉而不是修好。
+
+    箭頭是 `CC_ComboBox` 畫的，`buttonSymbols` 影響不到它；開日曆那條路徑也在
+    轉交給 spinbox 之前就處理完了。
+    """
+    field = date_field()
+    qtbot.addWidget(field)
+    field.show()
+    assert field.calendarPopup() is True
+    assert field.buttonSymbols() == QAbstractSpinBox.ButtonSymbols.NoButtons
+    assert field.calendarWidget() is not None
+
+
+def test_the_date_field_starts_on_the_day_section_and_has_a_range(qtbot) -> None:
+    """鍵盤與滾輪預設動「日」，而且年份有上下界。
+
+    `displayFormat` 以 `yyyy` 開頭時 Qt 預設停在年份那一段，於是按一下方向鍵就是
+    跳一年。日期範圍則是防手滑用的護欄：沒有它年份可以一路打到 9999。
+    """
+    field = date_field()
+    qtbot.addWidget(field)
+    assert field.currentSection() == QDateTimeEdit.Section.DaySection
+    assert field.minimumDate().year() == forms.MIN_YEAR
+    assert field.maximumDate() > QDate.currentDate()
+    # 上限必須放得下最長的定存（600 個月 = 50 年），否則到期日會被無聲夾掉。
+    assert field.maximumDate() >= QDate.currentDate().addYears(50)
+
+
+def test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates(qtbot) -> None:
+    """日期格要放得下兩位數，否則每一格都會顯示成「...」。
+
+    量的是 `SE_ItemViewItemText`（delegate 真正拿到的文字矩形），不是欄寬 ——
+    2026-08-18 那次就是只看欄寬，以為修好了。實際上欄寬 33 px 綽綽有餘，是
+    `QTableView::item { padding: 7px 8px }` 把文字矩形壓成 17x7，**高度**不夠才省略的。
+
+    **斷言寫成「文字矩形幾乎等於整格」而不是「放得下 26 這兩個字」**，因為欄寬與字型
+    會隨平台改變（offscreen 用的是 fallback 字型），而「有沒有被那圈 padding 吃掉」
+    是不變的：壞掉時 33x21 的格子只剩 17x7，修好之後就是整格。
+    """
+    # **主題一定要真的套上去，否則這條測試什麼都沒驗到。** 樣式表是掛在 QApplication
+    # 上的，只有建過 MainWindow 的測試才會設它 —— 單獨跑這一條時它是空的，於是
+    # 「有沒有被 padding 吃掉」根本不會發生。2026-08-21 第一版就是這樣假性通過的。
+    application = QApplication.instance()
+    apply_dark_theme(application)
+    assert "QTableView::item" in application.styleSheet(), (
+        "樣式表裡沒有那條全域的 item padding —— 這條守門失去了它要防的東西"
+    )
+
+    field = date_field()
+    qtbot.addWidget(field)
+    calendar = field.calendarWidget()
+    assert calendar is not None
+    # 要**真的排版過**才量得到最終的格子大小；沒 show 過的 view 回報的是預設值。
+    calendar.resize(320, 260)
+    calendar.show()
+    qtbot.waitExposed(calendar)
+    view = calendar.findChild(QTableView, "qt_calendar_calendarview")
+    assert view is not None, "找不到日曆的日期格 view，這條測試什麼都沒驗到"
+    model = view.model()
+
+    checked = 0
+    for row in range(model.rowCount()):
+        for column in range(model.columnCount()):
+            index = model.index(row, column)
+            text = str(model.data(index, Qt.ItemDataRole.DisplayRole) or "")
+            if len(text) != 2 or not text.isdigit():
+                continue
+            option = QStyleOptionViewItem()
+            option.initFrom(view)
+            option.rect = view.visualRect(index)
+            view.itemDelegate().initStyleOption(option, index)
+            text_rect = view.style().subElementRect(
+                QStyle.SubElement.SE_ItemViewItemText, option, view
+            )
+            cell = option.rect
+            assert text_rect.height() >= cell.height() - 2, (
+                f"第 {text} 格：格子高 {cell.height()} px，但文字只分到 "
+                f"{text_rect.height()} px —— `::item` 的 padding 又跑回來了"
+            )
+            assert text_rect.width() >= cell.width() - 2, (
+                f"第 {text} 格：格子寬 {cell.width()} px，但文字只分到 "
+                f"{text_rect.width()} px —— `::item` 的 padding 又跑回來了"
+            )
+            checked += 1
+    assert checked >= 10, f"只檢查到 {checked} 個兩位數日期，抓格子的方式有問題"
+
+
+def test_the_calendar_is_tall_enough_for_six_week_rows(qtbot) -> None:
+    """有些月份真的會用到第六列（1 號在週六又是 31 天），少一列就是最後一排被切掉。
+
+    QSS 改了列高之後 `QCalendarPopup` 算出來的高度會少一截 —— 2026-08-21 實測切掉 7 px。
+    """
+    field = date_field()
+    qtbot.addWidget(field)
+    field.show()
+    calendar = field.calendarWidget()
+    assert calendar is not None
+    view = calendar.findChild(QTableView, "qt_calendar_calendarview")
+    assert view is not None
+    rows = view.model().rowCount()
+    assert rows == forms.CALENDAR_ROWS, f"日曆的列數變成 {rows}，最小高度的算法要跟著改"
+    needed = sum(view.rowHeight(row) for row in range(rows))
+    assert calendar.minimumHeight() >= needed, (
+        f"日曆最小高度 {calendar.minimumHeight()} px 放不下 {rows} 列（要 {needed} px）"
+    )
+
+
+# --- 其餘缺陷（Stage 3）---------------------------------------------------------
+
+
+def test_a_fresh_transfer_does_not_default_to_the_same_account(
+    qtbot, tmp_path: Path
+) -> None:
+    """剛開程式選「轉帳」按下儲存，**不該必定失敗**。
+
+    兩個下拉填的是同一份清單、預設都停在第 0 項，所以以前一定會撞
+    `TRANSFER_SAME_ACCOUNT` —— 一個照著做就一定失敗的預設值。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    assert window.controller.create_account("郵局", "0").success
+    window.entry.reload_options()
+
+    page = window.entry
+    assert page.account.count() >= 2, "要有兩個帳戶才驗得到這件事"
+    assert page.destination.currentData() != page.account.currentData()
+
+    page.select_entry_type("transfer")
+    page.amount.setText("500")
+    page.submit()
+    assert "已儲存" in page.status.text(), page.status.text()
+
+    # 把來源切成跟目的一樣，轉入帳戶要自己閃開。
+    page.account.setCurrentIndex(
+        page.account.findData(page.destination.currentData())
+    )
+    assert page.destination.currentData() != page.account.currentData()
+
+
+def test_editing_a_deposit_contract_keeps_its_note(qtbot, tmp_path: Path) -> None:
+    """修改定存合約**不可以動到備註**。
+
+    對話框沒有備註欄位，以前卻永遠送 `note=""` 進去，而 store 無條件寫
+    `note = ?` —— 使用者沒有任何機會發現備註被洗掉了。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    assert controller.create_account("郵局", "0").success
+    account_id = next(
+        str(item["account_id"])
+        for item in controller.account_options()
+        if item["name"] == "郵局"
+    )
+    created = controller.create_deposit_contract(
+        account_id=account_id,
+        name="郵局定存",
+        interest_method="lump_sum",
+        maturity_action="none",
+        interest_destination_account_id="acct_cash",
+        term_months=12,
+        start_date="2026-01-01",
+        principal="100000",
+        annual_rate_ppm=16000,
+        note="分行 001，單號 12345",
+    )
+    assert created.success, created.message
+    contract = controller.list_deposit_contracts()[0]
+    assert contract["note"] == "分行 001，單號 12345"
+
+    result = controller.update_deposit_contract(
+        str(contract["contract_id"]),
+        name="郵局定存（改名）",
+        maturity_action="none",
+        interest_destination_account_id="acct_cash",
+    )
+    assert result.success, result.message
+
+    after = controller.list_deposit_contracts()[0]
+    assert after["name"] == "郵局定存（改名）"
+    assert after["note"] == "分行 001，單號 12345", "改個名字把備註洗掉了"
+
+
+def test_editing_a_deposit_contract_hides_the_term_only_fields(
+    qtbot, tmp_path: Path
+) -> None:
+    """修改合約時不顯示起存日與本金 —— 它們是「期」的欄位，這裡沒有值可以回填。
+
+    以前那幾格是停用但**仍然顯示建立用的預設值**：起存日＝今天、本金＝空白。
+    一個灰掉卻寫著今天的「起存日」比沒有那一列更糟，它看起來像事實。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    contract = {
+        "contract_id": "dep_x",
+        "account_id": "acct_cash",
+        "name": "郵局定存",
+        "interest_method": "lump_sum",
+        "maturity_action": "none",
+        "interest_destination_account_id": "acct_cash",
+        "term_months": 12,
+        "status": "active",
+        "note": "",
+        "rate_type": "fixed",
+    }
+    editing = DepositContractDialog(controller, window, current=contract)
+    qtbot.addWidget(editing)
+    creating = DepositContractDialog(controller, window)
+    qtbot.addWidget(creating)
+
+    for widget, name in (
+        (editing.start_date, "起存日"),
+        (editing.principal, "本金"),
+        (editing.annual_rate, "年利率"),
+    ):
+        assert editing.form.isRowVisible(widget) is False, (
+            f"修改合約時還看得到「{name}」，而那一格的值是建立用的預設值"
+        )
+    assert editing.term_hint.isVisible() or editing.term_hint.text(), (
+        "把欄位收起來就要說去哪裡改，否則使用者只會覺得功能不見了"
+    )
+    # 陽性對照：新增時那幾格本來就該在，否則上面那三條可能只是抓錯 widget。
+    for widget, name in (
+        (creating.start_date, "起存日"),
+        (creating.principal, "本金"),
+        (creating.annual_rate, "年利率"),
+    ):
+        assert creating.form.isRowVisible(widget) is True, f"新增合約時「{name}」不見了"
+
+
+def test_the_paths_page_shows_the_data_root(qtbot, tmp_path: Path) -> None:
+    """「資料路徑」要看得到資料根目錄。
+
+    `PATH_OUTSIDE_DATA_ROOT` 這個錯誤講的正是這個值，而它是從「記帳資料路徑」的
+    上一層推出來的 —— 畫面上沒有它，使用者就只能猜訊息在說哪個資料夾。
+    """
+    paths = resolve_app_paths(tmp_path / "ledger-data")
+    window = MainWindow(paths)
+    qtbot.addWidget(window)
+    window.show()
+    page = window.system_settings.paths
+
+    assert page.data_root.isReadOnly(), "資料根目錄是推導值，不該讓人編輯"
+    assert page.data_root.text() == str(paths.data_dir)
+    # 它必須真的是那兩個路徑的上層，否則顯示了也沒有意義。
+    assert str(paths.ledger_dir).startswith(page.data_root.text())
+    assert str(paths.backup_dir).startswith(page.data_root.text())
+
+
+# --- 一次問完的小表單（Stage 4）-------------------------------------------------
+
+
+def test_the_simple_form_disables_ok_until_required_fields_are_filled(qtbot) -> None:
+    """必填欄空白時「確定」是停用的。
+
+    **不要讓使用者按下去才知道不行。** 空白名稱送到 store 換來的是
+    `..._NAME_REQUIRED` 警告框，而那句話說的是他早就看得到的事。
+    """
+    dialog = SimpleFormDialog(
+        "新增帳戶",
+        [TextField("name", "帳戶名稱"), TextField("balance", "期初餘額（TWD）", default="0")],
+        None,
+    )
+    qtbot.addWidget(dialog)
+    ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
+
+    assert ok.isEnabled() is False, "名稱還空著就可以按確定"
+    dialog._widgets["name"].setText("郵局")
+    assert ok.isEnabled() is True
+    dialog._widgets["name"].setText("   ")
+    assert ok.isEnabled() is False, "只打空白也算沒填"
+
+    dialog._widgets["name"].setText("郵局")
+    assert dialog.values() == {"name": "郵局", "balance": "0"}
+
+
+def test_adding_an_item_asks_everything_in_one_dialog(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    """新增項目**只開一次對話框**，而且類別是用 id 帶的不是用名字反查的。
+
+    舊版是兩個連續的 `QInputDialog`：先選上層類別按 OK，再打名稱按 OK ——
+    取消第二個，第一個選的類別就靜靜消失了。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+    assert controller.create_category("交通").success
+    transport_id = next(
+        str(item["category_id"])
+        for item in controller.category_options()
+        if item["name"] == "交通"
+    )
+
+    asked: list[list[Any]] = []
+
+    def fake_ask(parent: Any, title: str, fields: Any) -> dict[str, Any]:
+        asked.append(list(fields))
+        assert title == "新增項目"
+        options = dict(fields[0].options)
+        # 下拉帶的是 id，不是顯示文字 —— 這正是舊版用 `labels.index()` 反查的地方。
+        return {"parent_id": options["交通"], "name": "捷運"}
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.catalog.ask_form", fake_ask)
+    page = window.operation_settings.items
+    page.add_item()
+
+    assert len(asked) == 1, f"問了 {len(asked)} 次，應該只問一次"
+    labels = [spec.label for spec in asked[0]]
+    assert labels == ["所屬類別", "項目名稱"], labels
+
+    children = {
+        str(item["name"]): str(item["category_id"])
+        for item in controller.category_options(transport_id)
+    }
+    assert "捷運" in children, f"項目沒有建在「交通」底下：{children}"
+
+
+def test_adding_an_account_asks_everything_in_one_dialog(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    """新增帳戶也是一次問完，而且第一格叫「帳戶名稱」不是「名稱」。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    asked: list[list[Any]] = []
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.catalog.ask_form",
+        lambda parent, title, fields: (
+            asked.append(list(fields)) or {"name": "郵局", "balance": "100000"}
+        ),
+    )
+    window.operation_settings.accounts.add_item()
+
+    assert len(asked) == 1
+    assert [spec.label for spec in asked[0]] == ["帳戶名稱", "期初餘額（TWD）"]
+    names = {str(item["name"]) for item in window.controller.account_options()}
+    assert "郵局" in names
+
+
+def test_creating_a_duplicate_category_says_which_name_clashed(
+    qtbot, tmp_path: Path
+) -> None:
+    """同名衝突要有自己的錯誤碼與說法，不要塌成一句「請確認名稱沒有重複且上層類別有效」。
+
+    以前三種失敗共用 `CATEGORY_CREATE_FAILED`，訊息後面還接著 SQLite 原文
+    —— 一句同時指控兩個欄位、又沒說是哪個名字重複的話。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    controller = window.controller
+
+    duplicate = controller.create_category("伙食")
+    assert not duplicate.success
+    assert duplicate.error_code == "CATEGORY_ACTIVE_NAME_CONFLICT", duplicate.error_code
+    assert "伙食" in duplicate.message
+    assert "reason" not in duplicate.details, "SQLite 原文不可以印到畫面上"
+
+    blank = controller.create_category("   ")
+    assert blank.error_code == "CATEGORY_NAME_REQUIRED", blank.error_code
+
+    orphan = controller.create_category("早餐", "cat_does_not_exist")
+    assert orphan.error_code == "CATEGORY_PARENT_INVALID", orphan.error_code
+
+
+# --- 類別／項目的篩選與排序（Stage 5）------------------------------------------
+
+
+def _column(page: Any, column: int) -> list[str]:
+    return [
+        str(page.model.index(row, column).data()) for row in range(page.model.rowCount())
+    ]
+
+
+def test_catalog_pages_filter_by_search_status_and_parent(
+    qtbot, tmp_path: Path
+) -> None:
+    """搜尋、狀態、所屬類別三個條件都要真的縮短清單。
+
+    **項目也要能用類別名搜到** —— 打「交通」就該列出交通底下的每一項，
+    不然使用者得先知道項目叫什麼才找得到它。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+
+    transport = controller.create_category("交通")
+    assert transport.success
+    transport_id = str(transport.details["category_id"])
+    assert controller.create_category("捷運", transport_id).success
+    assert controller.create_category("加油", transport_id).success
+    assert controller.create_category("早餐店", "cat_food").success
+
+    page = window.operation_settings.items
+    page.refresh()
+    assert set(_column(page, 1)) == {"7-11", "早餐店", "捷運", "加油"}
+
+    # 用項目名搜
+    page.filter_bar.search.setText("捷")
+    assert _column(page, 1) == ["捷運"]
+
+    # 用類別名搜 —— 交通底下的兩個都要出來
+    page.filter_bar.search.setText("交通")
+    assert set(_column(page, 1)) == {"捷運", "加油"}
+
+    page.filter_bar.search.clear()
+    index = page.parent_filter.findData(transport_id)
+    assert index > 0, "篩選下拉裡沒有「交通」"
+    page.parent_filter.setCurrentIndex(index)
+    assert set(_column(page, 1)) == {"捷運", "加油"}
+
+    # 狀態：封存一個之後，「使用中」看不到它、「已封存」只看得到它
+    page.parent_filter.setCurrentIndex(0)
+    page.filter_bar.search.clear()
+    assert controller.archive_category("cat_food_711").success
+    page.refresh()
+
+    page.filter_bar.status.setCurrentIndex(
+        page.filter_bar.status.findData("active")
+    )
+    assert "7-11" not in _column(page, 1)
+    page.filter_bar.status.setCurrentIndex(
+        page.filter_bar.status.findData("archived")
+    )
+    assert _column(page, 1) == ["7-11"]
+    page.filter_bar.status.setCurrentIndex(page.filter_bar.status.findData("all"))
+    assert "7-11" in _column(page, 1)
+
+
+def test_clicking_a_header_sorts_and_reverses(qtbot, tmp_path: Path) -> None:
+    """點表頭排序，再點一次反向。**排序是 SQL 做的，不是 QTableView 自己排的。**"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+    for name in ("交通", "娛樂", "醫療"):
+        assert controller.create_category(name).success
+    assert controller.create_category("捷運", 
+        str(next(item["category_id"] for item in controller.category_options()
+                 if item["name"] == "交通"))).success
+
+    page = window.operation_settings.categories
+    page.refresh()
+    header = page.table.horizontalHeader()
+    assert header.sectionsClickable(), "表頭不能點就沒有排序可言"
+    assert page.table.isSortingEnabled() is False, (
+        "setSortingEnabled(True) 會讓 QTableView 在 Python 裡排序 —— 規則禁止"
+    )
+
+    header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+    ascending = _column(page, 0)
+    header.setSortIndicator(0, Qt.SortOrder.DescendingOrder)
+    descending = _column(page, 0)
+    assert ascending == sorted(ascending)
+    assert descending == list(reversed(ascending)), (ascending, descending)
+
+    # 依「項目數」排：交通有 1 項、其餘 0 項（伙食有 1 項）
+    header.setSortIndicator(1, Qt.SortOrder.DescendingOrder)
+    counts = _column(page, 1)
+    assert counts == sorted(counts, reverse=True), counts
+
+
+def test_the_parent_dropdown_keeps_every_category_while_searching(
+    qtbot, tmp_path: Path
+) -> None:
+    """搜尋縮短了清單，**「所屬類別」下拉不能跟著只剩搜到的那幾個** —— 否則換不回去。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    assert window.controller.create_category("交通").success
+
+    page = window.operation_settings.items
+    page.refresh()
+    before = [page.parent_filter.itemText(i) for i in range(page.parent_filter.count())]
+    assert {"伙食", "交通"} <= set(before), before
+
+    page.filter_bar.search.setText("7-11")
+    after = [page.parent_filter.itemText(i) for i in range(page.parent_filter.count())]
+    assert after == before, f"搜尋把下拉也縮掉了：{before} -> {after}"
+
+
+# --- 轉帳的三種對象（Stage 6）---------------------------------------------------
+
+
+def test_transfer_scope_switches_the_fields_and_the_account_label(
+    qtbot, tmp_path: Path
+) -> None:
+    """三種對象各自顯示對的欄位，而「帳戶」那一列要說出它現在問的是什麼。
+
+    對外轉帳要類別／項目（它存成收入或支出），內部轉帳要轉入帳戶 —— 三種各不相同，
+    而且**標籤要跟著欄位一起收**（`QFormLayout` 的標籤是獨立 widget）。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    page = window.entry
+
+    page.select_entry_type("expense")
+    assert page.form.isRowVisible(page.scope_row) is False, "非轉帳不該出現轉帳對象"
+    assert page.form.isRowVisible(page.category) is True
+
+    expected = {
+        "internal": ("轉出帳戶", True, False),
+        "inbound": ("收款帳戶", False, True),
+        "outbound": ("付款帳戶", False, True),
+    }
+    page.select_entry_type("transfer")
+    checked = 0
+    for scope, (label, destination_visible, category_visible) in expected.items():
+        page.select_transfer_scope(scope)
+        assert page.form.isRowVisible(page.scope_row) is True
+        assert page.form.isRowVisible(page.destination) is destination_visible, scope
+        assert page.form.isRowVisible(page.category) is category_visible, scope
+        assert page.form.isRowVisible(page.detail) is category_visible, scope
+        account_label = page.form.labelForField(page.account)
+        assert account_label.text() == label, (scope, account_label.text())
+        assert account_label.isHidden() is False
+        checked += 1
+    assert checked == 3
+
+    # 切回支出，標籤要變回「帳戶」
+    page.select_entry_type("expense")
+    assert page.form.labelForField(page.account).text() == "帳戶"
+
+
+def test_each_transfer_scope_saves_the_right_entry_type(qtbot, tmp_path: Path) -> None:
+    """**資料庫只有一種轉帳。** 對外的兩種存成收入與支出，總資產才會跟著動。
+
+    這是與 `state-machines.md`「利息記成收入，不是轉帳」同一個原則：
+    錢有沒有離開你的總資產，才是收支與轉帳的分界。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+    assert controller.create_account("郵局", "0").success
+    window.entry.reload_options()
+    page = window.entry
+    page.select_entry_type("transfer")
+
+    def total() -> int:
+        return int(controller.overview_snapshot()["total_minor"])
+
+    start = total()
+
+    page.select_transfer_scope("internal")
+    page.amount.setText("500")
+    page.submit()
+    assert "已儲存" in page.status.text(), page.status.text()
+    assert total() == start, "自己帳戶之間搬錢，總資產不該變"
+
+    page.select_transfer_scope("inbound")
+    page.amount.setText("1200")
+    page.submit()
+    assert "已儲存" in page.status.text(), page.status.text()
+    assert total() == start + 1200, "別人轉入是收入，總資產要增加"
+
+    page.select_transfer_scope("outbound")
+    page.amount.setText("300")
+    page.submit()
+    assert "已儲存" in page.status.text(), page.status.text()
+    assert total() == start + 1200 - 300, "轉出給別人是支出，總資產要減少"
+
+    kinds = [
+        row["entry_type"]
+        for row in controller.list_transactions().details["transactions"]
+    ]
+    assert sorted(kinds) == ["expense", "income", "transfer"], kinds

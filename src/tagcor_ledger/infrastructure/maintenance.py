@@ -36,7 +36,10 @@ class MaintenanceService:
                 destination.close()
         integrity = _integrity_check(database_copy)
         if integrity != "ok":
-            raise RuntimeError(f"BACKUP_INTEGRITY_FAILED:{integrity}")
+            # 訊息就是錯誤碼，不接 `:{integrity}` —— 帶後綴的話
+            # `application/failures.py` 查不到這個 key，使用者就會看到英文原文。
+            # 需要那串 pragma 輸出時對同一個資料夾跑 `validate_backup()` 就重現得出來。
+            raise RuntimeError("BACKUP_INTEGRITY_FAILED")
         manifest = {
             "manifest_version": 1,
             "database_schema_version": LATEST_SCHEMA_VERSION,

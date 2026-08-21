@@ -625,8 +625,20 @@ QCalendarWidget QMenu::item:selected {
     color: #E8E8EA;
 }
 
-/* 日期格。padding 要是 0 —— 全域 QAbstractItemView 的 padding 正是把
- * 兩位數日期擠成「...」的原因。 */
+/* 日期格。
+ *
+ * **padding 要清在 `::item` 上，不是清在 view 上。** 這一條 2026-08-18 修錯過一次：
+ * 當時只寫了底下那條 view 的 `padding: 0`，而真正把日期擠掉的是上面
+ * 「表格」那一節的 `QTableView::item { padding: 7px 8px }` —— 日曆的日期格
+ * 就是一個 `QTableView`。view 的 padding 管的是 viewport，管不到每一格。
+ *
+ * 症狀是每一格都顯示成「...」。2026-08-21 量到的數字：格子 33x21，但
+ * `SE_ItemViewItemText` 只剩 17x7，而 10pt 中文字要 16 px 高 —— 高度不夠就省略。
+ * 清掉之後同一格是 33x21，兩位數日期正常顯示。 */
+QCalendarWidget QAbstractItemView::item {
+    padding: 0;
+}
+
 QCalendarWidget QAbstractItemView {
     color: #E8E8EA;
     background-color: #16161A;

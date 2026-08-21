@@ -145,32 +145,39 @@ class DepositStore(StoreBase):
         name: str,
         maturity_action: str,
         interest_destination_account_id: str | None,
-        note: str = "",
+        note: str | None = None,
     ) -> None:
         """只改名稱、到期轉存方式、利息轉入帳戶。
 
         **計息方式與期長刻意不能改。** 它們決定了已經產生出來的事件長什麼樣子，
         事後改會讓歷史難以解讀 —— 要換就結束這個合約、開一個新的。
+
+        **`note=None` 表示「不要動備註」，不是「把備註清空」。** 以前它的預設值是
+        `""` 而且無條件寫進 SQL，於是修改合約永遠會把備註洗掉 —— 而畫面上根本沒有
+        備註欄位，使用者沒有任何機會發現。要清空就明確傳 `""`。
         """
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("DEPOSIT_NAME_REQUIRED")
+        columns = ["name = ?", "maturity_action = ?", "interest_destination_account_id = ?"]
+        values: list[object] = [
+            clean_name,
+            maturity_action,
+            interest_destination_account_id,
+        ]
+        if note is not None:
+            columns.append("note = ?")
+            values.append(note.strip())
+        columns.append("updated_at = ?")
+        values.extend([now_iso(), contract_id])
         with database_transaction(self.paths.database_path) as connection:
             changed = connection.execute(
-                """
+                f"""
                 UPDATE deposit_contracts
-                SET name = ?, maturity_action = ?, interest_destination_account_id = ?,
-                    note = ?, updated_at = ?
+                SET {", ".join(columns)}
                 WHERE contract_id = ? AND status = 'active'
                 """,
-                (
-                    clean_name,
-                    maturity_action,
-                    interest_destination_account_id,
-                    note.strip(),
-                    now_iso(),
-                    contract_id,
-                ),
+                tuple(values),
             ).rowcount
             if changed == 0:
                 raise NotFoundError("DEPOSIT_CONTRACT_NOT_FOUND")
@@ -270,6 +277,19 @@ class DepositStore(StoreBase):
                 ),
             ).rowcount
             if changed == 0:
+                # **0 列有兩種原因，要分開。** `WHERE term_id = ? AND status = 'active'`
+                # 沒改到東西，可能是這一期不存在，也可能是它已續約／已結清。
+                # 兩者該給的建議完全不同（「重新整理」對上「這一期已經產生過交易」），
+                # 以前一律回 `DEPOSIT_TERM_NOT_EDITABLE` —— 於是找不到的期會被講成
+                # 「只有存續中的期可以修改」，而使用者要去找一個畫面上根本沒有的東西。
+                exists = connection.execute(
+                    "SELECT 1 FROM deposit_terms WHERE term_id = ?", (term_id,)
+                ).fetchone()
+                # **兩個碼都寫成獨立的 raise，不要用三元運算式。** 掃錯誤碼的
+                # AST 守門只看 `raise X("常數")`，包成 `X(a if c else b)` 之後
+                # 兩個碼就都掃不到了 —— 第一版這樣寫，是守門自己報出來的。
+                if exists is None:
+                    raise NotFoundError("DEPOSIT_TERM_NOT_FOUND")
                 raise NotFoundError("DEPOSIT_TERM_NOT_EDITABLE")
             self._audit(
                 connection,

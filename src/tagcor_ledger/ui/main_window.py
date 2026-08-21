@@ -111,13 +111,18 @@ class MainWindow(QMainWindow):
 
         self.overview.inbox_requested.connect(lambda: self.show_page(PageId.INBOX))
         self.overview.balance_requested.connect(lambda: self.show_page(PageId.BALANCE))
-        self.entry.saved.connect(self._transaction_changed)
+        # **每一個會改動帳務的來源都接到同一個 `_ledger_changed`。** 三個來源
+        # （記帳、交易紀錄的作廢／編輯、待確認的確認入帳）做的是同一件事 ——
+        # 產生或改變交易 —— 所以它們該通知的對象也是同一組。分成三個「差不多」
+        # 的方法，就是下一個「某一頁忘了重刷」的來源。
+        self.entry.saved.connect(self._ledger_changed)
+        self.transactions.changed.connect(self._ledger_changed)
+        self.inbox.changed.connect(self._ledger_changed)
         self.balance.changed.connect(self._balance_changed)
         self.balance.record_transaction_requested.connect(self._focus_new)
         self.transactions.duplicate_requested.connect(self._prefill_quick)
         self.operation_settings.apply_requested.connect(self._prefill_quick)
         self.operation_settings.changed.connect(self._catalog_changed)
-        self.inbox.changed.connect(self.refresh_pending_badge)
         self.system_settings.restored.connect(self._restored)
         self.system_settings.saved.connect(self._settings_changed)
         self.system_settings.paths_changed.connect(self._restored)
@@ -185,9 +190,19 @@ class MainWindow(QMainWindow):
         self.entry.apply_draft(draft)
         self.show_page(PageId.ENTRY)
 
-    def _transaction_changed(self) -> None:
+    def _ledger_changed(self) -> None:
+        """有交易被建立、改變或作廢之後，誰要重算。
+
+        **餘額盤點一定要在這裡。** 未解釋差額是「盤點金額 － 期間 posting 加總」，
+        任何一筆交易的增減都會改變它。2026-08 之前只有記帳頁接到這條線，於是從
+        交易紀錄作廢一筆錯帳、或在待確認按下確認入帳之後，餘額盤點的差額都停在舊值。
+
+        **資產總覽不在這裡** —— 它走「切過去就重算」（見 `overview.py` 的模組說明）。
+        把它加進來就等於同時維護兩套規則，而其中一套遲早會漏。
+        """
         self.transactions.first_page()
         self.balance.refresh()
+        self.refresh_pending_badge()
 
     def _balance_changed(self) -> None:
         self.balance.refresh()
@@ -197,10 +212,6 @@ class MainWindow(QMainWindow):
         self.balance.reload_accounts()
         self.transactions.reload_filters()
         self.system_settings.reload()
-        self.operation_settings.refresh()
-        self.inbox.refresh()
-
-    def _automation_changed(self) -> None:
         self.operation_settings.refresh()
         self.inbox.refresh()
 

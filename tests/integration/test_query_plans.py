@@ -37,7 +37,26 @@ ALLOWED_SCAN_MARKERS = (
 # 是 O(10) 而且**跟記了幾年沒有關係**。列出所有帳戶餘額本來就得走過每一列
 # （`list_accounts` 也一樣），所以那個 SCAN 不是退化。
 # 真正要守的是它 JOIN 過去的 `account_postings` 與 `transactions` —— 那兩張會長大。
-SMALL_FIXED_TABLES = {"settings", "schema_migrations", "sqlite_master", "accounts"}
+SMALL_FIXED_TABLES = {
+    "settings",
+    "schema_migrations",
+    "sqlite_master",
+    "accounts",
+    # `categories` 跟 `accounts` 同一個理由：它的筆數等於你**建了幾個類別與項目**，
+    # 是 O(100)，而且**跟記了幾年沒有關係**。名冊分頁的搜尋、狀態與排序都下推到 SQL
+    # （2026-08-21），那句查詢會 SCAN `categories` 兩次（本體與 parent 的 LEFT JOIN）
+    # 加一個算子項目數的相關子查詢 —— 在這個量級上那不是退化。
+    #
+    # **會長大的是 `category_allocations`**（每筆交易一列），而那張表不在這句查詢裡。
+    "categories",
+    # 類別樹要 self-join（本體 ＋ 上層 ＋ 算子項目數的子查詢），所以**非用別名不可**，
+    # 而 `EXPLAIN QUERY PLAN` 報的是別名不是表名（見本檔開頭與 data-model.md）。
+    # 別名刻意取成帶表名的 `category_*`，這幾條白名單才說得出自己在放行什麼 ——
+    # 叫 `node` / `parent` / `item` 的話，日後任何一句查詢隨手用同一個別名就被放行了。
+    "category_node",
+    "category_parent",
+    "category_item",
+}
 
 
 @pytest.fixture
@@ -229,3 +248,46 @@ def test_full_text_search_sorts_in_memory_and_that_is_accepted(store: LedgerStor
         "搜尋沒有走 FTS 索引"
     )
     assert not _full_scans(steps), f"搜尋掃了會長大的資料表：{_full_scans(steps)}"
+
+
+def test_category_tree_filter_and_sort_run_in_sql(store: LedgerStore) -> None:
+    """名冊分頁的搜尋、狀態、所屬類別與排序**都要在 SQL 裡**，而且不得掃到會長大的表。
+
+    `categories` 本身被掃是接受的（見 `SMALL_FIXED_TABLES` 的說明）—— 這一條真正
+    要守的是「有人日後為了做搜尋而 JOIN 進 `category_allocations` 或 `transactions`」。
+
+    順便當成 `CATEGORY_SORT_KEYS` 的煙霧測試：每一個 key 都要能真的組出一句合法 SQL。
+    """
+    from tagcor_ledger.domain.models import CategoryTreeFilter
+    from tagcor_ledger.infrastructure.stores.categories import CATEGORY_SORT_KEYS
+
+    checked = 0
+    for sort_key in CATEGORY_SORT_KEYS:
+        for descending in (False, True):
+            tree_filter = CategoryTreeFilter(
+                level=2,
+                search="7",
+                status="active",
+                sort_key=sort_key,
+                descending=descending,
+            )
+            _assert_no_growing_table_scan(
+                store, lambda f=tree_filter: store.list_category_tree(tree_filter=f)
+            )
+            checked += 1
+    assert checked == len(CATEGORY_SORT_KEYS) * 2, checked
+
+
+def test_an_unknown_sort_key_falls_back_instead_of_reaching_sql(store: LedgerStore) -> None:
+    """**`sort_key` 只能是白名單裡的值。** 未知的值退回預設，不是拼進 `ORDER BY`。
+
+    那是唯一一個把字串拼進 SQL 的地方，所以它必須是封閉的清單 —— 這條測試就是
+    在證明「畫面送什麼進來都不會變成 SQL 片段」。
+    """
+    from tagcor_ledger.domain.models import CategoryTreeFilter
+
+    injected = CategoryTreeFilter(sort_key="node.name; DROP TABLE categories")
+    rows = store.list_category_tree(tree_filter=injected)
+    assert rows, "退回預設排序之後應該照樣列得出東西"
+    # 表還在，而且內容沒變。
+    assert store.list_categories(), "categories 被動到了"

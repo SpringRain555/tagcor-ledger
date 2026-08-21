@@ -24,6 +24,17 @@
 | **`active`** | ▶ 編輯（`revision` +1） | ▶ 作廢 |
 | **`voided`** | ✗ **不可復原** | — |
 
+```mermaid
+stateDiagram-v2
+    [*] --> active: 建立
+    active --> active: 編輯（revision +1）
+    active --> voided: 作廢
+    voided --> [*]
+    note right of voided
+        單向。想「復原」只能重新建一筆新的。
+    end note
+```
+
 **作廢是單向的。** 想恢復一筆作廢的交易，只能重新建立一筆新的。這是刻意的 —— 復原會讓
 「這筆到底有沒有計入」的歷史變得無法追溯。
 
@@ -76,6 +87,19 @@
 | **`active`** | — | ▶ 封存 | ✂ **僅限未被引用** |
 | **`archived`** | ▶ 恢復 | — | ✂ **僅限未被引用** |
 
+```mermaid
+stateDiagram-v2
+    [*] --> active: 建立
+    active --> archived: 封存
+    archived --> active: 恢復
+    active --> [*]: 刪除（僅限未被引用）
+    archived --> [*]: 刪除（僅限未被引用）
+    note left of archived
+        不在下拉選單裡，
+        但歷史資料仍然指向它。
+    end note
+```
+
 ### 封存與刪除的分界，是這套設計的核心
 
 **只要被任何一筆歷史資料引用過，就永遠不能刪，只能封存。** 否則報表會出現指向空無的外鍵，
@@ -119,6 +143,20 @@
 | **`pending`** | ▶ 編輯內容（狀態不變） | ▶ 確認（產生交易） | ▶ 略過 |
 | **`confirmed`** | ✗ | — | ✗ |
 | **`skipped`** | ✗ | ✗ | — |
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: 定期收支／定存產生
+    pending --> pending: 編輯內容（狀態不變）
+    pending --> confirmed: 確認（同一個 SQLite transaction 內產生交易）
+    pending --> skipped: 略過（不產生交易）
+    confirmed --> [*]
+    skipped --> [*]
+    note right of confirmed
+        兩個都是終點。要改結果就去作廢
+        它產生的那筆交易。
+    end note
+```
 
 `confirmed` 與 `skipped` 都是**終點**。想改變已確認的結果，去作廢它產生的那筆交易；
 `OCCURRENCE_NOT_PENDING` 就是在擋非 `pending` 的修改。
@@ -247,6 +285,22 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 | **`存續中`** | — | ▶ 到期日到 | ✗ | ✗ | ▶ 中途解約 |
 | **`已到期`** | ✗ | — | ▶ 自動轉期 | ▶ 不自動轉存 | ✗ |
 | **`已續約`／`已結清`／`已解約`** | ✗ | ✗ | ✗ | ✗ | — |
+
+```mermaid
+stateDiagram-v2
+    [*] --> 存續中: 開立／續存產生新的一期
+    存續中 --> 已到期: 到期日到（要使用者確認，不自動判定）
+    存續中 --> 已解約: 中途解約
+    已到期 --> 已續約: 依到期轉存方式自動轉期
+    已到期 --> 已結清: 不自動轉存
+    已續約 --> [*]
+    已結清 --> [*]
+    已解約 --> [*]
+    note right of 已續約
+        產生下一期，舊的一期不改寫 ——
+        歷次利率才留得下來。
+    end note
+```
 
 **與待確認相同的原則：到期不自動入帳。** 到期前 7 天產生待確認項目，由使用者確認才成為交易。
 `tests/integration/test_deposits.py::test_generating_events_never_writes_a_posting` 斷言

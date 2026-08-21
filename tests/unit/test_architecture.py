@@ -240,6 +240,10 @@ def test_no_module_grows_back_into_a_monolith() -> None:
 RETIRED_UI_WORDS = {
     "排程": "定期收支",
     "快速記帳": "記帳",
+    # 第一層叫「類別」、第二層叫「項目」，所以項目的那一欄是**它屬於誰**，
+    # 不是「它上面還有一層」。列表的表頭一直都寫「所屬類別」，只有新增項目的
+    # 對話框寫「上層類別」—— 同一件事在同一個分頁裡有兩個名字。
+    "上層類別": "所屬類別",
 }
 
 
@@ -292,3 +296,58 @@ def test_ui_does_not_use_retired_wording() -> None:
                     )
     if offenders:
         pytest.fail("UI 字串裡還有淘汰的用詞：\n" + "\n".join(offenders))
+
+
+# 日期欄的唯一工廠。`QDateEdit` 直接建出來的話，`date_field()` 裡那些防護
+# （關掉上下鍵、日期範圍、日曆彈窗的設定）就完全沒有套到。
+DATE_FIELD_FACTORY = "ui/widgets/forms.py"
+
+
+def _constructor_calls(path: Path, name: str) -> int:
+    """這個模組直接呼叫 `name(...)` 幾次。**看 AST 的 Call 節點，不做字串比對** ——
+    `from PySide6.QtWidgets import QDateEdit` 這種 import 本身不算，型別註解也不算。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == name
+    )
+
+
+def test_the_constructor_extractor_actually_finds_calls() -> None:
+    """陽性對照：抽取器認不出 `QDateEdit(...)` 的話，底下那條會空過。"""
+    factory = SOURCE_ROOT / DATE_FIELD_FACTORY
+    assert _constructor_calls(factory, "QDateEdit") >= 1, (
+        "工廠自己一定會呼叫 QDateEdit()，抽不到就是抽取器壞了"
+    )
+    assert _constructor_calls(factory, "QDoesNotExist") == 0
+
+
+def test_every_date_input_comes_from_the_shared_factory() -> None:
+    """**`ui/` 底下不得直接建 `QDateEdit`**，一律用 `forms.date_field()`。
+
+    理由不是「統一比較好看」，是 `date_field()` 擋掉了一個 Qt 與 QSS 交互作用的
+    誤觸：`QDateTimeEdit` 在 `calendarPopup` 模式下用 CC_ComboBox 做命中測試，但
+    `SC_ComboBoxFrame` 與 `SC_SpinBoxUp` 是**同一個數字**，於是點在 QSS 給的那圈
+    內距上會被讀成「按了上箭頭」，把年份加一（點文字上則是減一）。
+    工廠用 `setButtonSymbols(NoButtons)` 把那條路斷掉。
+
+    2026-08-21 之前有**七個**欄位繞過工廠（交易紀錄的日期區間 2、定存頁 3、
+    模板／定期收支的起訖日 2），所以「修好了」只會修到記帳頁那一個。
+    """
+    offenders: list[str] = []
+    for path in _modules("ui"):
+        relative = path.relative_to(SOURCE_ROOT).as_posix()
+        if relative == DATE_FIELD_FACTORY:
+            continue
+        count = _constructor_calls(path, "QDateEdit")
+        if count:
+            offenders.append(f"  {relative} 直接建了 {count} 個 QDateEdit")
+    if offenders:
+        pytest.fail(
+            "日期欄一律用 `forms.date_field()`，不要自己 `QDateEdit(...)`：\n"
+            + "\n".join(offenders)
+        )

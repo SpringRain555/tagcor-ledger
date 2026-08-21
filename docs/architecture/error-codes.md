@@ -10,7 +10,35 @@
 
 `Result` 同時帶 `correlation_id`，回報問題時附上它就能在日誌裡找到對應的那一次操作。
 
+## 兩種碼，兩種責任
+
+| | 誰產生 | 中文訊息寫在哪 |
+|---|---|---|
+| **具體碼**（`ACCOUNT_IS_DEFAULT`、`AMOUNT_NOT_POSITIVE`…） | 寫入層／驗證層 `raise ValueError("碼")` | [`application/failures.py`](../../src/tagcor_ledger/application/failures.py) 裡的錯誤碼對照表 |
+| **`*_FAILED` 退路碼** | 應用層，**只在具體碼翻不出來時** | 呼叫處的 `fallback_message=` |
+
+`failure()` 認得出 `str(exc)` 就用**那個具體碼**與它的句子；認不出來（`sqlite3.Error`
+的原文、還沒收錄的碼）才退回 `*_FAILED`，原文放 `details["detail"]`。
+
+**`details["reason"]` 已經廢除。** 以前應用層把 `str(exc)` 塞進去，而
+`result_message()` 會把它用括號接在畫面訊息後面 —— 於是使用者看到
+「帳戶無法刪除；預設帳戶或已有歷史資料的帳戶請改用封存。（`ACCOUNT_IS_DEFAULT`）」，
+一句同時指控兩件事的中文，真正發生的那件只寫在後面的英文裡。
+`details["detail"]` **永遠不顯示**，它是給日誌與人工排查看的。
+
 ---
+
+## 金額
+
+金額解析在 `domain/money.py`。**這一組最常被看到** —— 打錯金額是最普通的操作失誤。
+
+| 錯誤碼 | 成因 | 使用者該怎麼做 |
+|---|---|---|
+| `AMOUNT_FORMAT_INVALID` | 不是合法的十進位數字（有逗號、單位、空白、指數） | 只填數字。`1,200` 要寫成 `1200` |
+| `AMOUNT_NOT_POSITIVE` | 不允許 0 的欄位填了 0 | 填大於 0 的金額。**負數不會走到這裡** —— 減號在格式那一關就被擋掉，回的是上面那個碼 |
+| `AMOUNT_NOT_A_STRING` | 傳進來的不是字串 | UI 正常操作不會發生 —— 這是程式的問題 |
+| `CURRENCY_UNSUPPORTED` | 幣別不在幣別對照表裡 | 目前只有 TWD。同上，正常操作不會發生 |
+| `CURRENCY_FRACTION_UNSUPPORTED` | 台幣填了小數 | 填整數元。TWD 的 scale 是 0，沒有角與分 |
 
 ## 帳戶
 
@@ -23,7 +51,8 @@
 | `ACCOUNT_NOT_ACTIVE` | 想用一個已封存的帳戶記帳 | 先恢復該帳戶，或改選別的 |
 | `ACCOUNT_IS_DEFAULT` | 想刪掉預設帳戶 | 先到操作設定改預設帳戶，再刪 |
 | `ACCOUNT_IN_USE` | 想刪掉已被歷史交易引用的帳戶 | **改用封存。** 刪除只允許從未被引用過的 |
-| `ACCOUNT_CREATE_FAILED` / `ACCOUNT_RENAME_FAILED` / `ACCOUNT_ARCHIVE_FAILED` / `ACCOUNT_RESTORE_FAILED` / `ACCOUNT_DELETE_FAILED` | 上述操作在寫入層失敗 | 看 `details.reason`；多半是底下某個更具體的錯誤 |
+| `ACCOUNT_CREATE_FAILED` / `ACCOUNT_RENAME_FAILED` / `ACCOUNT_ARCHIVE_FAILED` / `ACCOUNT_RESTORE_FAILED` / `ACCOUNT_DELETE_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
+| `DESTINATION_ACCOUNT_NOT_ACTIVE` | 待確認的轉帳，轉入帳戶已封存 | 恢復那個帳戶，或改掉這筆待確認項目的轉入帳戶 |
 
 ## 類別與項目
 
@@ -39,7 +68,8 @@
 | `CATEGORY_HAS_ACTIVE_CHILDREN` | 想封存還有使用中子項目的類別 | 先封存子項目。否則會出現「父封存了、子還在選單裡」的矛盾 |
 | `CATEGORY_IN_USE` | 想刪掉已被歷史交易引用的 | **改用封存** |
 | `CATEGORY_REQUIRED` | 收入／支出沒選類別 | 選一個。轉帳不需要類別 |
-| `CATEGORY_CREATE_FAILED` / `CATEGORY_RENAME_FAILED` / `CATEGORY_ARCHIVE_FAILED` / `CATEGORY_RESTORE_FAILED` / `CATEGORY_DELETE_FAILED` | 上述操作在寫入層失敗 | 看 `details.reason` |
+| `CATEGORY_CREATE_FAILED` | **預期外**的寫入失敗。名稱空白、上層無效、同層同名這三種都已經有自己的碼，走到這裡表示三道檢查都沒攔到 | 匯出診斷資訊回報。原文在 `details.detail`，**不會印在畫面上** |
+| `CATEGORY_RENAME_FAILED` / `CATEGORY_ARCHIVE_FAILED` / `CATEGORY_RESTORE_FAILED` / `CATEGORY_DELETE_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
 
 ## 交易
 
@@ -47,13 +77,13 @@
 |---|---|---|
 | `ENTRY_TYPE_INVALID` | 流向不是收入／支出／轉帳 | UI 正常操作不會發生；發生代表有 bug |
 | `DATETIME_TIMEZONE_REQUIRED` | 時間字串沒有時區 | 同上。本專案固定 `Asia/Taipei` |
-| `VALIDATION_FAILED` | 泛用的輸入驗證失敗 | 看 `details.reason` 找出實際原因 |
+| `VALIDATION_FAILED` | **退路碼**：輸入驗證失敗，而且認不出是哪一種 | 匯出診斷資訊回報。**這個碼出現代表分類漏了一種情形**，該補一個具體的碼 |
 | `TRANSACTION_NOT_FOUND` | 交易不存在 | 可能已被刪除或資料庫被換過 |
 | `TRANSACTION_VOIDED` | 想編輯一筆已作廢的交易 | 作廢不可復原。要改就新建一筆 |
 | `TRANSACTION_REVISION_CONFLICT` | 樂觀鎖衝突 —— 這筆在你編輯期間被別處改過 | 重新載入交易紀錄再改一次 |
 | `TRANSACTION_STATUS_FILTER_INVALID` | 篩選的狀態值不合法 | UI 正常操作不會發生 |
-| `TRANSACTION_UPDATE_FAILED` | 更新在寫入層失敗 | 看 `details.reason` |
-| `LIST_TRANSACTIONS_FAILED` | 查詢失敗 | 多半是資料庫層問題；匯出診斷資訊 |
+| `TRANSACTION_UPDATE_FAILED` | **退路碼**：更新失敗，原因認不出來 | 匯出診斷資訊回報 |
+| `LIST_TRANSACTIONS_FAILED` | **退路碼**：查詢失敗 | 多半是資料庫層問題；匯出診斷資訊 |
 | `PAGE_LIMIT_INVALID` | 每頁筆數不在允許範圍 | 只接受 20／50／100 |
 
 ## 轉帳
@@ -65,7 +95,7 @@
 | `TRANSFER_EDIT_NOT_SUPPORTED` | 想就地編輯轉帳 | **這是刻意的。** 轉帳用「替換」流程：建新的、作廢舊的，同一個 SQLite transaction 完成 |
 | `TRANSFER_NOT_FOUND` | 要替換的轉帳不存在 | 重新載入 |
 | `TRANSFER_NOT_ACTIVE` | 要替換的轉帳已作廢 | 已作廢的不能再替換 |
-| `TRANSFER_REPLACE_FAILED` | 替換流程失敗 | **舊轉帳未變更。** 看 `details.reason` |
+| `TRANSFER_REPLACE_FAILED` | **退路碼**：替換流程失敗 | **舊轉帳未變更。** 匯出診斷資訊回報 |
 | `CURRENCY_MISMATCH` | 兩個帳戶幣別不同 | 目前只支援同幣別 TWD 轉帳 |
 
 ## 餘額盤點
@@ -75,8 +105,8 @@
 | `BALANCE_SNAPSHOT_NEGATIVE` | 填了負數的實際金額 | 盤點金額不能是負的 |
 | `BALANCE_SNAPSHOT_NOT_FOUND` | 盤點不存在 | 重新載入 |
 | `BALANCE_SNAPSHOT_STATUS_FILTER_INVALID` | 篩選狀態值不合法 | UI 正常操作不會發生 |
-| `BALANCE_SNAPSHOT_VALIDATION_FAILED` | 輸入驗證失敗 | 看 `details.reason` |
-| `BALANCE_SNAPSHOT_UPDATE_FAILED` / `BALANCE_SNAPSHOT_LIST_FAILED` / `BALANCE_SNAPSHOT_EXPORT_FAILED` | 對應操作失敗 | 看 `details.reason` |
+| `BALANCE_SNAPSHOT_VALIDATION_FAILED` | **退路碼**：輸入驗證失敗，認不出是哪一種 | 匯出診斷資訊回報 |
+| `BALANCE_SNAPSHOT_UPDATE_FAILED` / `BALANCE_SNAPSHOT_LIST_FAILED` / `BALANCE_SNAPSHOT_EXPORT_FAILED` | **退路碼**：對應操作失敗 | 匯出診斷資訊回報 |
 | `BALANCE_GAP_LOAD_FAILED` / `BALANCE_GAP_TRANSACTIONS_FAILED` | 差額或期間交易查詢失敗 | 匯出診斷資訊 |
 
 ## 模板、排程與待確認
@@ -92,7 +122,7 @@
 | `SCHEDULE_INTERVAL_INVALID` | 間隔倍數不合法 | 要是正整數 |
 | `OCCURRENCE_NOT_PENDING` | 想修改一筆已確認或已略過的待確認項目 | 兩者都是終點。要改結果就去作廢它產生的交易 |
 | `OCCURRENCE_AMOUNT_REQUIRED` | 確認時金額還是空的 | 填金額才能入帳 |
-| `TEMPLATE_SAVE_FAILED` / `TEMPLATE_ARCHIVE_FAILED` / `SCHEDULE_SAVE_FAILED` / `SCHEDULE_ARCHIVE_FAILED` / `SCHEDULE_GENERATE_FAILED` / `OCCURRENCE_CONFIRM_FAILED` / `OCCURRENCE_SKIP_FAILED` / `OCCURRENCE_UPDATE_FAILED` | 對應操作失敗 | 看 `details.reason` |
+| `TEMPLATE_SAVE_FAILED` / `TEMPLATE_ARCHIVE_FAILED` / `SCHEDULE_SAVE_FAILED` / `SCHEDULE_ARCHIVE_FAILED` / `SCHEDULE_GENERATE_FAILED` / `OCCURRENCE_CONFIRM_FAILED` / `OCCURRENCE_SKIP_FAILED` / `OCCURRENCE_UPDATE_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
 
 ## 設定
 
@@ -101,7 +131,7 @@
 | `DEFAULT_ACCOUNT_NOT_ACTIVE` | 想把已封存的帳戶設成預設 | 先恢復該帳戶 |
 | `SETTINGS_ENTRY_TYPE_INVALID` | 預設流向值不合法 | UI 正常操作不會發生 |
 | `SETTINGS_PAGE_SIZE_INVALID` | 每頁筆數不合法 | 只接受 20／50／100 |
-| `SETTINGS_SAVE_FAILED` | 設定寫入失敗 | 看 `details.reason` |
+| `SETTINGS_SAVE_FAILED` | **退路碼**：設定寫入失敗 | 匯出診斷資訊回報 |
 
 ## 系統路徑與資料庫
 
@@ -115,7 +145,7 @@
 | `SYSTEM_PATH_NOT_WRITABLE` | 資料夾建不出來或寫不進去 | 檢查磁碟是否連接、權限是否足夠、空間是否夠 |
 | `SYSTEM_PATH_SETTINGS_INVALID` | `system_paths.json` 不是合法 JSON | **刪掉它會退回預設路徑**，不會損失帳務資料 |
 | `TARGET_LEDGER_ALREADY_EXISTS` | 搬移目標已經有一個資料庫檔 | 換一個空資料夾，或先處理掉目標位置那一份 |
-| `PATH_SETTINGS_SAVE_FAILED` | 路徑設定儲存失敗 | **舊設定與舊資料都沒有變動。** 看 `details.reason` |
+| `PATH_SETTINGS_SAVE_FAILED` | **退路碼**：路徑設定儲存失敗，而且原因不是這一節其他任何一個 | **舊設定與舊資料都沒有變動。** 匯出診斷資訊回報 |
 | `DATABASE_SCHEMA_TOO_NEW` | 資料庫版本比程式支援的新 | **不要繼續使用，先更新程式。** 用舊程式開新資料庫會壞資料 |
 | `DATABASE_WRITE_FAILED` | 寫入交易時資料庫層失敗 | 磁碟滿、檔案被鎖、資料庫損毀都可能。匯出診斷資訊 |
 
@@ -156,7 +186,22 @@
 | `DEPOSIT_AMOUNT_REQUIRED` | 確認時沒有金額，而且利率空白算不出建議值 | **照存摺填實際金額。** 或先回定存頁補上年利率 |
 | `DEPOSIT_CONTRACT_IN_USE` | 想刪掉已經有入帳紀錄的定存 | **改用「結束合約」。** 刪除只允許從未入帳過的，否則帳本裡的交易會失去來歷 |
 | `DEPOSIT_TERM_NOT_EDITABLE` | 想修改已續約或已結清的期 | 只有「存續中」的期能改。已經產生過交易的改了會對不起帳 |
-| `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` | 對應操作在寫入層失敗 | 看 `details.reason` |
+| `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
+
+## 備份
+
+`validate_backup()` 把碼放在**回傳值**裡（`{"valid": False, "error_code": …}`），
+還原時才轉成例外。**這一組每一個都是「不要用這份備份」** ——
+所以每一句都要講清楚該改用別的，不要只說「失敗」。
+
+| 錯誤碼 | 成因 | 使用者該怎麼做 |
+|---|---|---|
+| `BACKUP_FILES_MISSING` | 資料夾裡少了 `backup_manifest.json` 或 `ledger.sqlite3` | 改用別的備份 |
+| `BACKUP_MANIFEST_INVALID` | 清單檔讀不開或不是合法 JSON | 改用別的備份 |
+| `BACKUP_CHECKSUM_MISMATCH` | 檔案雜湊與清單記的對不起來 —— 備份之後被改過或損毀 | **不要還原。** 改用別的備份 |
+| `BACKUP_INTEGRITY_FAILED` | 資料庫完整性檢查沒過 | **不要還原。** 建立備份時就出現的話，代表當下複製出來的那一份是壞的 |
+| `BACKUP_SCHEMA_MISSING` | 讀不到 `schema_migrations`，檔案可能不是本程式建的 | 改用別的備份 |
+| `BACKUP_SCHEMA_TOO_NEW` | 備份是用比較新的版本建立的 | **先更新程式再還原。** 用舊程式寫新結構會弄壞資料 |
 
 ## 法規參考庫
 
@@ -171,7 +216,7 @@
 
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
 |---|---|---|
-| `DIAGNOSTICS_BUILD_FAILED` | 蒐集診斷資訊時失敗 | 通常是資料庫讀不到。看 `details.reason` |
+| `DIAGNOSTICS_BUILD_FAILED` | 蒐集診斷資訊時失敗 | 通常是資料庫讀不到；確認磁碟已連接 |
 | `DIAGNOSTICS_WRITE_FAILED` | 診斷檔寫不進 `exports/` | 確認匯出資料夾存在且可寫、磁碟有空間 |
 
 ---

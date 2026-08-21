@@ -192,6 +192,28 @@ def test_changing_the_rate_refreshes_pending_suggestions(service: DepositService
     assert events[0].suggested_amount_minor == 1_612
 
 
+def test_a_missing_term_does_not_claim_to_be_uneditable(service: DepositService) -> None:
+    """期根本不存在時，不要說「只有存續中的期可以修改」。
+
+    以前 `update_term` 有一個 `except NotFoundError:` 無條件回
+    `DEPOSIT_TERM_NOT_EDITABLE` —— 但 store 的 `NotFoundError` 有兩種
+    （`DEPOSIT_TERM_NOT_EDITABLE` 與 `DEPOSIT_TERM_NOT_FOUND`），於是「找不到」
+    被講成「不能改」。使用者會去找一個不存在的期的狀態，而那個期根本不在畫面上。
+    """
+    _make_contract(service)
+    result = service.update_term(
+        "term_does_not_exist",
+        start_date="2026-02-15",
+        maturity_date="2027-02-15",
+        principal="100000",
+        annual_rate_ppm=None,
+    )
+    assert not result.success
+    assert result.error_code == "DEPOSIT_TERM_NOT_FOUND"
+    assert "存續中" not in result.message
+    assert "重新整理" in result.message
+
+
 def test_settled_terms_cannot_be_edited(service: DepositService) -> None:
     _make_contract(service)
     service.generate_due(today="2027-02-15")

@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any
 
 
+from tagcor_ledger.application.failures import message_for
 from tagcor_ledger.domain.deposits import (
     DEPOSIT_EVENT_TYPE_NAMES,
     INTEREST_METHOD_NAMES,
@@ -78,8 +79,31 @@ def signed_amount_text(item: dict[str, Any]) -> str:
 
 
 def result_message(result: Any) -> str:
-    reason = str(result.details.get("reason", "")).strip()
-    return f"{result.message}{'（' + reason + '）' if reason else ''}"
+    """畫面上顯示的一句話 —— **就是 `result.message`，不再接任何東西**。
+
+    以前這裡會把 `details["reason"]` 用括號補在後面，於是畫面長這樣：
+
+        帳戶無法刪除；預設帳戶或已有歷史資料的帳戶請改用封存。（ACCOUNT_IS_DEFAULT）
+
+    那個括號是在補償「一個錯誤碼代表好幾件事」—— 中文句子太籠統，只好把底層的碼
+    原封不動印出來讓人自己判斷。真正的修法是把碼拆開、每個碼講自己的話，
+    那件事在 `application/failures.py`。這裡就只剩下顯示。
+
+    `details["detail"]` 是給診斷用的，**永遠不顯示**。
+    """
+    return str(result.message)
+
+
+def error_text(exc: BaseException, *, fallback: str) -> str:
+    """把「訊息就是錯誤碼」的例外翻成中文，翻不出來就用 `fallback`。
+
+    有些地方在送出之前就自己解析輸入（待確認頁、模板對話框），例外沒有經過
+    `application/failures.py`。以前那些地方直接印 `str(exc)`，於是畫面上會出現
+    `金額無效（Amount must be greater than zero.）` —— 全中文介面裡的一句英文。
+
+    走同一張表，訊息才會跟服務層回的一致。
+    """
+    return message_for(str(exc)) or fallback
 
 
 def display_date(value: str) -> str:

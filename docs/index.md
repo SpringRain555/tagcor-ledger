@@ -37,6 +37,7 @@
 | [失敗紀錄](lessons.md) | 踩過的坑。append-only |
 | [研究](research/market-scan.md) | 市面產品的判讀，**附抓取日期** |
 | [維護者筆記](maintainer_notes.md) | **對什麼都沒有權威。** 它是「這件事的規則寫在哪」的查詢表 |
+| `architecture/diagrams/*.svg` | **對什麼都沒有權威。** 產生物，正本是各文件裡的 ` ```mermaid ` 區塊 |
 
 ## 快速入口
 
@@ -72,12 +73,32 @@
 - [ADR-0007 定存建模](decisions/ADR-0007-time-deposit-modelling.md)
 - [ADR-0008 AGENTS.md 是唯一正本](decisions/ADR-0008-agents-md-canonical.md)
 - [ADR-0009 UI 維持 PySide6](decisions/ADR-0009-keep-pyside6.md)
+- [ADR-0010 對外轉帳記成收入／支出](decisions/ADR-0010-external-transfers.md)
 
 ## Architecture
 
 - [總覽](architecture/overview.md)｜[資料模型](architecture/data-model.md)｜[狀態機](architecture/state-machines.md)
 - [儲存配置](architecture/storage-layout.md)｜[UI 流程](architecture/ui-workflows.md)
 - [錯誤碼目錄](architecture/error-codes.md)｜[用詞對照表](architecture/glossary.md)
+
+### 圖
+
+架構、狀態機、頁面地圖與資料表關聯都有 mermaid 圖，**寫在各自那份文件裡**
+（用 ` ```mermaid ` 區塊）。在看得到 mermaid 的地方（VS Code、GitHub、Obsidian）直接就是圖。
+
+同一份原始碼另外算成 SVG 放在 [`architecture/diagrams/`](architecture/diagrams/)，
+純文字編輯器或圖片檢視器也看得到。**SVG 是產生物**：改了 `.md` 裡的 mermaid 就要跑
+
+```powershell
+.\tools\diagrams\Render-Diagrams.ps1          # 重新產生
+.\tools\diagrams\Render-Diagrams.ps1 -Check   # 只檢查有沒有過期
+```
+
+沒重跑的話 `tests/unit/test_diagrams_drift.py` 會紅 —— 那條測試只比對 SHA-256，
+**不需要 node**，所以 `Verify.ps1` 照樣跑得動。
+
+> **圖是導覽，不是規格。** 狀態機的權威仍然是那幾張「從 A 能不能到 B」的轉移表 ——
+> 圖回答不了那個問題（見 [狀態機](architecture/state-machines.md) 開頭）。
 
 ## Research
 

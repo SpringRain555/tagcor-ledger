@@ -24,6 +24,48 @@
 - `deposit_events`：定存的到期與領息，等待使用者確認。**不走 `scheduled_occurrences`**
   —— 排程引擎不需要懂計息 —— 但在同一個「待確認」頁呈現，維持單一收件匣。
 
+```mermaid
+erDiagram
+    accounts ||--o{ account_postings : "每筆異動屬於一個帳戶"
+    transactions ||--|{ account_postings : "收支一筆／轉帳兩筆"
+    transactions ||--o{ category_allocations : "UI 目前只建一筆"
+    categories ||--o{ category_allocations : ""
+    categories ||--o{ categories : "parent_id（只有兩層）"
+    accounts ||--o{ balance_snapshots : "盤點不建立 posting"
+    accounts ||--o{ deposit_contracts : "定存帳戶"
+    deposit_contracts ||--|{ deposit_terms : "續存產生新的一期"
+    deposit_terms ||--o{ deposit_events : "到期／領息，待確認"
+    recurring_schedules ||--o{ scheduled_occurrences : "到期產生待確認"
+
+    accounts {
+        text account_id PK
+        text name "COLLATE NOCASE"
+        int opening_balance_minor
+        text status "active｜archived"
+    }
+    categories {
+        text category_id PK
+        text parent_id FK "level 1 為 NULL"
+        int level "CHECK IN (1, 2)"
+        text status "active｜archived"
+    }
+    transactions {
+        text transaction_id PK
+        int revision "樂觀鎖"
+        text entry_type "income｜expense｜transfer｜adjustment"
+        text status "active｜voided"
+        text occurred_at
+    }
+    account_postings {
+        text posting_id PK
+        int amount_minor "支出負、收入正"
+        int sequence "轉帳靠它分辨來源與目的"
+    }
+```
+
+> **`adjustment` 從 v1 就在 `CHECK` 約束裡，但沒有任何程式碼會建立它**
+> （見 [狀態機 §1](state-machines.md)）。圖上照實列出，免得有人以為漏實作了什麼。
+
 Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snapshot`。
 
 ### 刻意不存在的表與欄位

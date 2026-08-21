@@ -24,6 +24,9 @@ UI_WORKFLOWS = PROJECT_ROOT / "docs" / "architecture" / "ui-workflows.md"
 OPERATION_SETTINGS = (
     PROJECT_ROOT / "src" / "tagcor_ledger" / "ui" / "pages" / "operation_settings.py"
 )
+SYSTEM_SETTINGS = (
+    PROJECT_ROOT / "src" / "tagcor_ledger" / "ui" / "pages" / "system_settings.py"
+)
 
 
 def _settings_tab_labels() -> list[str]:
@@ -46,6 +49,30 @@ def _settings_tab_labels() -> list[str]:
     raise AssertionError("找不到 OperationSettingsPage._tabs()，抽取器要跟著改")
 
 
+def _system_tab_labels() -> list[str]:
+    """從 `SystemSettingsPage._build()` 的 `addTab(..., "名稱")` 取出四個分頁名。
+
+    系統設定沒有 `_tabs()` 那種正本方法，分頁是一行一行 `addTab` 加的，所以這裡
+    直接抓那些呼叫的第二個引數。**它一樣需要守門** —— 2026-08-21 之前只有操作設定
+    的六個分頁被逐字比對，系統設定的四個（一般設定／資料路徑／備份與還原／重製）
+    改了名不會有任何東西變紅，而「重製與還原」那個舊名正是這樣漂過一次的。
+    """
+    tree = ast.parse(SYSTEM_SETTINGS.read_text(encoding="utf-8"))
+    labels = [
+        node.args[1].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "addTab"
+        and len(node.args) == 2
+        and isinstance(node.args[1], ast.Constant)
+        and isinstance(node.args[1].value, str)
+    ]
+    if not labels:
+        raise AssertionError("找不到 SystemSettingsPage 的 addTab 呼叫，抽取器要跟著改")
+    return labels
+
+
 def test_the_extractor_finds_the_six_tabs() -> None:
     """陽性對照：抽不到名字的話，底下那條會空過。"""
     labels = _settings_tab_labels()
@@ -53,10 +80,21 @@ def test_the_extractor_finds_the_six_tabs() -> None:
     assert "定期收支" in labels
 
 
+def test_the_extractor_finds_the_four_system_tabs() -> None:
+    """陽性對照：同上，抽取器壞掉的話下面那條會空過。"""
+    labels = _system_tab_labels()
+    assert len(labels) == 4, labels
+    assert "備份與還原" in labels
+
+
 def test_every_page_name_appears_in_the_ui_workflows_doc() -> None:
-    """側邊欄八頁與操作設定六個分頁的名字，都要逐字出現在頁面地圖那份文件裡。"""
+    """側邊欄八頁、操作設定六個分頁、系統設定四個分頁，都要逐字出現在頁面地圖那份文件裡。"""
     document = UI_WORKFLOWS.read_text(encoding="utf-8")
-    expected = [LABELS[page] for page in ALL_PAGES] + _settings_tab_labels()
+    expected = (
+        [LABELS[page] for page in ALL_PAGES]
+        + _settings_tab_labels()
+        + _system_tab_labels()
+    )
 
     missing = [name for name in expected if name not in document]
     if missing:

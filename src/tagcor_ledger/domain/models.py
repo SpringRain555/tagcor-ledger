@@ -92,6 +92,25 @@ class TransactionFilter:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryTreeFilter:
+    """類別樹的篩選與排序條件。**全部在 SQL 裡處理，不撈回 Python 再過濾。**
+
+    `status` 是 `active` / `archived` / `all`；**預設 `all`**，因為名冊分頁是管理用的，
+    看不到封存的東西就沒辦法恢復它。
+
+    `sort_key` 只接受 `CATEGORY_SORT_KEYS` 裡的值 —— 它會變成 `ORDER BY` 的一部分，
+    所以**絕對不能讓使用者輸入直接進去**。查不到就退回 `default`。
+    """
+
+    level: int | None = None
+    parent_id: str | None = None
+    search: str = ""
+    status: str = "all"
+    sort_key: str = "default"
+    descending: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class ApplicationSettings:
     default_account_id: str
     default_entry_type: str

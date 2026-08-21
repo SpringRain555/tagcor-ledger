@@ -25,9 +25,35 @@ CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{3,}$")
 # 加新的攜帶型別到這裡時，記得它的錯誤碼必須用**位置參數**傳，否則掃不到。
 RAISING_CALLS = {"fail", "_error_code", "StartupFailure"}
 
-# 有些呼叫用關鍵字傳，例如 `SomeThing(error_code="X")`。這個名字帶著意圖，
-# 不會誤抓到別的字串，所以任何呼叫上出現它都算數。
-CODE_KEYWORDS = {"error_code"}
+# 有些呼叫用關鍵字傳，例如 `SomeThing(error_code="X")`、
+# `failure(exc, fallback_code="X", ...)`。這兩個名字都帶著意圖，不會誤抓到別的
+# 字串，所以任何呼叫上出現它們都算數。
+CODE_KEYWORDS = {"error_code", "fallback_code"}
+
+# 模組層的錯誤碼對照表。它的 **key 就是錯誤碼**，而且是使用者真的會看到的那一組 ——
+# 有些碼（例如 `DESTINATION_ACCOUNT_NOT_ACTIVE`）是被 `return` 出來再轉成例外的，
+# 只掃 `raise` 抓不到，只有從這裡才看得見。
+CODE_TABLES = {"ERROR_MESSAGES"}
+
+
+def _code_table_keys(node: ast.AST) -> list[ast.expr]:
+    """`ERROR_MESSAGES: dict[str, str] = {...}` 的 key 清單，不是這種賦值就回空。
+
+    **`Assign` 與 `AnnAssign` 都要接。** 有型別註記的賦值是 `AnnAssign`，只寫
+    `isinstance(node, ast.Assign)` 會靜靜地一個 key 都抓不到 —— 而抓不到的表現
+    是測試通過，不是失敗，所以底下有一條陽性對照守著。
+    """
+    if isinstance(node, ast.AnnAssign):
+        targets: list[ast.expr] = [node.target]
+    elif isinstance(node, ast.Assign):
+        targets = list(node.targets)
+    else:
+        return []
+    if not isinstance(node.value, ast.Dict):
+        return []
+    if not any(isinstance(target, ast.Name) and target.id in CODE_TABLES for target in targets):
+        return []
+    return [key for key in node.value.keys if key is not None]
 
 
 def _string_code(node: ast.AST) -> str | None:
@@ -44,6 +70,13 @@ def codes_in_source() -> dict[str, set[str]]:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         relative = str(path.relative_to(SOURCE_ROOT)).replace("\\", "/")
         for node in ast.walk(tree):
+            table_keys = _code_table_keys(node)
+            if table_keys:
+                for key in table_keys:
+                    table_code = _string_code(key)
+                    if table_code:
+                        found.setdefault(table_code, set()).add(relative)
+                continue
             code: str | None = None
             if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call) and node.exc.args:
                 code = _string_code(node.exc.args[0])
@@ -83,6 +116,12 @@ def test_extractor_finds_a_plausible_number_of_codes() -> None:
     assert "TRANSFER_SAME_ACCOUNT" in source
     assert "DATABASE_SCHEMA_TOO_NEW" in source
     assert "PATH_OUTSIDE_DATA_ROOT" in source
+    # 三個抽取路徑各抓一個：`raise`、`fallback_code=`、以及 `ERROR_MESSAGES` 的 key。
+    # 最後這個只出現在對照表裡（`_occurrence_invalid_reason` 是 `return` 不是 `raise`），
+    # 少了表格掃描就會漏掉它。
+    assert "ACCOUNT_DELETE_FAILED" in source, "fallback_code= 這條路徑沒抓到"
+    assert "DESTINATION_ACCOUNT_NOT_ACTIVE" in source, "ERROR_MESSAGES 的 key 沒抓到"
+    assert "application/failures.py" in source["DESTINATION_ACCOUNT_NOT_ACTIVE"]
 
 
 def test_every_source_code_is_documented() -> None:

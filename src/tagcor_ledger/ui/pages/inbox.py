@@ -47,7 +47,12 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import inbox_values, minor_text, result_message
+from tagcor_ledger.ui.formatting import (
+    error_text,
+    inbox_values,
+    minor_text,
+    result_message,
+)
 from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
 from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 from tagcor_ledger.ui.widgets.table import (
@@ -64,6 +69,10 @@ EMPTY_MESSAGE = (
     "要新增定期收支：操作設定 → 定期收支"
 )
 """空狀態的文字。**這一段就是「這一頁是做什麼的」的答案**，不要簡化成「沒有資料」。"""
+
+BAD_AMOUNT_TEXT = "金額只能填數字，不要加逗號、單位或空白。"
+"""`MoneyError` 翻不出來時的退路。認得出來的碼（負數、要大於 0）由
+`error_text()` 從 `application/failures.py` 那張表取，兩邊講的話才會一致。"""
 
 
 class InboxPage(QWidget):
@@ -192,7 +201,9 @@ class InboxPage(QWidget):
         try:
             amount = Money.from_decimal_string(text.strip(), allow_zero=True).amount_minor
         except MoneyError as exc:
-            QMessageBox.warning(self, "金額無效", str(exc))
+            QMessageBox.warning(
+                self, "金額無效", error_text(exc, fallback=BAD_AMOUNT_TEXT)
+            )
             return
         result = self.controller.confirm_deposit_event(
             str(item["event_id"]), actual_amount_minor=amount
@@ -335,7 +346,7 @@ class InboxEditDialog(QDialog):
         try:
             amount_minor = Money.from_decimal_string(self.amount.text().strip()).amount_minor
         except MoneyError as exc:
-            self.error.setText(f"金額無效（{exc}）")
+            self.error.setText(error_text(exc, fallback=BAD_AMOUNT_TEXT))
             return
         result = self.controller.update_occurrence(
             str(self.item["occurrence_id"]),

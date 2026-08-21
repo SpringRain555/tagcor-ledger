@@ -22,12 +22,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
-    QInputDialog,
-    QLabel,
     QMessageBox,
     QPushButton,
     QTableView,
@@ -36,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.application.result import Result
+from tagcor_ledger.domain.models import CategoryTreeFilter
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import (
     account_values,
@@ -43,6 +42,8 @@ from tagcor_ledger.ui.formatting import (
     item_values,
     result_message,
 )
+from tagcor_ledger.ui.widgets.filters import CatalogFilterBar
+from tagcor_ledger.ui.widgets.simple_form import ChoiceField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
     SETTINGS_TABLE_ROWS,
     RowsModel,
@@ -61,10 +62,22 @@ class CatalogPage(QWidget):
     AMOUNT_COLUMN: int | None = None
     ADD_LABEL = "新增"
     ID_FIELD = ""
+    NAME_LABEL = "名稱"
+    """重新命名時那一格的標籤。三個分頁各自說自己的話 ——「名稱」對「帳戶」與
+    「項目」都成立，所以它等於沒說。"""
+
+    SORT_KEYS: tuple[str | None, ...] = ()
+    """欄索引 → SQL 的 `sort_key`。`None` 表示那一欄不能排；空 tuple 表示整頁不能排。
+
+    值必須是 `CATEGORY_SORT_KEYS` 裡有的 key —— 那份白名單才是唯一能拼進
+    `ORDER BY` 的東西。"""
 
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
         self.controller = controller
+        self.sort_key = "default"
+        self.descending = False
+        self.filter_bar: CatalogFilterBar | None = None
         self.model = RowsModel(
             list(self.HEADERS),
             self._values,
@@ -73,6 +86,10 @@ class CatalogPage(QWidget):
         self.table = QTableView()
         self._build()
         self.refresh()
+        if self.filter_bar is not None:
+            # 訊號**最後**才接。`_build()` 與第一次 `refresh()` 都會動篩選列，
+            # 在那之前接上只會多跑一次重整。
+            self.filter_bar.changed.connect(self.refresh)
 
     # --- 子類要回答的 -----------------------------------------------------------
 
@@ -99,9 +116,13 @@ class CatalogPage(QWidget):
     def _delete(self, identifier: str) -> Result:
         raise NotImplementedError
 
-    def _filter_widgets(self) -> list[QWidget]:
-        """按鈕列右側的額外控制項（目前只有「項目」分頁的類別篩選）。"""
-        return []
+    def _make_filter_bar(self) -> CatalogFilterBar | None:
+        """這一頁要不要篩選列。回傳 `None` 就沒有。
+
+        **在這裡建，不在 `__init__` 開頭建** —— `QWidget.__init__` 還沒跑完之前往
+        `self` 上掛屬性是 PySide6 明確不保證的事。基底會先呼叫這裡，再呼叫 `refresh()`。
+        """
+        return None
 
     # --- 形狀 -------------------------------------------------------------------
 
@@ -117,23 +138,55 @@ class CatalogPage(QWidget):
         for button in (add_button, rename, toggle, delete_button):
             row.addWidget(button)
         row.addStretch()
-        for widget in self._filter_widgets():
-            row.addWidget(widget)
 
         setup_table(self.table, self.model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
         # 「新增」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
         bind_selection(self.table, rename, toggle, delete_button)
         layout = QVBoxLayout(self)
         layout.addLayout(row)
+        # **篩選列自己一行**，不擠在按鈕列右邊 —— 四顆按鈕加一條搜尋框會把分頁的
+        # 最小寬度撐大，而這一頁的表格本來就只有三欄。
+        self.filter_bar = self._make_filter_bar()
+        if self.filter_bar is not None:
+            layout.addWidget(self.filter_bar)
         layout.addWidget(self.table)
         # 表格現在是固定高度（`fit_rows`），沒有這一行的話 QVBoxLayout 會把多餘的
         # 高度平均塞進每個 widget 之間 —— 按鈕與表格會浮在分頁中間。
         layout.addStretch()
 
+        self._setup_sorting()
+
         add_button.clicked.connect(self.add_item)
         rename.clicked.connect(self.rename_selected)
         toggle.clicked.connect(self.toggle_selected)
         delete_button.clicked.connect(self.delete_selected)
+
+    def _setup_sorting(self) -> None:
+        """點表頭排序。**排序在 SQL 裡做，不是 `setSortingEnabled(True)`。**
+
+        `QTableView.setSortingEnabled(True)` 會叫 model 自己在 Python 裡排 —— 那正是
+        `AGENTS.md` 禁止的事。這裡只借用表頭的「可點 ＋ 顯示指示箭頭」，真正的排序
+        是把 `sort_key` 送回 SQL 再查一次。
+        """
+        if not self.SORT_KEYS:
+            return
+        header = self.table.horizontalHeader()
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(True)
+        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        header.sortIndicatorChanged.connect(self._sort_changed)
+
+    def _sort_changed(self, column: int, order: Qt.SortOrder) -> None:
+        key = self.SORT_KEYS[column] if 0 <= column < len(self.SORT_KEYS) else None
+        if key is None:
+            # 那一欄不能排。把指示箭頭收回去，不要留一個會動但沒有作用的箭頭。
+            self.table.horizontalHeader().setSortIndicator(
+                -1, Qt.SortOrder.AscendingOrder
+            )
+            return
+        self.sort_key = key
+        self.descending = order == Qt.SortOrder.DescendingOrder
+        self.refresh()
 
     def refresh(self) -> None:
         self.model.replace_rows(self._rows())
@@ -151,14 +204,13 @@ class CatalogPage(QWidget):
         item = self.model.selected_item(self.table)
         if item is None or item["status"] != "active":
             return
-        name, accepted = QInputDialog.getText(
+        values = ask_form(
             self,
             "重新命名",
-            "名稱",
-            text=str(item["name"]),
+            [TextField("name", self.NAME_LABEL, default=str(item["name"]))],
         )
-        if accepted:
-            self._finish(self._rename(str(item[self.ID_FIELD]), name))
+        if values is not None:
+            self._finish(self._rename(str(item[self.ID_FIELD]), str(values["name"])))
 
     def toggle_selected(self) -> None:
         item = self.model.selected_item(self.table)
@@ -193,6 +245,7 @@ class AccountsPage(CatalogPage):
     AMOUNT_COLUMN = 1
     ADD_LABEL = "新增帳戶"
     ID_FIELD = "account_id"
+    NAME_LABEL = "帳戶名稱"
 
     _values = staticmethod(account_values)
 
@@ -200,13 +253,22 @@ class AccountsPage(CatalogPage):
         return self.controller.account_options(include_archived=True)
 
     def _create(self) -> Result | None:
-        name, accepted = QInputDialog.getText(self, "新增帳戶", "名稱")
-        if not accepted:
-            return None
-        balance, accepted = QInputDialog.getText(
-            self, "新增帳戶", "期初餘額（TWD）", text="0"
+        values = ask_form(
+            self,
+            "新增帳戶",
+            [
+                TextField("name", "帳戶名稱", placeholder="例如：郵局、現金"),
+                TextField(
+                    "balance",
+                    "期初餘額（TWD）",
+                    default="0",
+                    placeholder="整數，例如 0 或 100000",
+                ),
+            ],
         )
-        return self.controller.create_account(name, balance) if accepted else None
+        if values is None:
+            return None
+        return self.controller.create_account(str(values["name"]), str(values["balance"]))
 
     def _rename(self, identifier: str, name: str) -> Result:
         return self.controller.rename_account(identifier, name)
@@ -226,12 +288,28 @@ class CategoryPageBase(CatalogPage):
 
     ID_FIELD = "category_id"
     LEVEL = 1
+    WITH_PARENT_FILTER = False
 
-    def _tree(self) -> list[dict[str, Any]]:
-        return self.controller.category_tree(include_archived=True)
+    def _make_filter_bar(self) -> CatalogFilterBar | None:
+        return CatalogFilterBar(with_parent=self.WITH_PARENT_FILTER)
 
     def _rows(self) -> list[dict[str, Any]]:
-        return [item for item in self._tree() if int(item["level"]) == self.LEVEL]
+        """**整個條件送進 SQL**，不撈回來再用 Python 濾。
+
+        以前 `level` 是在這裡用 list comprehension 濾掉的，「項目」分頁的類別篩選
+        也是 —— 兩者都是 `AGENTS.md` 那條「篩選、排序一律在 SQL 裡做」的例外。
+        """
+        bar = self.filter_bar
+        return self.controller.category_tree(
+            tree_filter=CategoryTreeFilter(
+                level=self.LEVEL,
+                parent_id=bar.parent_id() if bar is not None else None,
+                search=bar.search_text() if bar is not None else "",
+                status=bar.status_value() if bar is not None else "all",
+                sort_key=self.sort_key,
+                descending=self.descending,
+            )
+        )
 
     def _rename(self, identifier: str, name: str) -> Result:
         return self.controller.rename_category(identifier, name)
@@ -251,77 +329,79 @@ class CategoriesPage(CategoryPageBase):
 
     HEADERS = ("類別", "項目數", "狀態")
     ADD_LABEL = "新增類別"
+    NAME_LABEL = "類別名稱"
     LEVEL = 1
+    SORT_KEYS = ("name", "item_count", "status")
 
     _values = staticmethod(category_values)
 
     def _create(self) -> Result | None:
-        name, accepted = QInputDialog.getText(self, "新增類別", "類別名稱")
-        return self.controller.create_category(name) if accepted else None
+        values = ask_form(
+            self,
+            "新增類別",
+            [TextField("name", "類別名稱", placeholder="例如：伙食、交通")],
+        )
+        if values is None:
+            return None
+        return self.controller.create_category(str(values["name"]))
 
 
 class ItemsPage(CategoryPageBase):
-    """項目（第二層）。上方有一個類別篩選 —— 項目一多就找不到自己要的那一個。"""
+    """項目（第二層）。上方有搜尋、所屬類別與狀態 —— 項目一多就找不到自己要的那一個。"""
 
     HEADERS = ("所屬類別", "項目", "狀態")
     ADD_LABEL = "新增項目"
+    NAME_LABEL = "項目名稱"
     LEVEL = 2
+    WITH_PARENT_FILTER = True
+    SORT_KEYS = ("parent_name", "name", "status")
 
     _values = staticmethod(item_values)
 
-    def __init__(self, controller: LedgerController) -> None:
-        super().__init__(controller)
-        # 訊號**最後**才接。`_build()` 與第一次 `refresh()` 都會動這個下拉，
-        # 在那之前接上只會多跑一次重整。
-        self.parent_filter.currentIndexChanged.connect(self.refresh)
-
-    def _filter_widgets(self) -> list[QWidget]:
-        """在這裡建下拉，不在 `__init__` 開頭 —— `QWidget.__init__` 還沒跑完之前
-        往 `self` 上掛屬性是 PySide6 明確不保證的事。基底會先呼叫這裡，再呼叫
-        `refresh()`，所以順序是安全的。
-        """
-        self.parent_filter = QComboBox()
-        return [QLabel("類別"), self.parent_filter]
+    @property
+    def parent_filter(self) -> QComboBox:
+        """「所屬類別」那個下拉。篩選列自己持有它，這裡只是給頁面與測試一個入口。"""
+        assert self.filter_bar is not None and self.filter_bar.parent_filter is not None
+        return self.filter_bar.parent_filter
 
     def refresh(self) -> None:
-        """重填篩選再列資料。**兩者用同一份 `category_tree()`**，不要各查一次。"""
-        tree = self._tree()
-        self._reload_filter([item for item in tree if int(item["level"]) == 1])
-        selected = self.parent_filter.currentData()
-        self.model.replace_rows(
-            [
-                item
-                for item in tree
-                if int(item["level"]) == 2
-                and (selected is None or str(item["parent_id"]) == str(selected))
-            ]
-        )
+        """先重填「所屬類別」下拉，再列資料。
 
-    def _reload_filter(self, parents: list[dict[str, Any]]) -> None:
-        """保住目前的選擇。重填下拉會發 `currentIndexChanged`，所以先擋住訊號。"""
-        previous = self.parent_filter.currentData()
-        self.parent_filter.blockSignals(True)
-        self.parent_filter.clear()
-        self.parent_filter.addItem("全部", None)
-        for item in parents:
-            self.parent_filter.addItem(str(item["name"]), str(item["category_id"]))
-        index = self.parent_filter.findData(previous)
-        self.parent_filter.setCurrentIndex(max(index, 0))
-        self.parent_filter.blockSignals(False)
+        下拉的內容是**所有第一層類別**，跟目前的篩選無關 —— 用搜尋縮小清單之後，
+        下拉裡不該跟著只剩搜尋到的那幾個，否則就換不回去了。
+        """
+        if self.filter_bar is not None:
+            self.filter_bar.set_parents(
+                self.controller.category_tree(
+                    tree_filter=CategoryTreeFilter(level=1, sort_key="name")
+                )
+            )
+        super().refresh()
 
     def _create(self) -> Result | None:
+        """一張表單問完「所屬類別」與「項目名稱」，按一次確定。
+
+        **類別用下拉的 `userData` 帶 id，不用名稱反查。** 舊版是
+        `labels.index(selected)` —— 拿顯示文字回頭找位置，名稱一重複就會挑錯。
+        """
         parents = self.controller.category_options()
         if not parents:
             QMessageBox.information(self, "沒有類別", "請先在「類別」分頁建立一個類別。")
             return None
-        labels = [str(item["name"]) for item in parents]
-        selected, accepted = QInputDialog.getItem(
-            self, "新增項目", "上層類別", labels, editable=False
+        values = ask_form(
+            self,
+            "新增項目",
+            [
+                ChoiceField(
+                    "parent_id",
+                    "所屬類別",
+                    [(str(item["name"]), str(item["category_id"])) for item in parents],
+                ),
+                TextField("name", "項目名稱", placeholder="例如：早餐、捷運"),
+            ],
         )
-        if not accepted:
+        if values is None:
             return None
-        name, accepted = QInputDialog.getText(self, "新增項目", "項目名稱")
-        if not accepted:
-            return None
-        parent_id = str(parents[labels.index(selected)]["category_id"])
-        return self.controller.create_category(name, parent_id)
+        return self.controller.create_category(
+            str(values["name"]), str(values["parent_id"])
+        )

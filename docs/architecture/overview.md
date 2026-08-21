@@ -7,13 +7,26 @@
 > 這份文件曾經把主題規格抄過來一份，然後那一份放到 v0.12.0 才被發現還寫著「深藍色系」——
 > **同一件事有兩個權威，過期的一定是沒人在看的那一份。**
 
-```text
-PySide6 UI
-  → LedgerController
-  → application services / Result
-  → infrastructure stores / SQLite / backup / CSV
-  → domain models
+```mermaid
+flowchart TD
+    UI["ui/<br/>PySide6 頁面與 widget"]
+    CTRL["ui/controller.py<br/>LedgerController<br/><i>UI 唯一的入口</i>"]
+    APP["application/<br/>use case ＋ Result"]
+    INFRA["infrastructure/<br/>stores・migration・備份・CSV"]
+    DOM["domain/<br/>Money・帳戶・類別・交易・定存"]
+    DB[("SQLite<br/>ledger.sqlite3")]
+
+    UI --> CTRL --> APP --> INFRA --> DB
+    APP --> DOM
+    INFRA --> DOM
+
+    QT{{"只有這一層能 import PySide6"}} -.-> UI
+    NOSQL{{"這一層不得出現 SQL"}} -.-> UI
+    PURE{{"不依賴 Qt、sqlite3<br/>與其他任何一層"}} -.-> DOM
 ```
+
+> **圖只是導覽，規則的正本是底下的文字與那張守門測試表。** 三個虛線標註對應
+> `tests/unit/test_architecture.py` 裡真的會失敗的三條檢查。
 
 ## 分層
 
@@ -40,7 +53,8 @@ src/tagcor_ledger/
 │   ├── reference.py    離線法規庫（唯讀）
 │   ├── settings.py     ledger 內的一般偏好
 │   ├── diagnostics.py  診斷資訊匯出
-│   └── result.py       Result：成功／失敗與錯誤碼
+│   ├── result.py       Result：成功／失敗與錯誤碼
+│   └── failures.py     錯誤碼 → 中文說法。**一個碼的句子只寫在這裡**
 ├── infrastructure/
 │   ├── migrations.py   v1 → v7 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
@@ -88,6 +102,35 @@ FTS 索引與稽核列，然後就結束 —— **收 `connection`，不自己�
 現在 `transactions`、`transaction_fts`、`audit_events` **各只有一個寫入點**，
 由 `test_only_one_module_writes_a_transaction` 守著（`migrations.py` 除外 ——
 它重建索引是 schema 演進，不是執行期的寫入路徑）。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 記帳頁
+    participant C as LedgerController
+    participant S as AddTransaction
+    participant T as TransactionStore
+    participant B as StoreBase._write_transaction()
+    participant D as SQLite
+
+    U->>C: submit(流向, 金額, 帳戶, 項目…)
+    C->>S: AddTransactionRequest
+    S->>S: 驗時區 ＋ Money.from_decimal_string()
+    S->>T: create_transaction(...)
+    T->>D: BEGIN
+    T->>B: 收 connection，不自己開 transaction
+    B->>D: INSERT transactions
+    B->>D: INSERT account_postings（轉帳兩筆）
+    B->>D: INSERT category_allocations
+    B->>D: INSERT transaction_fts
+    B->>D: INSERT audit_events
+    T->>D: COMMIT
+    S-->>C: Result.ok / Result.fail(錯誤碼)
+    C-->>U: 繁中訊息（綠或紅）
+```
+
+**`_write_transaction()` 收 `connection` 而不是自己開**，所以「確認待確認項目」
+那條路徑（要在同一個 transaction 裡改 occurrence 狀態）用的是同一份實作。
 
 ## 頁面之間怎麼連動
 

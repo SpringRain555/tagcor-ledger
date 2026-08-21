@@ -22,8 +22,15 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import result_message
+from tagcor_ledger.ui.formatting import error_text, result_message
 from tagcor_ledger.ui.widgets.table import set_button_role
+
+BACKUP_FALLBACK = (
+    "備份操作失敗。請確認備份資料夾存在且可寫入、磁碟還有空間，然後匯出診斷資訊回報。"
+)
+"""認不出來的例外才用這一句。備份自己那幾種失敗（檔案缺少、雜湊對不上、
+完整性檢查沒過⋯⋯）由 `error_text()` 從 `application/failures.py` 那張表取，
+每一種都有自己的說法。"""
 
 
 class MaintenancePage(QWidget):
@@ -93,7 +100,9 @@ class MaintenancePage(QWidget):
             self.result.setText(f"備份已建立：{path}")
             self.refresh()
         except Exception as exc:
-            QMessageBox.warning(self, "備份失敗", str(exc))
+            QMessageBox.warning(
+                self, "備份失敗", error_text(exc, fallback=BACKUP_FALLBACK)
+            )
 
     def validate_selected(self) -> None:
         path = self._selected_path()
@@ -137,13 +146,19 @@ class MaintenancePage(QWidget):
             self.restored.emit()
             self.refresh()
         except Exception as exc:
-            QMessageBox.warning(self, "還原失敗", str(exc))
+            QMessageBox.warning(
+                self, "還原失敗", error_text(exc, fallback=BACKUP_FALLBACK)
+            )
 
     def export_csv(self) -> None:
         try:
             self.result.setText(f"CSV 已匯出：{self.controller.export_csv()}")
         except Exception as exc:
-            QMessageBox.warning(self, "匯出失敗", str(exc))
+            QMessageBox.warning(
+                self,
+                "匯出失敗",
+                error_text(exc, fallback="CSV 無法匯出。請確認匯出資料夾可寫入、磁碟還有空間。"),
+            )
 
     def export_diagnostics(self) -> None:
         result = self.controller.export_diagnostics()

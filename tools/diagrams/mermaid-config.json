@@ -1,0 +1,19 @@
+{
+  "theme": "dark",
+  "htmlLabels": false,
+  "flowchart": {
+    "htmlLabels": false,
+    "curve": "basis"
+  },
+  "themeVariables": {
+    "background": "#0D0D0F",
+    "primaryColor": "#1F1F25",
+    "primaryTextColor": "#E8E8EA",
+    "primaryBorderColor": "#33333C",
+    "secondaryColor": "#16161A",
+    "tertiaryColor": "#26262E",
+    "lineColor": "#7A7A85",
+    "textColor": "#E8E8EA",
+    "fontFamily": "Microsoft JhengHei UI, Microsoft JhengHei, Noto Sans TC, sans-serif"
+  }
+}

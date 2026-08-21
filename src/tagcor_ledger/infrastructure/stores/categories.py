@@ -9,7 +9,7 @@ from dataclasses import asdict
 import sqlite3
 from uuid import uuid4
 
-from tagcor_ledger.domain.models import Category, CategoryNode
+from tagcor_ledger.domain.models import Category, CategoryNode, CategoryTreeFilter
 from tagcor_ledger.infrastructure.clock import now_iso
 from tagcor_ledger.infrastructure.database import connect_database, database_transaction
 from tagcor_ledger.infrastructure.stores.base import (
@@ -17,6 +17,28 @@ from tagcor_ledger.infrastructure.stores.base import (
     StoreBase,
     has_any_reference,
 )
+
+CATEGORY_SORT_KEYS: dict[str, tuple[str, ...]] = {
+    # 預設：項目跟在自己的類別後面。這是「這份資料本來的形狀」，不是某一欄的排序。
+    "default": (
+        "COALESCE(category_parent.sort_order, category_node.sort_order)",
+        "COALESCE(category_parent.name, category_node.name) COLLATE NOCASE",
+        "category_node.level",
+        "category_node.sort_order",
+        "category_node.name COLLATE NOCASE",
+    ),
+    "name": ("category_node.name COLLATE NOCASE",),
+    # 依所屬類別排時，同一個類別底下再照項目名 —— 否則同組之內是隨機順序。
+    "parent_name": (
+        "COALESCE(category_parent.name, '') COLLATE NOCASE",
+        "category_node.name COLLATE NOCASE",
+    ),
+    "item_count": ("item_count", "category_node.name COLLATE NOCASE"),
+    "status": ("category_node.status", "category_node.name COLLATE NOCASE"),
+}
+"""**`ORDER BY` 的白名單。** key 是畫面傳進來的 `sort_key`，value 是要拼進 SQL 的
+欄位運算式。畫面永遠只能送 key，不能送片段 —— 這是唯一一個把字串拼進 SQL 的地方，
+所以它必須是封閉的清單。"""
 
 
 class CategoryStore(StoreBase):
@@ -39,37 +61,73 @@ class CategoryStore(StoreBase):
             ).fetchall()
         return [Category(**dict(row)) for row in rows]
 
-    def list_category_tree(self, *, include_archived: bool = False) -> list[CategoryNode]:
-        """一句話取回兩層類別、上層名稱與子項目數。
+    def list_category_tree(
+        self,
+        *,
+        include_archived: bool = False,
+        tree_filter: CategoryTreeFilter | None = None,
+    ) -> list[CategoryNode]:
+        """一句話取回兩層類別、上層名稱與子項目數，**篩選與排序都在 SQL 裡**。
 
         舊的做法是先 `list_categories()` 拿到所有類別，再對**每一個**類別各呼叫一次
         `list_categories(parent_id=...)` —— 而每一次都開一條新連線。
 
-        排序刻意讓項目跟在自己的類別後面：先照上層（沒有上層就照自己）的
-        `sort_order` 與名稱，再照 `level`。這樣同一份結果既能給「類別」分頁
-        （濾 level 1）也能給「項目」分頁（濾 level 2）用。
+        預設排序刻意讓項目跟在自己的類別後面：先照上層（沒有上層就照自己）的
+        `sort_order` 與名稱，再照 `level`。
+
+        `include_archived` 留著給既有呼叫端用；`tree_filter` 一給就以它為準。
         """
-        status_clause = "" if include_archived else "AND node.status = 'active'"
-        item_status = "" if include_archived else "AND item.status = 'active'"
+        selected = tree_filter or CategoryTreeFilter(
+            status="all" if include_archived else "active"
+        )
+        conditions: list[str] = []
+        values: list[object] = []
+        if selected.status in {"active", "archived"}:
+            conditions.append("category_node.status = ?")
+            values.append(selected.status)
+        if selected.level is not None:
+            conditions.append("category_node.level = ?")
+            values.append(selected.level)
+        if selected.parent_id is not None:
+            conditions.append("category_node.parent_id = ?")
+            values.append(selected.parent_id)
+        if selected.search:
+            # 項目也讓使用者用類別名搜得到 —— 打「交通」要列出交通底下的每一項。
+            conditions.append(
+                "(category_node.name LIKE '%' || ? || '%' COLLATE NOCASE"
+                " OR COALESCE(category_parent.name, '') LIKE '%' || ? || '%' COLLATE NOCASE)"
+            )
+            values.extend([selected.search, selected.search])
+        where = " AND ".join(["1 = 1", *conditions])
+
+        # 子項目數跟著同一個狀態條件走：列表顯示封存的項目時，數字也要含它們，
+        # 否則「0 項」底下卻列得出東西。
+        item_status = (
+            "" if selected.status == "all" else f"AND category_item.status = '{selected.status}'"
+        )
+
+        # **`ORDER BY` 只從白名單來。** `sort_key` 是畫面傳進來的，任何字串內插都是
+        # 一條注入路徑；這裡查不到就退回預設，不接受未知的值。
+        terms = CATEGORY_SORT_KEYS.get(selected.sort_key, CATEGORY_SORT_KEYS["default"])
+        direction = " DESC" if selected.descending else ""
+        order = ", ".join(f"{term}{direction}" for term in terms)
+
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
                 f"""
-                SELECT node.category_id, node.name, node.parent_id, node.level,
-                       node.status, node.sort_order,
-                       parent.name AS parent_name,
+                SELECT category_node.category_id, category_node.name, category_node.parent_id, category_node.level,
+                       category_node.status, category_node.sort_order,
+                       category_parent.name AS parent_name,
                        (
-                           SELECT COUNT(*) FROM categories AS item
-                           WHERE item.parent_id = node.category_id {item_status}
+                           SELECT COUNT(*) FROM categories AS category_item
+                           WHERE category_item.parent_id = category_node.category_id {item_status}
                        ) AS item_count
-                FROM categories AS node
-                LEFT JOIN categories AS parent ON parent.category_id = node.parent_id
-                WHERE 1 = 1 {status_clause}
-                ORDER BY COALESCE(parent.sort_order, node.sort_order),
-                         COALESCE(parent.name, node.name) COLLATE NOCASE,
-                         node.level,
-                         node.sort_order,
-                         node.name COLLATE NOCASE
-                """
+                FROM categories AS category_node
+                LEFT JOIN categories AS category_parent ON category_parent.category_id = category_node.parent_id
+                WHERE {where}
+                ORDER BY {order}
+                """,
+                tuple(values),
             ).fetchall()
         return [
             CategoryNode(

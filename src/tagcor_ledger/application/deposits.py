@@ -42,6 +42,7 @@ import sqlite3
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
+from tagcor_ledger.application.failures import failure
 from tagcor_ledger.application.result import Result, new_correlation_id
 from tagcor_ledger.domain.deposits import (
     DEPOSIT_EVENT_TYPE_NAMES,
@@ -133,7 +134,11 @@ class DepositService:
                 else None
             )
         except ValueError as exc:
-            return Result.fail("DEPOSIT_AMOUNT_INVALID", "金額格式不正確。", details={"reason": str(exc)})
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_AMOUNT_INVALID",
+                fallback_message="金額格式不正確。只接受整數元，不要加逗號或單位。",
+            )
 
         if InterestMethod(interest_method) is InterestMethod.INSTALLMENT_SAVINGS and not monthly_minor:
             return Result.fail("DEPOSIT_MONTHLY_DEPOSIT_REQUIRED", "零存整付需要每月存入金額。")
@@ -160,10 +165,10 @@ class DepositService:
                 monthly_deposit_minor=monthly_minor,
             )
         except (ValueError, sqlite3.Error, NotFoundError) as exc:
-            return Result.fail(
-                "DEPOSIT_CONTRACT_CREATE_FAILED",
-                "定存合約無法建立。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_CONTRACT_CREATE_FAILED",
+                fallback_message="定存合約無法建立。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         return Result.ok(
@@ -179,8 +184,9 @@ class DepositService:
         name: str,
         maturity_action: str,
         interest_destination_account_id: str | None,
-        note: str = "",
+        note: str | None = None,
     ) -> Result:
+        """`note=None` 表示不要動備註。傳 `""` 才是清空。"""
         try:
             MaturityAction(maturity_action)
         except ValueError:
@@ -200,32 +206,27 @@ class DepositService:
                 note=note,
             )
         except (ValueError, sqlite3.Error, NotFoundError) as exc:
-            return Result.fail(
-                "DEPOSIT_CONTRACT_UPDATE_FAILED",
-                "定存合約無法修改。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_CONTRACT_UPDATE_FAILED",
+                fallback_message="定存合約無法修改。請匯出診斷資訊回報。",
             )
         return Result.ok("定存合約已更新。")
 
     def delete_contract(self, contract_id: str) -> Result:
+        """刪除合約。
+
+        以前這裡有一個 `if str(exc) == "DEPOSIT_CONTRACT_IN_USE"` 的手動分支 ——
+        那是「唯一一個值得講清楚的失敗」被特別挑出來的痕跡。`failure()` 對每一個
+        碼都這樣做，所以那個分支連同它下面重複的 `except` 一起沒了。
+        """
         try:
             self.store.delete_contract(contract_id)
-        except ValueError as exc:
-            if str(exc) == "DEPOSIT_CONTRACT_IN_USE":
-                return Result.fail(
-                    "DEPOSIT_CONTRACT_IN_USE",
-                    "這個定存已經有入帳紀錄，不能刪除。可以改用「結束合約」。",
-                )
-            return Result.fail(
-                "DEPOSIT_CONTRACT_DELETE_FAILED",
-                "定存合約無法刪除。",
-                details={"reason": str(exc)},
-            )
-        except (sqlite3.Error, NotFoundError) as exc:
-            return Result.fail(
-                "DEPOSIT_CONTRACT_DELETE_FAILED",
-                "定存合約無法刪除。",
-                details={"reason": str(exc)},
+        except (ValueError, sqlite3.Error, NotFoundError) as exc:
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_CONTRACT_DELETE_FAILED",
+                fallback_message="定存合約無法刪除。請匯出診斷資訊回報。",
             )
         return Result.ok("定存合約已刪除。")
 
@@ -249,8 +250,10 @@ class DepositService:
                 else None
             )
         except ValueError as exc:
-            return Result.fail(
-                "DEPOSIT_AMOUNT_INVALID", "金額格式不正確。", details={"reason": str(exc)}
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_AMOUNT_INVALID",
+                fallback_message="金額格式不正確。只接受整數元，不要加逗號或單位。",
             )
         try:
             self.store.update_term(
@@ -262,14 +265,14 @@ class DepositService:
                 monthly_deposit_minor=monthly_minor,
                 note=note,
             )
-        except NotFoundError:
-            return Result.fail(
-                "DEPOSIT_TERM_NOT_EDITABLE",
-                "只有存續中的期可以修改。已續約或已結清的期已經產生過交易，改了會對不起帳。",
-            )
-        except (ValueError, sqlite3.Error) as exc:
-            return Result.fail(
-                "DEPOSIT_TERM_UPDATE_FAILED", "這一期無法修改。", details={"reason": str(exc)}
+        except (ValueError, sqlite3.Error, NotFoundError) as exc:
+            # 以前這裡有一個 `except NotFoundError:` 無條件回 `DEPOSIT_TERM_NOT_EDITABLE`
+            # 的分支 —— 但 store 的 `NotFoundError` 也可能是 `DEPOSIT_TERM_NOT_FOUND`，
+            # 那句「只有存續中的期可以修改」會在「這一期根本不存在」時說錯話。
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_TERM_UPDATE_FAILED",
+                fallback_message="這一期無法修改。請匯出診斷資訊回報。",
             )
         self._refresh_suggestions(term_id)
         return Result.ok("這一期已更新。")
@@ -321,10 +324,10 @@ class DepositService:
                 contract = self.store.get_contract(term.contract_id)
                 generated += self._generate_for_term(contract, term, current, horizon)
         except (sqlite3.Error, NotFoundError, ValueError) as exc:
-            return Result.fail(
-                "DEPOSIT_GENERATE_FAILED",
-                "定存待確認項目無法產生。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_GENERATE_FAILED",
+                fallback_message="定存待確認項目無法產生。請匯出診斷資訊回報。",
             )
         return Result.ok(
             f"已產生 {generated} 件定存待確認項目。", details={"generated": generated}
@@ -479,10 +482,10 @@ class DepositService:
             )
             renewed = self._advance_term(event, amount)
         except (ValueError, sqlite3.Error, NotFoundError) as exc:
-            return Result.fail(
-                "DEPOSIT_CONFIRM_FAILED",
-                "定存項目無法確認入帳。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_CONFIRM_FAILED",
+                fallback_message="定存項目無法確認入帳。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         return Result.ok(

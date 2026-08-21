@@ -19,6 +19,7 @@ from tagcor_ledger.application.balance import (
     UpdateBalanceSnapshotRequest,
 )
 from tagcor_ledger.application.catalogs import AccountService, CategoryService
+from tagcor_ledger.application.failures import failure
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.application.settings import SettingsService
 from tagcor_ledger.application.transaction_service import (
@@ -36,6 +37,7 @@ from tagcor_ledger.application.transaction_service import (
 )
 from tagcor_ledger.domain.models import (
     ApplicationSettings,
+    CategoryTreeFilter,
     CreateBalanceSnapshotRequest,
     RecurringSchedule,
     SystemPathSettings,
@@ -204,12 +206,21 @@ class LedgerController:
         )
         return list(result.details.get("categories", []))
 
-    def category_tree(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
+    def category_tree(
+        self,
+        *,
+        include_archived: bool = False,
+        tree_filter: CategoryTreeFilter | None = None,
+    ) -> list[dict[str, Any]]:
         """兩層類別攤成一份列表，每一列都帶著上層名稱與子項目數。
 
-        「類別」與「項目」兩個分頁各自從這一份濾出自己要的 `level`。
+        `tree_filter` 一給就以它為準：層級、所屬類別、狀態、名稱搜尋與排序**都在
+        SQL 裡處理**。「類別」與「項目」兩個分頁各自送自己的 `level`，不再撈回全部
+        再用 Python 濾。
         """
-        result = self.categories.list_tree(include_archived=include_archived)
+        result = self.categories.list_tree(
+            include_archived=include_archived, tree_filter=tree_filter
+        )
         return list(result.details.get("categories", []))
 
     def submit(
@@ -325,9 +336,17 @@ class LedgerController:
         return self.settings.update(settings)
 
     def get_path_settings(self) -> SystemPathSettings:
+        """目前生效的三個路徑。
+
+        **`data_root` 一定要填。** 以前這裡只回傳兩個路徑，`data_root` 永遠是 `None`，
+        於是它會被 `data_root_of()` 推成 `ledger_dir.parent` —— 而
+        `PATH_OUTSIDE_DATA_ROOT` 這個錯誤講的正是那個值。使用者在畫面上看不到它，
+        卻要照它去修路徑。
+        """
         return SystemPathSettings(
             ledger_dir=self.paths.ledger_dir,
             backup_dir=self.paths.backup_dir,
+            data_root=self.paths.data_dir,
         )
 
     def save_path_settings(
@@ -368,10 +387,15 @@ class LedgerController:
                 # 指標檔還沒寫成功，新位置那份複本必須清掉，否則下次搬移會撞上
                 # TARGET_LEDGER_ALREADY_EXISTS。舊資料原封不動。
                 copied.unlink(missing_ok=True)
-            return Result.fail(
-                "PATH_SETTINGS_SAVE_FAILED",
-                "資料路徑設定無法儲存，請確認兩個路徑分開、都在資料根目錄底下且可寫入。",
-                details={"reason": str(exc)},
+            # 五種失敗（同路徑、互相包含、超出資料根目錄、寫不進去、設定檔壞掉）
+            # 以前擠在同一句「請確認兩個路徑分開、都在資料根目錄底下且可寫入」，
+            # 真正發生的是哪一種只寫在後面括號裡的英文碼。
+            return failure(
+                exc,
+                fallback_code="PATH_SETTINGS_SAVE_FAILED",
+                fallback_message=(
+                    "資料路徑設定無法儲存，舊設定與舊資料都沒有變動。請匯出診斷資訊回報。"
+                ),
             )
 
     def _paths_for_settings(self, settings: SystemPathSettings) -> AppPaths:

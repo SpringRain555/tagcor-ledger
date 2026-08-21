@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tagcor_ledger.app.path_settings import data_root_of
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message
 from tagcor_ledger.ui.widgets.forms import form_panel
@@ -42,6 +43,11 @@ class PathSettingsPage(QWidget):
         # 而且可以選取複製 —— 出問題要貼給人看的時候正好需要。
         self.database = QLineEdit()
         self.database.setReadOnly(True)
+        # 資料根目錄是**推導值**（`ledger_dir` 的上一層），所以是唯讀的顯示不是輸入框。
+        # 沒有它的時候，`PATH_OUTSIDE_DATA_ROOT` 這個錯誤講的是一個使用者在畫面上
+        # 看不到的東西 —— 訊息叫他「把兩個路徑放進資料根目錄底下」，而他不知道那是哪裡。
+        self.data_root = QLineEdit()
+        self.data_root.setReadOnly(True)
         self.result = QLabel()
         self._build()
         self.reload()
@@ -62,6 +68,7 @@ class PathSettingsPage(QWidget):
         form.addRow("", browse_ledger)
         form.addRow("備份路徑", self.backup_dir)
         form.addRow("", browse_backup)
+        form.addRow("目前的資料根目錄", self.data_root)
         form.addRow("目前的資料庫檔案", self.database)
         actions = QHBoxLayout()
         actions.addWidget(switch_button)
@@ -74,7 +81,12 @@ class PathSettingsPage(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(form_row)
         layout.addLayout(actions)
-        hint = QLabel("記帳資料會存放 ledger.sqlite3；備份會建立在獨立備份路徑下。備份路徑不可與資料路徑相同或互相包含。")
+        hint = QLabel(
+            "記帳資料會存放 ledger.sqlite3；備份會建立在獨立備份路徑下。"
+            "備份路徑不可與資料路徑相同或互相包含。"
+            "兩個路徑都必須在同一個資料根目錄底下，而資料根目錄取的是"
+            "「記帳資料路徑」的上一層 —— 所以把備份放到另一顆磁碟會被擋下來。"
+        )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -90,6 +102,7 @@ class PathSettingsPage(QWidget):
         settings = self.controller.get_path_settings()
         self.ledger_dir.setText(str(settings.ledger_dir))
         self.backup_dir.setText(str(settings.backup_dir))
+        self.data_root.setText(str(data_root_of(settings)))
         self.database.setText(str(self.controller.paths.database_path))
 
     def _choose(self, target: QLineEdit) -> None:

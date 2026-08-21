@@ -47,8 +47,10 @@ class DiagnosticsService:
         except (OSError, sqlite3.Error) as exc:
             return Result.fail(
                 "DIAGNOSTICS_BUILD_FAILED",
-                "診斷資訊無法產生。",
-                details={"reason": str(exc)},
+                "診斷資訊無法產生 —— 多半是資料庫讀不到。請確認磁碟已連接。",
+                # `detail` 不會印在畫面上（見 `ui/formatting.result_message()`），
+                # 它是給日誌與人工排查看的。
+                details={"detail": str(exc)},
             )
         if target is None:
             stamp = datetime.now(TAIPEI).strftime("%Y%m%d_%H%M%S")
@@ -63,8 +65,8 @@ class DiagnosticsService:
         except OSError as exc:
             return Result.fail(
                 "DIAGNOSTICS_WRITE_FAILED",
-                "診斷資訊無法寫入。",
-                details={"reason": str(exc)},
+                "診斷資訊無法寫入。請確認匯出資料夾存在且可寫入、磁碟還有空間。",
+                details={"detail": str(exc)},
             )
         return Result.ok("診斷資訊已匯出。", details={"path": str(target)})
 

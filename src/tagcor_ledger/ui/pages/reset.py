@@ -24,8 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.ui.controller import LedgerController
+from tagcor_ledger.ui.formatting import error_text
 from tagcor_ledger.ui.widgets.forms import show_status, status_label
 from tagcor_ledger.ui.widgets.table import set_button_role
+
+RESET_FALLBACK = "記帳資料無法重製，資料沒有變動。請匯出診斷資訊回報。"
+"""重製前會先建保護備份，備份自己失敗時的說法在 `application/failures.py`。"""
 
 COUNT_LABELS = {
     "transactions": "交易",
@@ -94,8 +98,9 @@ class ResetPage(QWidget):
         try:
             self.controller.reset_ledger(create_backup_first=backup)
         except Exception as exc:  # noqa: BLE001 —— 這裡要攔住一切，不能讓視窗無聲消失
-            QMessageBox.warning(self, "重製失敗", str(exc))
-            show_status(self.result, f"重製失敗：{exc}", ok=False)
+            text = error_text(exc, fallback=RESET_FALLBACK)
+            QMessageBox.warning(self, "重製失敗", text)
+            show_status(self.result, text, ok=False)
             return
         show_status(
             self.result,

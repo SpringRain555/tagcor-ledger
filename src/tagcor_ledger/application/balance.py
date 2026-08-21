@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
+from tagcor_ledger.application.failures import failure
 from tagcor_ledger.application.result import Result, new_correlation_id
 from tagcor_ledger.application.transaction_service import transaction_to_dict
 from tagcor_ledger.domain.models import (
@@ -62,17 +63,17 @@ class BalanceSnapshotService:
                 correlation_id=correlation_id,
             )
         except (MoneyError, ValueError) as exc:
-            return Result.fail(
-                _error_code(exc, "BALANCE_SNAPSHOT_VALIDATION_FAILED"),
-                "餘額盤點內容無法儲存，請檢查帳戶、時間與金額。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="BALANCE_SNAPSHOT_VALIDATION_FAILED",
+                fallback_message="餘額盤點內容有問題但認不出原因。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         except (sqlite3.Error, OSError) as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "餘額盤點無法寫入資料庫。",
-                details={"reason": str(exc)},
+                "餘額盤點無法寫入資料庫。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -100,17 +101,17 @@ class BalanceSnapshotService:
                 correlation_id=correlation_id,
             )
         except (MoneyError, ValueError, NotFoundError) as exc:
-            return Result.fail(
-                _error_code(exc, "BALANCE_SNAPSHOT_UPDATE_FAILED"),
-                "餘額盤點無法更新。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="BALANCE_SNAPSHOT_UPDATE_FAILED",
+                fallback_message="餘額盤點無法更新，原因認不出來。請匯出診斷資訊回報。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "餘額盤點無法寫入資料庫。",
-                details={"reason": str(exc)},
+                "餘額盤點無法寫入資料庫。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -120,17 +121,17 @@ class BalanceSnapshotService:
             self.store.void_balance_snapshot(snapshot_id, correlation_id)
             return Result.ok("餘額盤點已作廢。", correlation_id=correlation_id)
         except NotFoundError as exc:
-            return Result.fail(
-                "BALANCE_SNAPSHOT_NOT_FOUND",
-                "找不到可作廢的餘額盤點。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="BALANCE_SNAPSHOT_NOT_FOUND",
+                fallback_message="找不到可作廢的餘額盤點。請重新整理。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "餘額盤點無法作廢。",
-                details={"reason": str(exc)},
+                "餘額盤點無法作廢。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
 
@@ -151,10 +152,10 @@ class BalanceSnapshotService:
                 details={"gaps": [balance_gap_to_dict(gap) for gap in gaps]},
             )
         except (ValueError, sqlite3.Error) as exc:
-            return Result.fail(
-                "BALANCE_SNAPSHOT_LIST_FAILED",
-                "餘額盤點無法載入。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="BALANCE_SNAPSHOT_LIST_FAILED",
+                fallback_message="餘額盤點無法載入。請匯出診斷資訊回報。",
             )
 
     def latest_gap(self, account_id: str) -> Result:
@@ -167,8 +168,8 @@ class BalanceSnapshotService:
         except sqlite3.Error as exc:
             return Result.fail(
                 "BALANCE_GAP_LOAD_FAILED",
-                "最近餘額盤點無法載入。",
-                details={"reason": str(exc)},
+                "最近餘額盤點無法載入。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
             )
 
     def list_gap_transactions(
@@ -195,10 +196,10 @@ class BalanceSnapshotService:
                 },
             )
         except (ValueError, sqlite3.Error) as exc:
-            return Result.fail(
-                "BALANCE_GAP_TRANSACTIONS_FAILED",
-                "差額期間交易無法載入。",
-                details={"reason": str(exc)},
+            return failure(
+                exc,
+                fallback_code="BALANCE_GAP_TRANSACTIONS_FAILED",
+                fallback_message="差額期間交易無法載入。請匯出診斷資訊回報。",
             )
 
     def export_csv(self, target: Path | None = None) -> Result:
@@ -256,8 +257,8 @@ class BalanceSnapshotService:
         except (OSError, sqlite3.Error, ValueError) as exc:
             return Result.fail(
                 "BALANCE_SNAPSHOT_EXPORT_FAILED",
-                "餘額盤點 CSV 無法匯出。",
-                details={"reason": str(exc)},
+                "餘額盤點 CSV 無法匯出。請確認匯出資料夾存在且可寫入、磁碟還有空間。",
+                details={"detail": str(exc)},
             )
 
     def reminder_due(self, account_id: str) -> bool:
@@ -316,8 +317,3 @@ def _validate_observed_at(value: str) -> None:
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("DATETIME_TIMEZONE_REQUIRED")
-
-
-def _error_code(exc: Exception, fallback: str) -> str:
-    text = str(exc).strip()
-    return text if text.isupper() and " " not in text else fallback

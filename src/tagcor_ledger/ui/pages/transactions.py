@@ -12,7 +12,6 @@ from PySide6.QtCore import QDate, QDateTime, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -45,6 +44,13 @@ from tagcor_ledger.ui.widgets.table import (
 
 class TransactionsPage(QWidget):
     duplicate_requested = Signal(dict)
+    changed = Signal()
+    """這一頁改動了帳務。**餘額盤點的未解釋差額因此要重算。**
+
+    作廢與編輯都會改變 posting，而未解釋差額就是「盤點金額 － 期間 posting 加總」。
+    以前這兩個動作只重刷自己那張表，於是使用者作廢一筆錯帳之後切到餘額盤點，
+    差額還是舊的數字 —— 而那個數字正是那一頁存在的唯一理由。
+    """
 
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
@@ -57,8 +63,8 @@ class TransactionsPage(QWidget):
         )
         self.search = QLineEdit()
         self.date_enabled = QCheckBox("日期")
-        self.date_from = QDateEdit(QDate.currentDate().addMonths(-1))
-        self.date_to = QDateEdit(QDate.currentDate())
+        self.date_from = date_field(QDate.currentDate().addMonths(-1))
+        self.date_to = date_field(QDate.currentDate())
         self.account = QComboBox()
         self.category = QComboBox()
         self.status = QComboBox()
@@ -75,10 +81,8 @@ class TransactionsPage(QWidget):
         title = QLabel("交易紀錄")
         title.setObjectName("pageTitle")
         self.search.setPlaceholderText("搜尋備註、類別、項目或帳戶")
-        self.date_from.setDisplayFormat("yyyy/MM/dd")
-        self.date_to.setDisplayFormat("yyyy/MM/dd")
+        # 格式、日曆彈窗與誤觸防護都由 `date_field()` 統一處理，這裡只管「一開始停用」。
         for date_widget in (self.date_from, self.date_to):
-            date_widget.setCalendarPopup(True)
             date_widget.setEnabled(False)
         self.date_enabled.toggled.connect(self.date_from.setEnabled)
         self.date_enabled.toggled.connect(self.date_to.setEnabled)
@@ -221,6 +225,7 @@ class TransactionsPage(QWidget):
         dialog = TransactionEditDialog(self.controller, item, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.first_page()
+            self.changed.emit()
 
     def void_selected(self) -> None:
         item = self.model.selected_item(self.table)
@@ -232,6 +237,7 @@ class TransactionsPage(QWidget):
         result = self.controller.void_transaction(str(item["transaction_id"]))
         if result.success:
             self.first_page()
+            self.changed.emit()
         else:
             QMessageBox.warning(self, "無法作廢", result_message(result))
 

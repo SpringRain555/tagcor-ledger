@@ -128,8 +128,9 @@ class ReferenceLibrary:
         except sqlite3.Error as exc:
             return Result.fail(
                 "REFERENCE_LIBRARY_UNREADABLE",
-                "法規庫無法讀取。",
-                details={"reason": str(exc)},
+                "法規庫讀不開，檔案可能損毀。刪掉它重新產生即可 —— 它是產生物，"
+                "沒有任何不可重建的內容。",
+                details={"detail": str(exc)},
             )
         return Result.ok("法規庫可用。", details={"meta": meta, "disclaimer": DISCLAIMER})
 

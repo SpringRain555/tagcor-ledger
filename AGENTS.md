@@ -101,6 +101,25 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 正確做法是新增一份 ADR 推翻 [`ADR-0006`](docs/decisions/ADR-0006-manual-entry-only.md)，
 不是「順手」加一個欄位。市面產品幾乎都做卡片歸戶，所以這裡的壓力是持續的。
 
+## 對外轉帳慣例
+
+**這是記帳慣例，不是功能。** 記帳頁的「轉帳」底下有三種對象，但**資料庫只有一種轉帳**：
+
+| 轉帳對象 | 存成 | 為什麼 |
+|---|---|---|
+| 我的帳戶之間 | `transfer`，兩筆 posting | 錢沒有離開你，只是換了地方 |
+| 別人轉入 | **收入** ＋ 類別／項目 | 錢進入你的總資產 |
+| 轉出給別人 | **支出** ＋ 類別／項目 | 錢離開你的總資產 |
+
+判準是**總資產有沒有變**。這與「利息記成收入，不是轉帳」是同一條原則。
+
+- 建議自己建一個類別「轉帳」，底下放「他人轉入」「轉出給他人」這類項目。
+  **程式不自動建立任何類別** —— 名字該叫什麼是使用者的事。
+- 「轉給誰」寫在備註。**不得**因此重新引入 payee model。
+- **不得新增 `transfer_in` / `transfer_out` 這類 `entry_type`。** 理由與被否決的
+  兩個替代方案寫在 [`ADR-0010`](docs/decisions/ADR-0010-external-transfers.md)；
+  要改變這個取捨就新增一份 ADR 推翻它，不要順手加一個列舉值。
+
 ## 不做的事（非目標，不是待辦）
 
 - 不做銀行同步、不串接電子發票載具、不做任何自動匯入。
@@ -127,7 +146,9 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - 主要操作按鈕用 `primaryButton`；刪除、作廢、重製、還原等高風險操作用 `dangerButton`。
 - **表格不得在 QSS 設 `color` 或 `selection-color`。** 那會蓋掉 model 的 `ForegroundRole`，金額的紅綠會被壓成同一個白。顏色由 `widgets/table.py` 的 `amount_color` 決定。
 - **對所選項目動作的按鈕一律用 `bind_selection` 綁選取狀態。** 沒選取就停用，不要讓使用者按下去什麼都不發生。（注意停用會讓焦點跑掉 —— 焦點跑到哪裡都不該有副作用。）
-- **一個錯誤碼只能代表一件事。** 不要用一個 `except` 接多種例外再回同一個碼 —— 錯誤碼的數量決定了訊息能有多具體。**`str(exc)` 不得放進 `details["reason"]`**，`result_message()` 會把它印在畫面上；預期外的原文放 `details["detail"]`。
+- **一個錯誤碼只能代表一件事。** 寫入層丟的是 `raise ValueError("SOME_CODE")`（訊息就是碼），應用層用 `application/failures.py` 的 `failure()` 把它翻成中文：**認得出來的碼就用那個碼**，認不出來才退回呼叫端給的 `fallback_code`。碼的中文說法只寫在 `ERROR_MESSAGES` 一個地方，情境需要不同說法時用 `overrides=`。
+- **`details["reason"]` 是廢除的 key，加回來 `tests/unit/test_failure_messages.py` 會紅。** 它曾經有 51 個出處，而 `result_message()` 會把它用括號接在畫面訊息後面 —— 於是英文碼與 SQLite 原文都被印給使用者看。預期外的原文放 `details["detail"]`，**那個 key 永遠不顯示**。
+- **例外的訊息就是錯誤碼，不要寫英文散文。** `domain/money.py` 以前丟 `MoneyError("Amount must be greater than zero.")`，那句英文因此出現在全中文的畫面上 —— 而且金額打錯是最常見的操作失誤。UI 自己 `except` 的地方用 `ui/formatting.error_text()`，不要直接印 `str(exc)`。
 - 分頁必須由 QSS 覆蓋 `QTabWidget/QTabBar` 的 selected、unselected、hover、disabled 狀態。
 - **不要覆寫 `QComboBox::drop-down`。** 一碰那個 subcontrol，Fusion 就不再畫箭頭，而本專案不打包圖檔，結果是一塊空白方格。
 - **主字體必須是中文字型**（`Microsoft JhengHei UI` 排第一），12pt、Medium 字重。理由是 `Segoe UI Variable` 沒有中文字形，中文全靠 fallback，而**字重套不到 fallback 字型上** —— 對它設 Medium 只有數字變粗，中文一點都沒變。字體不打包，順序是 `Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、`Segoe UI Variable`、`Segoe UI`、sans-serif。
@@ -191,7 +212,8 @@ python -m tagcor_ledger --gui
 
 ## 文件維護
 
-任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog。踩到坑要在 `docs/lessons.md` 追加一筆 —— 那是 append-only 的失敗紀錄，目的是不要重蹈覆轍。
+任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog。
+**改了 `docs/architecture/*.md` 裡的 ` ```mermaid ` 區塊，要跑 `.\tools\diagrams\Render-Diagrams.ps1` 重新產生 SVG**（`tests/unit/test_diagrams_drift.py` 會擋；那條測試不需要 node）。踩到坑要在 `docs/lessons.md` 追加一筆 —— 那是 append-only 的失敗紀錄，目的是不要重蹈覆轍。
 
 **新增或改名一頁時，`docs/architecture/ui-workflows.md` 的頁面地圖要跟著改**，
 而且那一列的**「不在這裡做的事」不可以留空** —— 那一欄才是整張表存在的理由。

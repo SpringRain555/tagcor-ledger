@@ -16,6 +16,148 @@
 
 ---
 
+## 2026-08-21 那個把英文碼印到畫面上的括號，是在補償錯誤碼被塌掉
+
+**情境**：整理 51 處 `details={"reason": str(exc)}`。`result_message()` 會把 `reason`
+用括號接在畫面訊息後面，於是使用者看到「帳戶無法刪除；預設帳戶或已有歷史資料的帳戶
+請改用封存。（`ACCOUNT_IS_DEFAULT`）」。
+
+**做了什麼**：第一個念頭是改 `result_message()` 不要接 `reason` —— **一行就修好 51 處**。
+
+**為什麼失敗**：那會讓訊息**更糟**。括號裡那串代碼雖然醜，卻是使用者當時唯一能分辨
+「我撞到的是哪一種失敗」的線索，因為外層訊息把好幾件事寫成同一句話
+（`ACCOUNT_DELETE_FAILED` 底下至少藏著 `ACCOUNT_IS_DEFAULT` 與 `ACCOUNT_IN_USE`，
+兩者該給的建議完全不同）。**那個括號是症狀的止痛藥，不是病。**
+
+**結論**：順序是「先拆碼、每個碼講自己的話，然後才拿掉括號」。做法是把
+「碼 → 中文」集中到 `application/failures.py` 的 `ERROR_MESSAGES`，
+讓 `failure()` 用底層丟出來的**具體碼**取代籠統的 `*_FAILED`。
+
+**不要再做**：不要用「一行就能修好 N 處」當作動手的理由。**先問那一行為什麼會存在** ——
+它常常是在補償另一個沒修的問題，拆掉補償而不修根因，只會讓使用者更沒有線索。
+
+## 2026-08-21 例外訊息寫成英文散文，於是全中文的介面上出現英文
+
+**情境**：同一次整理。`domain/money.py` 的 `MoneyError` 帶的是
+`"Amount must be greater than zero."`。
+
+**為什麼失敗**：寫入層（`infrastructure/stores/`）的約定是 `raise ValueError("SOME_CODE")`
+—— **訊息就是穩定的錯誤碼**。domain 層沒有跟上這個約定，寫成了給開發者看的英文句子。
+上層 `_error_code(exc, fallback)` 用 `text.isupper()` 判斷「這是不是一個碼」，英文散文
+判不出來，於是走 fallback 並把原文塞進 `reason` —— **直接印到畫面上**。
+而金額打錯是最常見的操作失誤，那句英文因此是整個程式最常被看到的一句話之一。
+
+**結論**：**同一個 repo 裡只能有一種例外訊息約定。** 現在 domain、infrastructure、
+`app/path_settings.py` 一律「訊息就是錯誤碼」，翻譯只在 `application/failures.py` 一處。
+`tests/unit/test_failure_messages.py` 掃所有 `raise X("CODE")`，少一列說法就紅。
+
+**不要再做**：不要在例外訊息裡寫英文句子。也不要在 UI 直接 `str(exc)` ——
+用 `ui/formatting.error_text()`，它查同一張表。
+
+## 2026-08-21 兩個列舉值同號，於是點日期欄的內距就是「年份 +1」
+
+**情境**：使用者回報「按下箭頭準備點選時會自動把年份加一」。
+
+**做了什麼**：先照直覺猜是 QSS 把 `::up-button` / `::down-button` 的位置弄歪了，
+所以畫出來的箭頭與可點區域對不上。**那個猜測是錯的**，而且它會把人帶去改 QSS 的
+subcontrol —— 那正是 `AGENTS.md` 明文禁止的（一碰 Fusion 就不畫箭頭了）。
+
+**為什麼失敗**：真正的原因在 Qt 的列舉值。`QStyle::SubControl` 有兩組值**數字相同**：
+
+```
+SC_ComboBoxFrame     == SC_SpinBoxUp   == 0x1
+SC_ComboBoxEditField == SC_SpinBoxDown == 0x2
+```
+
+`QDateTimeEdit` 在 `calendarPopup` 模式下用 **CC_ComboBox** 做命中測試，命中結果
+不是 `SC_ComboBoxArrow` 就轉給 `QAbstractSpinBox::mousePressEvent`，而後者拿**同一個
+數字**去比 spinbox 的上下鍵。於是：
+
+| 點在哪 | CC_ComboBox 回傳 | spinbox 讀成 | 結果 |
+|---|---|---|---|
+| 內距那一圈 | `SC_ComboBoxFrame` 0x1 | 上箭頭 | 年份 **+1** |
+| 文字上 | `SC_ComboBoxEditField` 0x2 | 下箭頭 | 年份 **−1** |
+
+平常那一圈只有 1 px，碰不到。但本專案的 QSS 給輸入欄 `padding: 7px 10px`，那一圈就
+變成 7～10 px，剛好在使用者伸手去點右邊箭頭的路徑上。而 `displayFormat` 以 `yyyy`
+開頭，`currentSection` 預設就是年 —— 所以動到的是年份。
+
+**是量出來的，不是讀 Qt 原始碼推出來的。** 實測（`hitTestComplexControl` ＋ 合成點擊）：
+有 QSS 時欄位 608x49，點上緣／下緣／左緣內距都是 +1、點文字正中是 −1；
+清掉 stylesheet 之後欄位 608x29，同樣的點全部落在 EditField，什麼都不會發生。
+
+**結論**：`date_field()` 加 `setButtonSymbols(NoButtons)`。
+`QAbstractSpinBox::mousePressEvent` 在 `NoButtons` 時把 `stepEnabled()` 當成
+`StepNone`，整條路就斷了；而日曆箭頭是 `CC_ComboBox` 畫的、開日曆也在轉交之前就
+處理完了，所以**箭頭還在、日曆照樣打得開**。順手把 `currentSection` 設成日、
+補上 `setDateRange`。
+
+**不要再做**：
+- 不要因為「箭頭附近怪怪的」就去改 QSS 的 subcontrol。先量 `hitTestComplexControl`
+  回傳什麼，再送一次合成點擊看實際結果 —— 兩件事都比看程式碼快。
+- 不要假設 `QStyle::SubControl` 的值在不同 ComplexControl 之間是唯一的。它們不是。
+
+---
+
+## 2026-08-21 padding 清在 view 上，但吃掉日期的是 `::item`
+
+**情境**：日曆彈窗裡每一格日期都顯示成「...」。這個症狀 2026-08-18 修過一次，
+changelog 也寫了「修正日曆彈出視窗跑版」，但它**一直都在**。
+
+**做了什麼**：當時加了一整節 `QCalendarWidget` 專屬樣式，其中一條是
+`QCalendarWidget QAbstractItemView { padding: 0; }`，註解寫著「全域 `QAbstractItemView`
+的 padding 正是把兩位數日期擠成『...』的原因」。
+
+**為什麼失敗**：**那條 padding 清的是 view，不是每一格。** view 的 padding 管的是
+viewport；真正把日期擠掉的是「表格」那一節的 `QTableView::item { padding: 7px 8px }`
+—— 而日曆的日期格就是一個 `QTableView`。
+
+量出來的數字：格子 33x21，但 `SE_ItemViewItemText` 只剩 **17x7**，而 10pt 中文字要
+16 px 高。**是高度不夠，不是寬度不夠** —— 所以當時只看欄寬（33 px，綽綽有餘）
+就以為修好了。加上 `QCalendarWidget QAbstractItemView::item { padding: 0; }` 之後，
+同一格的文字矩形變回 33x21。
+
+**結論**：QSS 裡「清 padding」要清在**被畫的那一層**上。widget 的 padding 與
+`::item` 的 padding 是兩件事，前者不會蓋掉後者。
+
+守門是 `test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates`，
+斷言「文字矩形幾乎等於整格」而不是「放得下 26 這兩個字」—— 欄寬與字型會隨平台變，
+但「有沒有被那圈 padding 吃掉」不會。
+
+**不要再做**：
+- 不要用「欄寬夠不夠」去判斷會不會被省略。要量 `SE_ItemViewItemText`，而且**寬高都要量**。
+- 寫 UI 守門時，如果它依賴 application 層級的樣式表，就要在測試裡**自己套一次**
+  並斷言那條規則真的在裡面。這條測試的第一版單獨跑時是綠的、加進整包也是綠的，
+  但它其實什麼都沒驗 —— 樣式表是別的測試建 `MainWindow` 時順便設上去的。
+
+---
+
+## 2026-08-21 跨頁連動掉了一條線，而沒有任何測試會知道
+
+**情境**：從交易紀錄作廢一筆帳之後，切到餘額盤點，「未解釋差額」還是舊的數字。
+在待確認頁按「確認入帳」之後，交易紀錄裡也找不到那一筆。
+
+**做了什麼**：`main_window.py` 用 `_..._changed` 方法集中所有跨頁連動，這個設計是
+對的。但 `TransactionsPage` **從頭到尾沒有對外發過任何訊號**，`inbox.changed` 也只
+接到側邊欄徽章。更明顯的線索是 `_automation_changed()` 這個方法**定義了卻沒接到任何
+訊號** —— 一段從 v0.14.0 重整之後就沒被呼叫過的死碼。
+
+**為什麼失敗**：分層測試、整合測試、UI 測試全部是綠的，因為**少接一條訊號線不會讓
+任何一層失敗**。每一頁自己都對：交易紀錄真的作廢了，資料庫真的變了，餘額盤點的
+`refresh()` 也真的會算出新數字 —— 只是沒有人叫它算。
+
+「頁面之間的連動只寫在 `main_window.py`」讓這件事**容易查**，但沒有讓它**不會發生**。
+
+**結論**：三個會改動帳務的來源（記帳、交易紀錄、待確認）接到同一個 `_ledger_changed()`。
+不是三個「差不多」的方法各接一個 —— 那份清單就是下一個會漏的地方。
+守門在 `tests/ui/test_main_window.py`，走真正的按鈕路徑（`void_selected()`）而不是
+自己 `emit`，因為要驗的正是「那顆按鈕有沒有通知別人」。
+
+**不要再做**：不要把「資產總覽」也加進那條通知鏈。它走「切過去就重算」是刻意的
+（見 `overview.py` 的模組說明），兩套規則並存等於兩份都要維護。
+
+---
+
 ## 2026-08-21 在字體套上去之前量寬度，量到的是別人的尺寸
 
 **情境**：實機截圖上「操作設定 → 帳戶」的表頭被切掉（「目前餘額（TWD」），

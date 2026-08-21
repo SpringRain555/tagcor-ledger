@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 from tagcor_ledger.app.paths import AppPaths
+from tagcor_ledger.application.failures import failure
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import ApplicationSettings
 from tagcor_ledger.infrastructure.clock import now_iso
@@ -65,8 +66,10 @@ class SettingsService:
                     )
             return Result.ok("設定已儲存。")
         except (ValueError, sqlite3.Error) as exc:
-            return Result.fail(
-                "SETTINGS_SAVE_FAILED",
-                "設定無法儲存。",
-                details={"reason": str(exc)},
+            # `DEFAULT_ACCOUNT_NOT_ACTIVE` 是這裡自己 raise 的（上面幾行），
+            # 所以它會被 `failure()` 認出來，不會塌成 `SETTINGS_SAVE_FAILED`。
+            return failure(
+                exc,
+                fallback_code="SETTINGS_SAVE_FAILED",
+                fallback_message="設定無法儲存。請匯出診斷資訊回報。",
             )

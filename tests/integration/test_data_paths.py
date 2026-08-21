@@ -120,7 +120,10 @@ def test_failed_move_leaves_settings_and_source_database_untouched(tmp_path: Pat
     )
 
     assert not result.success
-    assert result.error_code == "PATH_SETTINGS_SAVE_FAILED"
+    # **碼要指出真正發生的那件事。** 以前這裡是籠統的 `PATH_SETTINGS_SAVE_FAILED`，
+    # 「目標已經有一份帳本」只寫在 `details["reason"]` 裡，然後被括號印到畫面上。
+    assert result.error_code == "TARGET_LEDGER_ALREADY_EXISTS"
+    assert "已經有一個帳本檔" in result.message
     assert settings_path.read_text(encoding="utf-8") == before
     assert controller.paths.database_path == original_root / "data" / "ledger.sqlite3"
     assert LedgerStore(controller.paths).account_balance_minor("acct_cash") == -120

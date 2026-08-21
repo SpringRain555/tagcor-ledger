@@ -13,7 +13,6 @@ from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -26,8 +25,13 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import ENTRY_NAMES, FREQUENCY_NAMES, minor_text
-from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
+from tagcor_ledger.ui.formatting import (
+    ENTRY_NAMES,
+    FREQUENCY_NAMES,
+    error_text,
+    minor_text,
+)
+from tagcor_ledger.ui.widgets.forms import date_field, fill_combo, select_data
 
 
 class DraftDialog(QDialog):
@@ -53,9 +57,9 @@ class DraftDialog(QDialog):
         self.description = QLineEdit()
         self.frequency = QComboBox()
         self.interval = QSpinBox()
-        self.start_date = QDateEdit(QDate.currentDate())
+        self.start_date = date_field()
         self.has_end = QCheckBox("設定結束日期")
-        self.end_date = QDateEdit(QDate.currentDate().addYears(1))
+        self.end_date = date_field(QDate.currentDate().addYears(1))
         self.error = QLabel()
         self.saved_value: Any = None
         self._build()
@@ -68,8 +72,6 @@ class DraftDialog(QDialog):
         for key in ("daily", "weekly", "monthly", "yearly"):
             self.frequency.addItem(FREQUENCY_NAMES[key], key)
         self.interval.setRange(1, 999)
-        self.start_date.setCalendarPopup(True)
-        self.end_date.setCalendarPopup(True)
         self.has_end.toggled.connect(self.end_date.setEnabled)
         self.end_date.setEnabled(False)
         self.error.setObjectName("errorLabel")
@@ -192,7 +194,7 @@ class DraftDialog(QDialog):
                 self.saved_value = template_value
             self.accept()
         except (MoneyError, ValueError) as exc:
-            self.error.setText(f"請檢查輸入內容（{exc}）")
+            self.error.setText(error_text(exc, fallback="請檢查輸入內容。"))
 
     def _sync_flow(self) -> None:
         transfer = self.flow.currentData() == "transfer"
