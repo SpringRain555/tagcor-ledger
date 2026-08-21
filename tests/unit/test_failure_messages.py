@@ -40,6 +40,17 @@ RAISED_INDIRECTLY = {
     "BACKUP_SCHEMA_TOO_NEW",
 }
 
+BACKUP_STATE_CODES = {
+    # 清單那一欄要能一眼掃過去，所以短標籤與完整說法分成兩張表。
+    # 只有「這份備份壞在哪」需要短標籤；刪除失敗的那三個碼不會出現在清單上。
+    "BACKUP_FILES_MISSING",
+    "BACKUP_MANIFEST_INVALID",
+    "BACKUP_CHECKSUM_MISMATCH",
+    "BACKUP_INTEGRITY_FAILED",
+    "BACKUP_SCHEMA_MISSING",
+    "BACKUP_SCHEMA_TOO_NEW",
+}
+
 STARTUP_ONLY = {
     # 啟動階段的失敗**還沒有主視窗**，所以走不到 `Result` 也走不到
     # `result_message()`。它們的中文由 `app/startup.py` 自己寫成對話框的標題與內文
@@ -273,6 +284,24 @@ def test_overrides_win_over_the_default_message() -> None:
     )
     assert result.error_code == "ACCOUNT_ACTIVE_NAME_CONFLICT"
     assert result.message == "請先把那一個改名或封存。"
+
+
+def test_every_backup_state_has_both_a_label_and_a_sentence() -> None:
+    """短標籤與完整說法兩張表要同步。
+
+    清單那一欄放短標籤（「內容被改過」），按下「驗證」才給完整說法。少了任何一邊，
+    使用者不是看到一列英文碼，就是按了驗證只得到四個字。
+    """
+    from tagcor_ledger.ui.formatting import BACKUP_STATE_LABELS
+
+    for code in BACKUP_STATE_CODES:
+        assert code in ERROR_MESSAGES, f"{code} 沒有完整說法"
+        assert code in BACKUP_STATE_LABELS, f"{code} 沒有清單用的短標籤"
+    extra = set(BACKUP_STATE_LABELS) - BACKUP_STATE_CODES
+    assert not extra, f"短標籤表裡有多餘的碼：{sorted(extra)}"
+    # 短標籤要真的短 —— 它跟時間與路徑擠在同一列裡。
+    for code, label in BACKUP_STATE_LABELS.items():
+        assert len(label) <= 8, f"{code} 的標籤太長，會把清單那一列撐開：{label}"
 
 
 def test_a_broken_backup_explains_itself_in_chinese(tmp_path: Path) -> None:

@@ -222,11 +222,15 @@ def setup_table(
         fit_to_rows(table, limit=rows_limit)
 
 
-def bind_selection(table: QTableView, *buttons: QPushButton) -> None:
+def bind_selection(table: QAbstractItemView, *buttons: QPushButton) -> None:
     """沒有選取任何一列時，把這些按鈕停用。
 
     原本的寫法是 handler 裡 `if item is None: return` —— 使用者按下去**什麼都不會發生**，
     沒有訊息也沒有變化，看起來就像程式當掉。停用按鈕才說得出「現在不能按」。
+
+    **收 `QAbstractItemView` 而不是 `QTableView`**，因為維護頁的備份清單是
+    `QListWidget`。同一條「沒選取就停用」的規則對它一樣成立，而且那一頁有
+    「刪除所選備份」這種不可逆的操作 —— 正是最不該讓人按了沒反應的地方。
     """
 
     def sync() -> None:

@@ -453,6 +453,26 @@ class LedgerController:
         self.maintenance.restore_backup(path, create_backup_first=create_backup_first)
         self._wire_services()
 
+    def delete_backup(self, path: Path) -> Result:
+        """刪除一份備份。**回 `Result` 而不是丟例外**，因為每一種失敗都有話要說。
+
+        同一頁上的建立／還原是丟例外由頁面 `except` 接（那是既有的形狀），
+        但刪除的三種失敗（資料夾不見了、不在備份資料夾底下、檔案被鎖住）
+        各自要給不同的建議，走 `failure()` 才拿得到那些句子。
+        """
+        try:
+            self.maintenance.delete_backup(path)
+        except (ValueError, OSError) as exc:
+            return failure(
+                exc,
+                fallback_code="BACKUP_DELETE_FAILED",
+                fallback_message=(
+                    "備份刪不掉。可能是檔案正被其他程式使用（防毒、雲端同步、"
+                    "另一個開著的視窗），或是資料夾沒有寫入權限。"
+                ),
+            )
+        return Result.ok("備份已刪除。")
+
     def reset_ledger(self, *, create_backup_first: bool = False) -> None:
         self.maintenance.reset_ledger(create_backup_first=create_backup_first)
         self._wire_services()

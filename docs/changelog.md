@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.16.1 - 備份可以刪掉了（以及讓它一度不可能的那個連線洩漏）
+
+### 順序是刻意的：先修連線，才做得出刪除
+
+`sqlite3.Connection.__exit__` 只做 commit／rollback，**不 close**。
+「函式結束時 refcount 會收掉」這個假設在 Windows 上實測不成立：
+
+```python
+def leaky(path):
+    with sqlite3.connect(path) as conn:
+        conn.execute("PRAGMA integrity_check").fetchone()
+
+leaky(copy); shutil.rmtree(folder)   # PermissionError 32，檔案被佔用
+```
+
+`validate_backup()` 要開資料庫讀 schema 版本，`list_backups()` 對每一份都跑它，
+而維護頁每次 refresh 都呼叫 `list_backups()`。所以**開著程式看一眼備份清單，
+那些備份就全都刪不掉了** —— 不先修這個，刪除功能寫出來也是壞的。
+`maintenance.py` 四個 `sqlite3.connect()` 全部包上 `contextlib.closing`。
+
+拿掉 `closing` 之後 `tests/integration/test_backup_deletion.py` 十條裡有八條紅。
+
+### 刪除所選備份
+
+維護頁多一顆 `dangerButton`。三個設計決定：
+
+- **不檢查備份有沒有效。** 檢查了就變成「壞掉的備份刪不掉」，而使用者想刪的
+  八成就是壞的那一份 —— 那也是這顆按鈕存在的理由。
+- **只肯刪備份資料夾底下的東西。** 這個方法收路徑而且做遞迴刪除，沒有這道檢查，
+  一個算錯的路徑就能刪掉別的東西。「選擇外部備份資料夾」餵進來的會被擋下。
+- **最後一份可用的備份：講，但不擋。** 確認框念出這一份是什麼、刪完還剩幾份可用；
+  剩零份時明講「這之後就沒有任何可用的備份了」。硬擋會讓「清掉整個備份資料夾重來」
+  變成做不到。
+
+驗證／還原／刪除三顆改用 `bind_selection` 綁選取狀態 —— 以前是 handler 裡
+`if path is None: return`，按了什麼都不會發生。`bind_selection` 因此從
+`QTableView` 放寬成 `QAbstractItemView`（備份清單是 `QListWidget`）。
+
+### 又三處印英文碼給使用者看
+
+0.16.0 修了維護頁的**例外**路徑，漏了**非例外**路徑：
+
+| 位置 | 以前 | 現在 |
+|---|---|---|
+| 備份清單那一欄 | `無效：BACKUP_CHECKSUM_MISMATCH` | `不可用（內容被改過）` |
+| 壞掉那幾列的時間欄 | 空白（開頭直接是 `｜`） | `2026/08/21 20:44` |
+| 按「驗證所選備份」 | `備份不可用：BACKUP_CHECKSUM_MISMATCH` | 完整說法：壞在哪、接下來怎麼辦 |
+| 還原前的檢查對話框 | `BACKUP_CHECKSUM_MISMATCH` | 同上 |
+
+清單用**短標籤**、驗證用**完整說法**，兩張表分開 —— 一整句塞進清單那一列會讓
+每一列長到看不出哪一份是哪一份。這不是同一件事寫兩遍，是兩個不同的工作；
+`test_failure_messages.py` 檢查每個 `BACKUP_*` 兩邊都有，而且標籤不超過 8 個字。
+
+最後那一列是實機截圖才看到的：`validate_backup()` 一發現問題就回傳，`created_at`
+來自清單檔所以是空的，於是壞掉那幾列開頭是一個空欄位 —— **而使用者正是在
+「這幾份都壞了，該刪哪一份」的時候需要那個時間**。讀不到清單檔就退回資料夾名字
+裡的時間戳（`backup_20260821_204447_788741`）。
+
+### 新增的守門
+
+`tests/integration/test_backup_deletion.py`（10 條）與四條 UI 測試，
+其中三條走**真正的按鈕路徑**（選一列 → 按刪除 → 確認 → 清單少一列）。
+
+十三個修正各自做過陽性對照，其中兩次對照直接改變了結果：
+
+- 我在 `bind_selection` 裡註明「`QListWidget.clear()` 走 reset 不是
+  selectionChanged」，但拿掉 `modelReset` 那一行測試照樣綠 —— **那句註解是錯的**，
+  已經刪掉。
+- 時間欄的退路第一版**沒有守門**：把它改回 `created_at` 測試還是綠的。
+  補上「開頭不是 `｜`、而且長得像 `2026/08/21 20:44`」的斷言。
+
 ## 0.16.0 - 錯誤訊息說中文，而且說的是真正發生的那件事
 
 0.15.0 修掉了 `CategoryService.create` 一處「一個錯誤碼代表三件事」，並記下同樣的寫法

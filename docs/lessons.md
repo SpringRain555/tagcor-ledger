@@ -16,6 +16,35 @@
 
 ---
 
+## 2026-08-21 `with sqlite3.connect(...)` 不會關連線，於是備份刪不掉
+
+**情境**：要做「在 UI 刪除備份」，發現 `maintenance.py` 有四個
+`with sqlite3.connect(...)`。
+
+**做了什麼**：本來想「CPython 有 refcount，函式一結束就收掉了，先不管」。
+
+**為什麼失敗**：`sqlite3.Connection.__exit__` 只做 commit／rollback，**不 close**，
+而「函式一結束就收掉」這個假設在 Windows 上**實測不成立**：
+
+```python
+def leaky(path):
+    with sqlite3.connect(path) as conn:
+        conn.execute("PRAGMA integrity_check").fetchone()
+
+leaky(copy); shutil.rmtree(folder)   # PermissionError 32
+```
+
+`validate_backup()` 要開資料庫讀 schema 版本，而 `list_backups()` 對每一份都跑它、
+維護頁每次 refresh 又都呼叫 `list_backups()`。所以**開著程式看一眼備份清單，
+那些備份就全都刪不掉了** —— 刪除功能寫出來也是壞的。拿掉 `closing` 之後，
+`test_backup_deletion.py` 十條裡有八條紅。
+
+**結論**：`contextlib.closing` 包住每一個 `sqlite3.connect()`。
+`with conn:` 是交易邊界，不是資源邊界，兩者要分開想。
+
+**不要再做**：不要靠 refcount 收 OS 資源，尤其是在 Windows 上會被鎖的檔案。
+也不要把「這個功能好像不能用」當成環境問題 —— 先寫一個五行的隔離腳本量一次。
+
 ## 2026-08-21 那個把英文碼印到畫面上的括號，是在補償錯誤碼被塌掉
 
 **情境**：整理 51 處 `details={"reason": str(exc)}`。`result_message()` 會把 `reason`

@@ -1,4 +1,5 @@
 import ast
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -1985,3 +1986,125 @@ def test_each_transfer_scope_saves_the_right_entry_type(qtbot, tmp_path: Path) -
         for row in controller.list_transactions().details["transactions"]
     ]
     assert sorted(kinds) == ["expense", "income", "transfer"], kinds
+
+
+def test_backup_list_never_shows_a_raw_error_code(qtbot, tmp_path: Path) -> None:
+    """備份清單那一欄以前印的是 `無效：BACKUP_CHECKSUM_MISMATCH`。
+
+    這一頁是使用者遇到麻煩時才會來的地方 —— 在這裡丟一串英文碼給他，等於在他最
+    需要看懂的時候換一種語言。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    page = window.system_settings.maintenance
+
+    backup_dir = window.controller.create_backup()
+    (backup_dir / "ledger.sqlite3").write_bytes(b"tampered")
+    page.refresh()
+
+    assert page.list.count() == 1
+    text = page.list.item(0).text()
+    assert "不可用（內容被改過）" in text, text
+    assert "BACKUP_" not in text, text
+    # **壞掉的備份也要有時間。** `validate_backup()` 一發現問題就回傳，`created_at`
+    # 讀不到，那一列開頭因此是空的 —— 而使用者正是在「這幾份都壞了，該刪哪一份」
+    # 的時候需要那個時間。讀不到清單檔就退回資料夾名字裡的時間戳。
+    assert not text.startswith("｜"), f"時間欄是空的：{text}"
+    stamp = text.split("｜")[0]
+    assert re.fullmatch(r"\d{4}/\d{2}/\d{2} \d{2}:\d{2}", stamp), stamp
+
+    # 按「驗證」要給完整說法，不是短標籤也不是英文碼。
+    page.list.setCurrentRow(0)
+    page.validate_selected()
+    assert "雜湊對不起來" in page.result.text(), page.result.text()
+    assert "BACKUP_" not in page.result.text()
+
+
+def test_deleting_a_broken_backup_from_the_page(qtbot, tmp_path: Path, monkeypatch) -> None:
+    """走**真正的按鈕路徑**：選一列 → 按刪除 → 確認 → 清單少一列、資料夾真的不見。
+
+    不呼叫 `controller.delete_backup()` 了事 —— 那樣測不到選取綁定、確認框，
+    也測不到刪完有沒有重新整理。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    page = window.system_settings.maintenance
+
+    keep = window.controller.create_backup()
+    drop = window.controller.create_backup()
+    (drop / "ledger.sqlite3").write_bytes(b"tampered")
+    page.refresh()
+    assert page.list.count() == 2
+
+    asked: list[str] = []
+
+    def confirm(*args: Any, **kwargs: Any) -> QMessageBox.StandardButton:
+        asked.append(str(args[2]))
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(confirm))
+
+    row = next(
+        index
+        for index in range(page.list.count())
+        if str(drop) in page.list.item(index).text()
+    )
+    page.list.setCurrentRow(row)
+    page.delete_button.click()
+
+    assert not drop.exists(), "壞掉的備份要刪得掉 —— 那是這顆按鈕的主要用途"
+    assert keep.is_dir(), "不該動到別的備份"
+    assert page.list.count() == 1
+    assert str(keep) in page.list.item(0).text()
+    # 確認框要念出這一份是什麼，還要說刪完還剩幾份可用的。
+    assert str(drop) in asked[0], asked[0]
+    assert "還有 1 份可用的備份" in asked[0], asked[0]
+
+
+def test_the_last_usable_backup_says_so_before_it_goes(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    """**不擋、只講。** 刪掉最後一份可用的備份是使用者的決定，但他要知道。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    page = window.system_settings.maintenance
+
+    only = window.controller.create_backup()
+    page.refresh()
+
+    asked: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        staticmethod(
+            lambda *args, **kwargs: (
+                asked.append(str(args[2])) or QMessageBox.StandardButton.No
+            )
+        ),
+    )
+
+    page.list.setCurrentRow(0)
+    page.delete_button.click()
+
+    assert "這之後就沒有任何可用的備份了" in asked[0], asked[0]
+    assert only.is_dir(), "按了「否」就不該刪"
+    assert page.list.count() == 1
+
+
+def test_backup_buttons_are_disabled_until_a_backup_is_selected(
+    qtbot, tmp_path: Path
+) -> None:
+    """沒選取就停用 —— 對「刪除」這種不可逆的操作尤其不能按了沒反應。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    page = window.system_settings.maintenance
+
+    buttons = (page.validate_button, page.restore_button, page.delete_button)
+    assert not any(button.isEnabled() for button in buttons), "沒有備份時就不該能按"
+
+    window.controller.create_backup()
+    page.refresh()
+    assert not any(button.isEnabled() for button in buttons), "重整之後選取被清掉了"
+
+    page.list.setCurrentRow(0)
+    assert all(button.isEnabled() for button in buttons)

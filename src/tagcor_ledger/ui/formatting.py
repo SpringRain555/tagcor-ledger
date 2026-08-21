@@ -15,6 +15,7 @@ TWD 沒有輔幣（`CURRENCY_SCALE = 0`），所以 minor unit 就是元；
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 
@@ -92,6 +93,76 @@ def result_message(result: Any) -> str:
     `details["detail"]` 是給診斷用的，**永遠不顯示**。
     """
     return str(result.message)
+
+
+BACKUP_STATE_LABELS = {
+    "BACKUP_FILES_MISSING": "檔案缺少",
+    "BACKUP_MANIFEST_INVALID": "清單檔壞掉",
+    "BACKUP_CHECKSUM_MISMATCH": "內容被改過",
+    "BACKUP_INTEGRITY_FAILED": "完整性檢查沒過",
+    "BACKUP_SCHEMA_MISSING": "讀不到版本",
+    "BACKUP_SCHEMA_TOO_NEW": "版本太新",
+}
+"""備份清單那一欄的**短標籤**，不是完整說法。
+
+跟 `ERROR_MESSAGES` 的句子是兩件事，不是同一件事寫兩遍：清單一列要能一眼掃過去，
+塞一整句「這個備份的檔案內容與清單裡記的雜湊對不起來 —— 檔案在備份之後被改過或
+損毀了。請不要還原它，改用別的備份。」會讓每一列長到看不出哪一份是哪一份。
+完整說法在按下「驗證」或「刪除」時才出現。
+
+兩張表要同步：`tests/unit/test_failure_messages.py` 會檢查每個 `BACKUP_*` 兩邊都有。
+"""
+
+
+def backup_state_text(valid: bool, error_code: Any) -> str:
+    """備份清單那一欄：可用，或是壞在哪裡。
+
+    以前這裡直接印 `f"無效：{error_code}"`，於是清單上一整排
+    `無效：BACKUP_CHECKSUM_MISMATCH`。
+    """
+    if valid:
+        return "可用"
+    code = str(error_code or "")
+    return f"不可用（{BACKUP_STATE_LABELS.get(code, code or '原因不明')}）"
+
+
+def backup_row_text(item: dict[str, Any]) -> str:
+    """備份清單的一列：時間｜狀態｜路徑。
+
+    **壞掉的備份也要有時間。** `validate_backup()` 一發現問題就回傳，`created_at`
+    來自清單檔所以是空的 —— 於是壞掉那幾列開頭是一個空欄位。而使用者正是在
+    「這幾份都壞了，該刪哪一份」的時候需要那個時間。資料夾名字本身就帶著時間戳
+    （`backup_20260821_204129_147229`），讀不到清單檔時就用它。
+    """
+    path = Path(str(item["path"]))
+    created = str(item.get("created_at") or "").strip()
+    when = display_datetime(created) if created else _time_from_backup_id(path.name)
+    state = backup_state_text(bool(item["valid"]), item.get("error_code"))
+    return f"{when}｜{state}｜{path}"
+
+
+def _time_from_backup_id(name: str) -> str:
+    """`backup_20260821_204129_147229` → `2026/08/21 20:41`，認不出來就原樣回傳。"""
+    parts = name.split("_")
+    if len(parts) >= 3 and parts[0] == "backup":
+        try:
+            stamp = datetime.strptime(f"{parts[1]}{parts[2]}", "%Y%m%d%H%M%S")
+        except ValueError:
+            return name
+        return stamp.strftime("%Y/%m/%d %H:%M")
+    return name
+
+
+def display_datetime(value: str) -> str:
+    """給備份清單用：到分鐘。
+
+    這裡**要顯示時間**，跟 `display_date()` 刻意相反 —— 同一天可以有好幾份備份，
+    只印日期就分不出哪一份是哪一份。（交易那邊的時分秒是程式補的，所以不印。）
+    """
+    try:
+        return datetime.fromisoformat(value).strftime("%Y/%m/%d %H:%M")
+    except ValueError:
+        return value
 
 
 def error_text(exc: BaseException, *, fallback: str) -> str:
