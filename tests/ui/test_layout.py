@@ -187,6 +187,42 @@ def test_shrink_wrapped_tables_are_never_clipped(qtbot, tmp_path: Path) -> None:
     assert checked >= tabs.count(), f"只檢查了 {checked} 張表，過濾條件把它們濾光了"
 
 
+def test_tables_are_not_clipped_on_a_brand_new_ledger(qtbot, tmp_path: Path) -> None:
+    """**開程式之後什麼都不做**，表格就不能是切掉的。
+
+    上面那條守門在量之前先建了帳戶與類別、又呼叫了一次 `refresh()` —— 那會多發一次
+    `modelReset`，而那一次的重算是對的。所以它只證明了「刷新過的表格沒問題」。
+
+    真正壞掉的是**第一次**：`fit_to_contents` 在 `setup_table` 當下就跑，而那時候
+    `apply_dark_theme()` 還沒把 12pt 中文字體套上去。量到的是預設字體下的寬度
+    （帳戶表 187 px），套上字體之後欄位需要 279 px，於是「目前餘額（TWD）」被切掉、
+    底下冒出一條橫向捲軸。實機截圖上看得一清二楚，而整包測試是綠的。
+    """
+    window = _open(qtbot, tmp_path, size=(1600, 900))
+    window.show_page(PageId.OPERATION_SETTINGS)
+    QApplication.processEvents()
+
+    tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
+    assert tabs is not None
+
+    checked = 0
+    for index in range(tabs.count()):
+        tabs.setCurrentIndex(index)
+        QApplication.processEvents()
+        for table in tabs.widget(index).findChildren(QTableView):
+            header = table.horizontalHeader()
+            columns = sum(header.sectionSize(i) for i in range(header.count()))
+            assert table.width() >= columns, (
+                f"「{tabs.tabText(index)}」分頁的表格只有 {table.width()} px，"
+                f"欄位需要 {columns} px —— 表頭會被切掉"
+            )
+            assert not table.horizontalScrollBar().isVisible(), (
+                f"「{tabs.tabText(index)}」分頁的表格冒出了橫向捲軸"
+            )
+            checked += 1
+    assert checked >= tabs.count(), f"只檢查了 {checked} 張表"
+
+
 def test_long_tables_still_fill_the_width(qtbot, tmp_path: Path) -> None:
     """交易紀錄有七欄，寬度是真的有用 —— 它**不該**被收窄。"""
     window = _open(qtbot, tmp_path, size=(1600, 900))

@@ -133,6 +133,7 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - **主字體必須是中文字型**（`Microsoft JhengHei UI` 排第一），12pt、Medium 字重。理由是 `Segoe UI Variable` 沒有中文字形，中文全靠 fallback，而**字重套不到 fallback 字型上** —— 對它設 Medium 只有數字變粗，中文一點都沒變。字體不打包，順序是 `Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、`Segoe UI Variable`、`Segoe UI`、sans-serif。
 - **日期欄位一律用 `date_field()`，不要用 `QDateTimeEdit`。** 介面只問到「哪一天」；時分秒由 `iso_from_date()` 補上（新建補現在、編輯沿用原值），資料庫存的仍然是完整時間戳。顯示一律用 `display_date()`，**不要把補出來的時分印出來** —— 那不是使用者輸入的東西。
 - UI 變更至少跑 `tests/ui` smoke；樣式資源變更需同步更新 `tests/unit/test_resources.py`。
+- **`apply_dark_theme()` 要在任何 widget 建出來之前套用**（`MainWindow.__init__` 的第一件事）。它換掉整個 application 的字體，而表格在建構當下就會量自己該多寬 —— 順序反了，量到的是預設字體下的寬度，之後就再也不會重算。**UI 測試的 fixture 不要順手多做一次 `refresh()`**：那會把「第一次就要對」這個條件洗掉，而使用者看到的永遠是第一次。
 - **改配色或改樣式之後要真的看一眼。** `window.grab().save(...)` 可以在不開視窗的情況下把畫面存成 PNG（用 `QT_QPA_PLATFORM=windows` 才有中文字型）。純看 QSS 看不出「顏色被蓋掉」這種問題。**抓最上層視窗**，用 `QTimer.singleShot` 在事件迴圈裡觸發，grab 之前先 `repaint()` —— 單獨 grab 巢狀子 widget 會憑空生出不存在的 bug（`docs/lessons.md` 2026-08-20）。
 - **UI 測試量 geometry，不量設定值，也不用 `isVisible()` 過濾。** `QStackedWidget` 底下的頁在 offscreen 平台上永遠回報 `isVisible() == False`，用它當過濾條件會讓整條守門靜默跳過。斷行要比 `label.width() >= fontMetrics().horizontalAdvance(text)`，高度要比 `header + 列數 × 列高`。**每一個帶 `continue` 的檢查迴圈都要有陽性對照**（`assert checked >= N`）。
 

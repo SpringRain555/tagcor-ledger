@@ -46,6 +46,12 @@ class MainWindow(QMainWindow):
     def __init__(self, paths: AppPaths) -> None:
         super().__init__()
         self.controller = LedgerController(paths)
+        # **主題要在任何 widget 建出來之前套用。** `apply_dark_theme` 換掉的是整個
+        # application 的字體，而頁面裡的表格在**建構當下**就會量自己該多寬
+        # （`setup_table` → `fit_to_contents`）。順序反了，量到的是預設字體下的寬度，
+        # 之後套上 12pt 中文字體，欄位變寬而上限沒跟著變 —— 帳戶表因此被夾在 187 px
+        # （實際需要 279），「目前餘額（TWD）」被切掉還冒出橫向捲軸。
+        self._apply_theme()
         self.pages = QStackedWidget()
         self.overview = OverviewPage(self.controller)
         self.quick = QuickEntryPage(self.controller)
@@ -58,12 +64,15 @@ class MainWindow(QMainWindow):
         self._build(paths)
         self.refresh_pending_badge()
 
-    def _build(self, paths: AppPaths) -> None:
-        self.setWindowTitle("TagCor Ledger")
-        self._restore_geometry()
+    @staticmethod
+    def _apply_theme() -> None:
         app = QApplication.instance()
         if app is not None:
             apply_dark_theme(cast(QApplication, app))
+
+    def _build(self, paths: AppPaths) -> None:
+        self.setWindowTitle("TagCor Ledger")
+        self._restore_geometry()
 
         self._page_widgets: dict[PageId, QWidget] = {
             PageId.OVERVIEW: self.overview,
@@ -81,7 +90,8 @@ class MainWindow(QMainWindow):
             widget.setObjectName("pageSurface")
             self.pages.addWidget(widget)
 
-        # 側邊欄要在 apply_dark_theme 之後才建 —— 它的高度是照 QSS 的項目內距算出來的。
+        # 側邊欄的高度是照 QSS 的項目內距算出來的，所以要在主題套用之後才建 ——
+        # 現在整個 `__init__` 都在主題之後，這條自然成立（見 `_apply_theme` 那段說明）。
         self.sidebar = Sidebar()
         self.sidebar.adapt_to(self.width())
         self.sidebar.page_selected.connect(self._navigate)

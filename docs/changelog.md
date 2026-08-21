@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.14.3 - 表格不再在字體套上去之前量自己
+
+**剛開程式時「操作設定 → 帳戶」的表頭是切掉的**（「目前餘額（TWD」），底下還有一條
+橫向捲軸。修前兩個缺陷時截實機圖發現的。
+
+`setup_table()` 在建構表格的當下就量欄寬，而 `MainWindow.__init__` 是**先建好八個頁面、
+再**套 `apply_dark_theme(app)` —— 那會換掉整個 application 的字體。量的時候字體還是
+預設的：header 回報 `sectionSizeHint = [32, 109, 32]`，套上 12pt 中文字型之後是
+`[52, 155, 52]`。`maximumWidth` 因此凍結在 187 px，而欄位實際需要 279 px。
+
+而且沒有東西會再算一次 —— `fit_to_contents` 只掛在 `modelReset` 上。所以這個缺陷
+**只在「剛開程式、還沒動過任何東西」時看得到**，也就是每天的第一眼。
+
+修法是把 `apply_dark_theme()` 移到 `MainWindow.__init__` 的最前面，任何 widget 建出來
+之前就套好。`_build()` 裡原本那句「側邊欄要在 apply_dark_theme 之後才建」說明作者
+早就知道這一類問題，只是當時只處理了側邊欄。
+
+### 既有的守門為什麼漏掉
+
+`test_shrink_wrapped_tables_are_never_clipped` 在量之前先建了帳戶與類別、又呼叫了
+一次 `refresh()` —— 那會多發一次 `modelReset`，而**那一次的重算是對的**。
+所以它只證明了「刷新過的表格沒問題」。
+
+新增 `test_tables_are_not_clipped_on_a_brand_new_ledger`：**開完程式什麼都不做**，
+直接量每一張表的寬度與橫向捲軸。它在修好之前是紅的（帳戶表 186 px、欄位需要 288 px）。
+
 ## 0.14.2 - 側邊欄不再自己跳頁，新增帳戶說得出哪裡不對
 
 兩個使用者回報的缺陷。
