@@ -344,24 +344,49 @@ class DepositContractDialog(QDialog):
         fill_combo(self.interest_destination, accounts, "name", "account_id")
 
     def add_account(self) -> None:
-        """在這個對話框裡直接開一個定存帳戶，省得中途跳去「帳戶」分頁再回來。"""
+        """在這個對話框裡直接開一個定存帳戶，省得中途跳去「帳戶」分頁再回來。
+
+        **打到已經存在的名字不是錯誤，是「你要的就是那一個」。** 預設值是「郵局定存」，
+        而那正是最可能已經開過的名字 —— 第二次按下去必然撞名。舊版在這裡丟一個
+        警告框（還附著 SQLite 原文），使用者只能自己去猜要改什麼。現在直接把那個帳戶
+        選起來，因為那就是他按這顆按鈕想達成的事。
+        """
         name, accepted = QInputDialog.getText(self, "新增帳戶", "帳戶名稱", text="郵局定存")
         if not accepted or not name.strip():
             return
+        cleaned = name.strip()
+
+        if self._select_account_named(cleaned):
+            QMessageBox.information(
+                self,
+                "已經有這個帳戶",
+                f"「{cleaned}」已經在清單裡了，已經幫你選起來。",
+            )
+            return
+
         balance, accepted = QInputDialog.getText(
             self, "新增帳戶", "期初餘額（TWD）", text="0"
         )
         if not accepted:
             return
-        result = self.controller.create_account(name.strip(), balance.strip() or "0")
+        result = self.controller.create_account(cleaned, balance.strip() or "0")
         if not result.success:
             QMessageBox.warning(self, "無法新增帳戶", result_message(result))
             return
         self._reload_accounts()
+        self._select_account_named(cleaned)
+
+    def _select_account_named(self, name: str) -> bool:
+        """名稱對得上就把它選起來，回傳有沒有找到。
+
+        比對用 `casefold()` —— `accounts.name` 是 `COLLATE NOCASE`，
+        資料庫眼中「post」與「POST」是同一個名字，畫面上的判斷不能比它寬鬆。
+        """
         for index in range(self.account.count()):
-            if self.account.itemText(index) == name.strip():
+            if self.account.itemText(index).casefold() == name.casefold():
                 self.account.setCurrentIndex(index)
-                break
+                return True
+        return False
 
     def _sync_fields(self) -> None:
         """只顯示這個組合真的需要的欄位。"""

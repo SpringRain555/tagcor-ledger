@@ -17,8 +17,9 @@
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
 |---|---|---|
 | `ACCOUNT_NAME_REQUIRED` | 帳戶名稱空白 | 填名稱 |
+| `ACCOUNT_OPENING_BALANCE_INVALID` | 期初餘額不是整數元 | 只填數字，不要逗號或單位。留空當 0 |
 | `ACCOUNT_NOT_FOUND` | 指定的帳戶不存在 | 通常是資料不一致；重開程式，仍有問題就匯出診斷資訊 |
-| `ACCOUNT_ACTIVE_NAME_CONFLICT` | 已有同名的使用中帳戶 | 換名字，或先把同名的封存 |
+| `ACCOUNT_ACTIVE_NAME_CONFLICT` | 已有同名的使用中帳戶（新增或恢復時） | **多半是本來就想用那一個** —— 直接在選單裡選它。真要兩個就換名字 |
 | `ACCOUNT_NOT_ACTIVE` | 想用一個已封存的帳戶記帳 | 先恢復該帳戶，或改選別的 |
 | `ACCOUNT_IS_DEFAULT` | 想刪掉預設帳戶 | 先到操作設定改預設帳戶，再刪 |
 | `ACCOUNT_IN_USE` | 想刪掉已被歷史交易引用的帳戶 | **改用封存。** 刪除只允許從未被引用過的 |

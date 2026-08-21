@@ -16,6 +16,68 @@
 
 ---
 
+## 2026-08-21 把 current row 設成 -1，等於請 Qt 幫你選一頁
+
+**情境**：使用者回報「在操作設定裡做任何事都有機會跳回資產總覽」。
+
+**做了什麼**：側邊欄是兩個 `QListWidget`（中間要一段會長高的留白）。選了一邊就把另一邊
+`clearSelection()` ＋ `setCurrentRow(-1)`，讓畫面上只有一個選取。看起來很合理。
+
+**為什麼失敗**：`QAbstractItemView::focusInEvent` 在 current index **無效**時，會自己把它
+設成第一列。那不是使用者選的，但 `currentRowChanged(0)` 照樣發出來 —— 而第 0 列正好是
+資產總覽。所以只要焦點碰到「日常」那一組，畫面就跳走。
+
+讓焦點移動的事情多得數不完：關掉對話框、按鈕被 `bind_selection` 停用、按 Tab。
+實測在操作設定裡按四次 Tab 就中，焦點鏈是
+`QTabBar → QPushButton → QTableView → 側邊欄清單`。使用者說的「任何操作都有機會」
+一點都不誇張。
+
+**我第一次的推論是錯的**：以為 `setCurrentRow(-1)` 會把 Qt 內部的 `currentIndexSet`
+設成 true、因此擋掉自動選取。寫了一個逐項嘗試的探針去量，六種 focus reason **全部**
+都會跳。**憑對 Qt 原始碼的記憶推論，不能取代量一次。**
+
+**結論**：兩組清單的 current row **一直保持有效**，Qt 就沒有東西可以自作主張。
+「現在是哪一頁」改由 `Sidebar._current` 自己記，選取狀態才是畫面上的真相。
+代價是「點自己那一組裡已經是 current 的那一列」不會觸發 `currentRowChanged`，
+所以另外接 `itemClicked` —— 側邊欄裡不該有任何點不動的東西。
+
+**不要再做**：不要把 `currentRowChanged` 當成「使用者選了什麼」。它也會因為焦點、
+model 重建、程式自己設值而發出來。**要表達「使用者的選擇」就自己記一個狀態**，
+不要從 widget 的內部狀態反推。
+
+---
+
+## 2026-08-21 一個錯誤碼代表三件事，訊息就一定寫不好
+
+**情境**：使用者在定存對話框按「新增帳戶…」，跳出
+「帳戶無法建立，請確認名稱沒有重複且金額格式正確。（UNIQUE constraint failed:
+accounts.name）」。
+
+**為什麼失敗**：`AccountService.create` 把 `MoneyError`、`ValueError`、
+`sqlite3.IntegrityError` 三種例外接在同一個 `except`，回同一個
+`ACCOUNT_CREATE_FAILED`。一個錯誤碼代表三件事，訊息就只能同時指控兩個欄位、
+而且**兩個都沒說清楚**：哪個名字重複？金額哪裡不對？
+
+`details["reason"]` 塞的是 `str(exc)`，而 `result_message()` 會把它接在訊息後面 ——
+所以 SQLite 的原文直接漏到畫面上。那句話對使用者沒有任何意義，卻是他唯一拿到的線索。
+
+還有一層：擋下來的是 `accounts(name) WHERE status = 'active'` 這條**部分索引**。
+只有它知道為什麼失敗，而它說的話是給資料庫看的。
+
+**結論**：三種失敗各自有錯誤碼與說法，而且**先問清楚再寫**，不靠例外分類：
+名稱空白 → `ACCOUNT_NAME_REQUIRED`；金額格式 → `ACCOUNT_OPENING_BALANCE_INVALID`；
+名稱已被使用中帳戶佔用 → `ACCOUNT_ACTIVE_NAME_CONFLICT`，訊息直接寫出是哪個名字。
+真的走到預期外的例外時，原文放 `details["detail"]`（不顯示），不放 `reason`。
+
+**互動上更重要的一件事**：對話框的預設值就是「郵局定存」，也就是最可能已經開過的
+名字 —— 第二次按必然撞名。撞名時使用者要的其實是「用那一個」，所以現在直接把它
+選起來並說一聲，而不是丟一個他無法行動的錯誤框。
+
+**不要再做**：不要用一個 `except` 接多種例外再回同一個錯誤碼 —— 錯誤碼的數量決定了
+訊息能有多具體。**也不要把 `str(exc)` 放進會顯示給使用者的欄位。**
+
+---
+
 ## 2026-08-21 一份實作放錯地方，久了它的行為就跟正本不一樣了
 
 **情境**：`infrastructure/automation_store.py` 是唯一不在 `stores/` 底下、也不是

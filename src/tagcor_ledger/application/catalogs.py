@@ -47,20 +47,59 @@ class AccountService:
         account_type: str = "cash",
         opening_balance: str = "0",
     ) -> Result:
+        """建立帳戶。**三種失敗各有各的錯誤碼與說法。**
+
+        以前三種擠在同一個 `ACCOUNT_CREATE_FAILED`，訊息是「請確認名稱沒有重複且金額
+        格式正確」，後面還接著 SQLite 的原文
+        `（UNIQUE constraint failed: accounts.name）`。使用者看到的是一句同時指控
+        兩個欄位、又沒說是哪個名字重複的話 —— 三個問題都出在「一個錯誤碼代表三件事」。
+        """
+        cleaned = name.strip()
+        if not cleaned:
+            return Result.fail("ACCOUNT_NAME_REQUIRED", "請輸入帳戶名稱。")
+
         try:
             opening = Money.from_decimal_string(opening_balance, allow_zero=True)
+        except MoneyError:
+            return Result.fail(
+                "ACCOUNT_OPENING_BALANCE_INVALID",
+                "期初餘額只能是整數元，例如 0 或 100000（不要加逗號或單位）。",
+            )
+
+        # **先問清楚再寫**，不要靠 UNIQUE 索引把例外丟回來 —— 那條索引是
+        # `WHERE status = 'active'` 的部分索引，只有它才知道為什麼失敗，
+        # 而它說的話是給資料庫看的，不是給人看的。
+        taken = next(
+            (
+                account
+                for account in self.store.list_accounts()
+                if account.name.casefold() == cleaned.casefold()
+            ),
+            None,
+        )
+        if taken is not None:
+            return Result.fail(
+                "ACCOUNT_ACTIVE_NAME_CONFLICT",
+                f"已經有一個叫「{taken.name}」的帳戶了。"
+                "要用它就直接在選單裡選，不需要再新增一個。",
+                details={"account_id": taken.account_id, "name": taken.name},
+            )
+
+        try:
             account = self.store.create_account(
-                name=name,
+                name=cleaned,
                 account_type=account_type,
                 opening_balance_minor=opening.amount_minor,
             )
-            return Result.ok("帳戶已建立。", details={"account_id": account.account_id})
-        except (MoneyError, ValueError, sqlite3.IntegrityError) as exc:
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            # 走到這裡表示上面三道檢查都沒攔到 —— 那是預期外的，原文留給診斷用的
+            # `detail`，**不放進 `reason`**（`result_message()` 會把 reason 印到畫面上）。
             return Result.fail(
                 "ACCOUNT_CREATE_FAILED",
-                "帳戶無法建立，請確認名稱沒有重複且金額格式正確。",
-                details={"reason": str(exc)},
+                "帳戶無法建立。請匯出診斷資訊回報。",
+                details={"detail": str(exc)},
             )
+        return Result.ok("帳戶已建立。", details={"account_id": account.account_id})
 
     def archive(self, account_id: str) -> Result:
         try:

@@ -9,6 +9,21 @@
 上面那組仍然亮著。`_syncing` 旗標就是為了這件事 —— 清掉另一組的選取會觸發它自己的
 `currentRowChanged`，沒有旗標就是無窮遞迴。
 
+## 為什麼**不**把非作用中那組的 current row 設成 -1
+
+因為 `QAbstractItemView::focusInEvent` 在 current index 無效時，會自己把它設成第一列。
+那不是使用者選的，但 `currentRowChanged(0)` 照樣會發出來 —— 舊版因此只要焦點碰到
+「日常」那一組，畫面就跳回資產總覽。而讓焦點移動的事情多得數不完：關掉對話框、
+按鈕被停用（`bind_selection` 每次刷新都會做）、按 Tab（實測在操作設定裡按四次就中）。
+使用者看到的是「在操作設定裡做任何事都有機會跳回資產總覽」。
+
+所以**兩組的 current row 一直都是有效的**，Qt 就沒有東西可以自作主張。
+「現在是哪一頁」改由 `Sidebar` 自己記（`_current`），選取狀態才是畫面上的真相：
+**任何時候只有一列是選取的**。
+
+代價是「點自己那一組裡已經是 current 的那一列」不會觸發 `currentRowChanged`，
+所以另外接了 `itemClicked` —— 側邊欄裡不該有任何點不動的東西。
+
 ## 為什麼沒有分組標題
 
 見 `ui/navigation.py` 的模組說明。簡短版：那條路失敗過兩次，這次把標籤整個拿掉，
@@ -120,6 +135,8 @@ class Sidebar(QFrame):
         self.setObjectName("sidebarRail")
         self._rows: dict[PageId, tuple[_NavList, int]] = {}
         self._syncing = False
+        self._current: PageId | None = None
+        """哪一頁是作用中的。**這是正本**，不從 current row 推 —— 兩組都有 current row。"""
         self.daily = self._build_list(DAILY_PAGES)
         self.settings = self._build_list(SETTINGS_PAGES)
         self._build()
@@ -164,9 +181,15 @@ class Sidebar(QFrame):
             self._rows[page] = (widget, widget.count())
             widget.addItem(item)
         widget.updateGeometry()
+        # **先給一個有效的 current index，而且在接訊號之前。** 只要它是無效的，
+        # 焦點一碰到這個清單 Qt 就會自己把它設成第 0 列並發出 currentRowChanged。
+        widget.setCurrentRow(0)
+        widget.clearSelection()
         widget.currentRowChanged.connect(
             lambda row, source=widget: self._row_changed(source, row)
         )
+        # current row 沒變就不會有 currentRowChanged，所以「點目前這一列」要另外接。
+        widget.itemClicked.connect(lambda item, source=widget: self._item_clicked(source, item))
         return widget
 
     # --- 對外 -----------------------------------------------------------------
@@ -178,9 +201,20 @@ class Sidebar(QFrame):
         )
 
     def select(self, page: PageId) -> None:
-        """跳到某一頁。已經在那一頁時什麼都不做（`setCurrentRow` 不會重複發訊號）。"""
+        """把某一頁標成作用中。**只改畫面狀態，不發訊號** —— 呼叫者自己知道要去哪。"""
         widget, row = self._rows[page]
-        widget.setCurrentRow(row)
+        self._syncing = True
+        try:
+            widget.setCurrentRow(row)
+            for other in (self.daily, self.settings):
+                if other is not widget:
+                    other.clearSelection()
+            item = widget.item(row)
+            if item is not None:
+                item.setSelected(True)
+        finally:
+            self._syncing = False
+        self._current = page
 
     def set_badge(self, page: PageId, count: int) -> None:
         """設定某一頁右側的數字。`0` 表示不顯示。"""
@@ -190,10 +224,8 @@ class Sidebar(QFrame):
             item.setData(BADGE_ROLE, count or None)
 
     def current_page(self) -> PageId | None:
-        for page, (widget, row) in self._rows.items():
-            if widget.currentRow() == row:
-                return page
-        return None
+        """作用中的那一頁。**不從 current row 推** —— 兩組清單都有 current row。"""
+        return self._current
 
     def item_for(self, page: PageId) -> QListWidgetItem | None:
         """給測試用：拿到某一頁對應的那一列。"""
@@ -213,21 +245,26 @@ class Sidebar(QFrame):
     # --- 內部 -----------------------------------------------------------------
 
     def _row_changed(self, source: _NavList, row: int) -> None:
-        """兩組清單各自有 current row，所以選了一邊要清掉另一邊。
-
-        清掉會觸發對方的 `currentRowChanged(-1)`，因此需要 `_syncing` 擋住 ——
-        沒有它就是兩個 handler 互相呼叫到堆疊爆掉。
-        """
+        """鍵盤移動游標＝換頁。`_syncing` 擋掉 `select()` 自己造成的變動。"""
         if self._syncing or row < 0:
             return
-        self._syncing = True
-        try:
-            for other in (self.daily, self.settings):
-                if other is not source:
-                    other.clearSelection()
-                    other.setCurrentRow(-1)
-        finally:
-            self._syncing = False
-        item = source.item(row)
-        if item is not None:
-            self.page_selected.emit(str(item.data(PAGE_ROLE)))
+        self._choose(source.item(row))
+
+    def _item_clicked(self, source: _NavList, item: QListWidgetItem) -> None:
+        """滑鼠點一列＝換頁，**不管它是不是已經是 current row**。
+
+        少了這條，「切到設定那組之後，再點回日常那組原本停著的那一列」會完全沒反應
+        —— current row 沒變，`currentRowChanged` 就不會發。
+        """
+        if self._syncing:
+            return
+        self._choose(item)
+
+    def _choose(self, item: QListWidgetItem | None) -> None:
+        if item is None:
+            return
+        page = PageId(str(item.data(PAGE_ROLE)))
+        if page is self._current:
+            return
+        self.select(page)
+        self.page_selected.emit(str(page))

@@ -10,7 +10,8 @@ from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui import colors
 from tagcor_ledger.ui.main_window import MainWindow
-from tagcor_ledger.ui.navigation import DAILY_PAGES, SETTINGS_PAGES, PageId
+from tagcor_ledger.ui.navigation import DAILY_PAGES, LABELS, SETTINGS_PAGES, PageId
+from tagcor_ledger.ui.pages.deposits import DepositContractDialog
 from tagcor_ledger.ui.widgets.forms import date_field, iso_from_date
 from tagcor_ledger.ui.widgets.sidebar import BADGE_ROLE
 
@@ -71,25 +72,122 @@ def test_every_sidebar_row_can_be_clicked(qtbot, tmp_path: Path) -> None:
 
 
 def test_selecting_one_group_clears_the_other(qtbot, tmp_path: Path) -> None:
-    """兩個清單各有 current row，選了一邊必須清掉另一邊。
+    """兩個清單各自有選取狀態，任何時候**只有一列是選取的**。
 
     這段最容易寫成無窮遞迴：清掉對方會觸發對方的 `currentRowChanged`。
+
+    量的是**選取**不是 current row。current row 是鍵盤游標的位置，兩個清單都會有一個
+    （而且必須有 —— 見 `test_focus_landing_on_the_sidebar_does_not_navigate`）。
     """
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     window.show()
 
+    def selected() -> list[str]:
+        return [
+            item.text()
+            for lst in (window.sidebar.daily, window.sidebar.settings)
+            for item in lst.selectedItems()
+        ]
+
     window.show_page(PageId.ENTRY)
-    assert window.sidebar.daily.currentRow() == DAILY_PAGES.index(PageId.ENTRY)
-    assert window.sidebar.settings.currentRow() == -1
+    assert selected() == [LABELS[PageId.ENTRY]]
+    assert window.sidebar.current_page() is PageId.ENTRY
 
     window.show_page(PageId.SYSTEM_SETTINGS)
-    assert window.sidebar.daily.currentRow() == -1
-    assert window.sidebar.settings.currentRow() == SETTINGS_PAGES.index(
-        PageId.SYSTEM_SETTINGS
-    )
+    assert selected() == [LABELS[PageId.SYSTEM_SETTINGS]]
     assert window.sidebar.current_page() is PageId.SYSTEM_SETTINGS
     assert window.pages.currentWidget() is window.system_settings
+
+
+def test_focus_landing_on_the_sidebar_does_not_navigate(qtbot, tmp_path: Path) -> None:
+    """焦點落到側邊欄**不等於**使用者選了一頁。
+
+    `QAbstractItemView::focusInEvent` 在 current index 無效時會自動把它設成第一列。
+    舊做法把非作用中那組的 current row 設成 -1，於是焦點一碰到「日常」那組，
+    Qt 就把它設成第 0 列（資產總覽）並發出 `currentRowChanged(0)` —— 畫面就跳走了。
+
+    使用者回報的症狀是「在操作設定裡做任何事都有機會跳回資產總覽」，因為讓焦點移動的
+    事情太多了：關掉對話框、按鈕被停用、Tab。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    # **剛開程式、還沒點過任何一頁**時，「設定」那一組從來沒有被選過。
+    # 它的 current row 若是無效的，焦點一碰就會跳到法規參考。
+    for widget in (window.sidebar.daily, window.sidebar.settings):
+        widget.setFocus(Qt.FocusReason.TabFocusReason)
+        QApplication.processEvents()
+        assert window.pages.currentWidget() is window.overview, (
+            "啟動後焦點碰到側邊欄就離開了首頁"
+        )
+        widget.clearFocus()
+
+    for reason in (
+        Qt.FocusReason.TabFocusReason,
+        Qt.FocusReason.OtherFocusReason,
+        Qt.FocusReason.ActiveWindowFocusReason,
+        Qt.FocusReason.PopupFocusReason,
+    ):
+        window.show_page(PageId.OPERATION_SETTINGS)
+        for widget in (window.sidebar.daily, window.sidebar.settings):
+            widget.clearFocus()
+            widget.setFocus(reason)
+            # focusInEvent 是**送出去**的，不處理事件佇列就等於沒有發生 ——
+            # 少了這一行，這條測試在壞掉的版本上照樣是綠的。
+            QApplication.processEvents()
+            assert window.pages.currentWidget() is window.operation_settings, (
+                f"焦點以 {reason.name} 落到側邊欄就把畫面帶走了 —— "
+                f"現在停在 {window.pages.currentWidget()}"
+            )
+            assert window.sidebar.current_page() is PageId.OPERATION_SETTINGS
+
+
+def test_tabbing_through_a_settings_tab_never_changes_the_page(
+    qtbot, tmp_path: Path
+) -> None:
+    """在一頁裡按 Tab 只該在那一頁裡繞，不該換頁。
+
+    實測舊版按第 4 次 Tab 就跳走：焦點鏈是
+    `QTabBar → QPushButton → QTableView → 側邊欄清單`。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    window.show_page(PageId.OPERATION_SETTINGS)
+    window.operation_settings.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    for step in range(40):
+        window.focusNextPrevChild(True)
+        QApplication.processEvents()
+        assert window.pages.currentWidget() is window.operation_settings, (
+            f"按了 {step + 1} 次 Tab 就換頁了"
+        )
+
+
+def test_clicking_the_current_page_again_still_works(qtbot, tmp_path: Path) -> None:
+    """點一列就是選那一頁，**不管它是不是已經是 current row**。
+
+    修焦點問題時兩個清單都保有 current row，所以「點自己那一組裡 current 的那一列」
+    不會觸發 `currentRowChanged`。少了 `itemClicked` 這條路，那一列會變成點不動的 ——
+    而側邊欄裡不該有任何點不動的東西。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+
+    # 先讓「日常」那組的 current row 停在資產總覽，再切去設定那組。
+    window.show_page(PageId.OVERVIEW)
+    window.show_page(PageId.SYSTEM_SETTINGS)
+    assert window.sidebar.daily.currentRow() == DAILY_PAGES.index(PageId.OVERVIEW)
+
+    item = window.sidebar.item_for(PageId.OVERVIEW)
+    assert item is not None
+    window.sidebar.daily.itemClicked.emit(item)
+
+    assert window.pages.currentWidget() is window.overview
+    assert window.sidebar.current_page() is PageId.OVERVIEW
 
 
 def test_settings_group_sits_at_the_bottom_of_the_rail(qtbot, tmp_path: Path) -> None:
@@ -492,6 +590,44 @@ def test_navigation_labels_are_not_used_as_lookup_keys() -> None:
         and any("一" <= char <= "鿿" for char in node.slice.value)
     ]
     assert not offenders, f"這些查表用中文字串當 key：{offenders}"
+
+
+def test_adding_an_account_that_already_exists_just_selects_it(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    """定存對話框的「新增帳戶…」打到既有名字時，要把它選起來而不是丟錯誤。
+
+    預設值是「郵局定存」，也就是最可能已經開過的名字 —— 第二次按必然撞名。
+    舊版丟一個警告框，內容還帶著 `UNIQUE constraint failed: accounts.name`。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    assert window.controller.create_account("郵局定存", "100000").success
+
+    dialog = DepositContractDialog(window.controller, window)
+    qtbot.addWidget(dialog)
+
+    warnings: list[str] = []
+    infos: list[str] = []
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.deposits.QInputDialog.getText",
+        staticmethod(lambda *a, **k: ("郵局定存", True)),
+    )
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.deposits.QMessageBox.warning",
+        staticmethod(lambda parent, title, text, *a, **k: warnings.append(text)),
+    )
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.deposits.QMessageBox.information",
+        staticmethod(lambda parent, title, text, *a, **k: infos.append(text)),
+    )
+
+    dialog.add_account()
+
+    assert not warnings, f"不該出現錯誤框：{warnings}"
+    assert infos and "郵局定存" in infos[0]
+    assert dialog.account.currentText() == "郵局定存", "沒有把既有的那個帳戶選起來"
 
 
 def test_deposits_tab_and_pending_deposit_section_exist(qtbot, tmp_path: Path) -> None:

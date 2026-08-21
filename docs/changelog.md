@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.14.2 - 側邊欄不再自己跳頁，新增帳戶說得出哪裡不對
+
+兩個使用者回報的缺陷。
+
+### 焦點碰到側邊欄，畫面就跳回資產總覽
+
+回報的症狀是「在操作設定裡做任何事都有機會跳回資產總覽」。
+
+`QAbstractItemView::focusInEvent` 在 current index **無效**時會自己把它設成第一列 ——
+而舊版把非作用中那一組的 current row 設成 `-1`，第 0 列又正好是資產總覽。
+於是焦點一碰到「日常」那組，`currentRowChanged(0)` 就發出來，畫面跟著跳。
+
+讓焦點移動的事情多得數不完：關掉對話框、按鈕被 `bind_selection` 停用、按 Tab。
+**實測在操作設定裡按四次 Tab 就中**，焦點鏈是
+`QTabBar → QPushButton → QTableView → 側邊欄清單`。
+
+同一個成因還有一個沒被回報的版本：**剛啟動、還沒點過任何一頁時**，「設定」那一組
+從來沒有被選過，焦點碰到它會跳到法規參考。
+
+修法是讓兩組清單的 current row **一直保持有效**，Qt 就沒有東西可以自作主張。
+「現在是哪一頁」改由 `Sidebar._current` 自己記。代價是「點自己那組裡已經是 current
+的那一列」不會觸發 `currentRowChanged`，所以另外接了 `itemClicked` ——
+側邊欄裡不該有任何點不動的東西。
+
+### 「新增帳戶」的錯誤訊息把 SQL 丟到畫面上
+
+在定存對話框按「新增帳戶…」會看到：
+
+> 帳戶無法建立，請確認名稱沒有重複且金額格式正確。
+> （UNIQUE constraint failed: accounts.name）
+
+三個問題，同一個成因：`AccountService.create` 把三種例外接在同一個 `except`，
+回同一個 `ACCOUNT_CREATE_FAILED`。**一個錯誤碼代表三件事，訊息就只能同時指控兩個
+欄位而且兩個都說不清楚**；`details["reason"]` 塞 `str(exc)`，`result_message()`
+又會把它印出來，所以 SQLite 原文直接漏到畫面上。
+
+現在三種失敗各自有錯誤碼與說法，而且**先問清楚再寫**：
+
+| 情況 | 錯誤碼 | 使用者看到 |
+|---|---|---|
+| 名稱空白 | `ACCOUNT_NAME_REQUIRED` | 請輸入帳戶名稱。 |
+| 金額格式不對 | `ACCOUNT_OPENING_BALANCE_INVALID`（新增） | 期初餘額只能是整數元，例如 0 或 100000 |
+| 名稱已被使用中帳戶佔用 | `ACCOUNT_ACTIVE_NAME_CONFLICT` | 已經有一個叫「郵局定存」的帳戶了。要用它就直接在選單裡選 |
+
+預期外的例外原文放 `details["detail"]`（不顯示），不再放 `reason`。
+
+**互動上更重要的一點**：那個對話框的預設名稱就是「郵局定存」，也就是最可能已經開過的
+名字 —— 第二次按必然撞名。撞名時使用者要的其實是「用那一個」，所以現在直接把它
+選起來並說一聲，而不是丟一個他無法行動的錯誤框。
+
+### 新的守門（各注入驗證過會紅）
+
+- `test_focus_landing_on_the_sidebar_does_not_navigate` —— 四種 focus reason ×
+  兩組清單 × 啟動當下，都不能換頁。
+- `test_tabbing_through_a_settings_tab_never_changes_the_page` —— 連按 40 次 Tab。
+- `test_clicking_the_current_page_again_still_works` —— `itemClicked` 那條路。
+- `test_creating_an_account_with_a_taken_name_says_which_name_and_leaks_no_sql`
+  —— 訊息要有名字，且不得出現 `UNIQUE` / `constraint` / `sqlite3` / `accounts.name`。
+- `test_a_bad_opening_balance_is_a_different_error_from_a_taken_name`
+- `test_adding_an_account_that_already_exists_just_selects_it`
+
 ## 0.14.1 - 交易只剩一個寫入點
 
 架構檢視找到的一塊沒收乾淨的東西，以及它已經造成的一個實際缺陷。

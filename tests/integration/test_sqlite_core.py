@@ -19,6 +19,7 @@ from tagcor_ledger.domain.money import Money
 from tagcor_ledger.infrastructure.database import connect_database
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
+from tagcor_ledger.ui.formatting import result_message
 
 
 def test_transfer_is_balanced_and_atomic(tmp_path: Path) -> None:
@@ -48,6 +49,61 @@ def test_transfer_is_balanced_and_atomic(tmp_path: Path) -> None:
 
     assert AccountService(paths, store).rename(destination_id, "主要銀行").success
     assert store.list_accounts()[1].name == "主要銀行"
+
+
+def test_creating_an_account_with_a_taken_name_says_which_name_and_leaks_no_sql(
+    tmp_path: Path,
+) -> None:
+    """同名帳戶的錯誤訊息要說得出**是哪個名字**，而且不能把 SQL 丟到畫面上。
+
+    使用者實際看到的是：
+    「帳戶無法建立，請確認名稱沒有重複且金額格式正確。
+      （UNIQUE constraint failed: accounts.name）」
+
+    三個問題：SQLite 的內部訊息漏到畫面上、把兩個不同的成因（重名／金額格式）
+    綁在同一句話裡所以沒有一個是可行動的、而且沒說是哪個名字重複。
+    """
+    paths = resolve_app_paths(tmp_path / "ledger")
+    service = AccountService(paths)
+
+    assert service.create(name="郵局定存", opening_balance="100000").success
+
+    again = service.create(name="郵局定存", opening_balance="0")
+    assert not again.success
+    assert again.error_code == "ACCOUNT_ACTIVE_NAME_CONFLICT"
+
+    text = result_message(again)
+    assert "郵局定存" in text, f"訊息沒說是哪個名字重複：{text}"
+    for leak in ("UNIQUE", "constraint", "sqlite3", "accounts.name", "IntegrityError"):
+        assert leak not in text, f"畫面上的訊息漏出了實作細節「{leak}」：{text}"
+
+    # 前後空白會被 strip 掉，所以「郵局定存 」也是同一個名字。
+    padded = service.create(name="郵局定存 ", opening_balance="0")
+    assert not padded.success
+    assert padded.error_code == "ACCOUNT_ACTIVE_NAME_CONFLICT"
+
+    # 名稱欄位是 COLLATE NOCASE，英文大小寫不同仍算同一個。
+    assert service.create(name="Post", opening_balance="0").success
+    assert service.create(name="POST", opening_balance="0").error_code == (
+        "ACCOUNT_ACTIVE_NAME_CONFLICT"
+    )
+
+
+def test_a_bad_opening_balance_is_a_different_error_from_a_taken_name(
+    tmp_path: Path,
+) -> None:
+    """金額格式與名稱重複是兩件事，錯誤碼不能共用 —— 共用就沒辦法告訴使用者要改哪個。"""
+    paths = resolve_app_paths(tmp_path / "ledger")
+    service = AccountService(paths)
+
+    bad = service.create(name="新帳戶", opening_balance="一百塊")
+    assert not bad.success
+    assert bad.error_code == "ACCOUNT_OPENING_BALANCE_INVALID"
+    assert "新帳戶" not in result_message(bad), "金額有問題時不該把矛頭指向名稱"
+
+    blank = service.create(name="   ", opening_balance="0")
+    assert not blank.success
+    assert blank.error_code == "ACCOUNT_NAME_REQUIRED"
 
 
 def test_editing_a_transaction_leaves_no_stale_row_in_the_search_index(

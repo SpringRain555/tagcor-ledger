@@ -119,13 +119,15 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - 不要用過寬的全域 QSS selector 污染不同用途元件；共用元件若用途不同，需指定 objectName。
 - 側邊欄外框用 `sidebarRail`（`QFrame`，右框線畫在這一層）、兩個導覽清單用 `sidebarNavigation`；備份清單用 `backupList`；內容堆疊用 `contentStack`；每一頁的置中容器用 `pageContent`；狀態訊息用 `statusLabel`（帶 `state` 屬性）；流向切換用 `segmentButton`；資產總覽的大數字用 `totalAmount`。
 - **側邊欄裡不得有任何點不動的東西。** 分組不放標題，靠位置表達（日常在上、設定沉底，中間留白）。這條路用「程度差異」試過兩次都失敗，第三次是把標籤整個移除；理由見 `ui/navigation.py` 的模組說明與 `docs/lessons.md`。有測試守著。
+- **側邊欄兩組清單的 current row 必須一直是有效的**，而且「現在是哪一頁」由 `Sidebar._current` 記，不從 widget 狀態反推。把 current row 設成 `-1`，`QAbstractItemView::focusInEvent` 就會自己把它設成第 0 列並發出 `currentRowChanged` —— 焦點一碰到側邊欄，畫面就換頁。**不要把 `currentRowChanged` 當成「使用者選了什麼」。**
 - **導覽用 `PageId`，不得拿顯示文字當 key。** 頁面身分在 `ui/navigation.py` 的 `PageId`，顯示文字在 `LABELS`；改 `LABELS` 不影響任何查表。側邊欄順序的唯一正本是 `DAILY_PAGES` / `SETTINGS_PAGES`，改了要同步 `docs/architecture/ui-workflows.md`（`tests/unit/test_docs_drift.py` 會逐字比對）。
 - **版面走 `widgets/layout.py` 的 `page_layout(self, width=...)`**，不要各頁自己 `QVBoxLayout(self)`。寬度上限：表單 `FORM_WIDTH`、摘要 `SUMMARY_WIDTH`、有資料表的 `TABLE_WIDTH`。
 - **欄位少的表格用 `fit_content=True` 收寬**；操作設定裡的表格另外用 `fit_rows=SETTINGS_TABLE_ROWS` 收高度，而且該分頁最後要有 `addStretch()`，否則 layout 會把多餘高度平均塞進元件之間。
 - **UI 用詞與資料表名稱可以不同。** 使用者看到「定期收支」，schema 仍是 `recurring_schedules`。已淘汰的 UI 用詞列在 `tests/unit/test_architecture.py` 的 `RETIRED_UI_WORDS`，該測試掃 `ui/` 的字串常數（docstring 與註解不算）。
 - 主要操作按鈕用 `primaryButton`；刪除、作廢、重製、還原等高風險操作用 `dangerButton`。
 - **表格不得在 QSS 設 `color` 或 `selection-color`。** 那會蓋掉 model 的 `ForegroundRole`，金額的紅綠會被壓成同一個白。顏色由 `widgets/table.py` 的 `amount_color` 決定。
-- **對所選項目動作的按鈕一律用 `bind_selection` 綁選取狀態。** 沒選取就停用，不要讓使用者按下去什麼都不發生。
+- **對所選項目動作的按鈕一律用 `bind_selection` 綁選取狀態。** 沒選取就停用，不要讓使用者按下去什麼都不發生。（注意停用會讓焦點跑掉 —— 焦點跑到哪裡都不該有副作用。）
+- **一個錯誤碼只能代表一件事。** 不要用一個 `except` 接多種例外再回同一個碼 —— 錯誤碼的數量決定了訊息能有多具體。**`str(exc)` 不得放進 `details["reason"]`**，`result_message()` 會把它印在畫面上；預期外的原文放 `details["detail"]`。
 - 分頁必須由 QSS 覆蓋 `QTabWidget/QTabBar` 的 selected、unselected、hover、disabled 狀態。
 - **不要覆寫 `QComboBox::drop-down`。** 一碰那個 subcontrol，Fusion 就不再畫箭頭，而本專案不打包圖檔，結果是一塊空白方格。
 - **主字體必須是中文字型**（`Microsoft JhengHei UI` 排第一），12pt、Medium 字重。理由是 `Segoe UI Variable` 沒有中文字形，中文全靠 fallback，而**字重套不到 fallback 字型上** —— 對它設 Medium 只有數字變粗，中文一點都沒變。字體不打包，順序是 `Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、`Segoe UI Variable`、`Segoe UI`、sans-serif。
