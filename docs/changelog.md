@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.14.4 - 記帳那一頁終於叫記帳（行為零改變）
+
+v0.14.0 把 UI 上的「快速記帳」改成「記帳」時，**檔名與類別名留在原地** ——
+那是刻意延後的（改檔名要動 import 與測試，而當時的收益只是名字好看）。現在收掉。
+
+| | 舊 | 新 |
+|---|---|---|
+| 檔案 | `ui/pages/quick_entry.py` | `ui/pages/entry.py` |
+| 類別 | `QuickEntryPage` | `EntryPage` |
+| 屬性 | `MainWindow.quick` | `MainWindow.entry` |
+
+屬性一起改，是因為 `MainWindow` 其他七個頁面屬性**全部**跟著 `PageId` 命名
+（`overview`、`inbox`、`transactions`…），只有這一個不是 —— 留著它等於只改一半。
+
+**文件一個字都沒動。** `quick_entry` / `QuickEntryPage` 在 `.md` 裡零出現；
+「快速記帳」四個字只出現在 changelog、lessons、REQ 這些記錄歷史的地方，那些該保留舊名。
+
+### 沒有加守門測試，以及為什麼
+
+想過寫一條「`PageId.X` 必須對到 `pages/x.py` 的 `XPage`」，但 `PageId.BALANCE`
+對到的是 `balance_snapshot.py` / `BalanceSnapshotPage`。**第一天就要例外清單的規則不是規則** ——
+它擋不住真正的漂移（漂的那一個大可以進例外清單），只會讓下一個人以為有人在看著。
+
 ## 0.14.3 - 表格不再在字體套上去之前量自己
 
 **剛開程式時「操作設定 → 帳戶」的表頭是切掉的**（「目前餘額（TWD」），底下還有一條

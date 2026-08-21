@@ -39,7 +39,7 @@ def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(qtbot, tmp_path: P
 
     for page, widget in (
         (PageId.OVERVIEW, window.overview),
-        (PageId.ENTRY, window.quick),
+        (PageId.ENTRY, window.entry),
         (PageId.INBOX, window.inbox),
         (PageId.TRANSACTIONS, window.transactions),
         (PageId.BALANCE, window.balance),
@@ -273,11 +273,11 @@ def test_main_window_applies_scoped_dark_theme(qtbot, tmp_path: Path) -> None:
     assert colors.BG in styles
 
 
-def test_quick_entry_switches_transfer_fields_and_saves(qtbot, tmp_path: Path) -> None:
+def test_entry_page_switches_transfer_fields_and_saves(qtbot, tmp_path: Path) -> None:
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     window.show()
-    page = window.quick
+    page = window.entry
 
     page.select_entry_type("transfer")
     assert page.destination.isHidden() is False
@@ -314,12 +314,12 @@ def test_balance_snapshot_page_creates_snapshot_and_setting(qtbot, tmp_path: Pat
     assert not window.controller.get_settings().balance_snapshot_reminder
 
 
-def test_quick_entry_hides_the_label_together_with_the_field(qtbot, tmp_path: Path) -> None:
+def test_entry_page_hides_the_label_together_with_the_field(qtbot, tmp_path: Path) -> None:
     """QFormLayout 的標籤是獨立 widget，只藏欄位會留下孤兒標籤（2026-08-18 實機發現）。"""
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     window.show()
-    page = window.quick
+    page = window.entry
 
     page.select_entry_type("expense")
     assert page.form.labelForField(page.destination).isHidden() is True
@@ -332,7 +332,7 @@ def test_quick_entry_hides_the_label_together_with_the_field(qtbot, tmp_path: Pa
     assert page.form.labelForField(page.detail).isHidden() is True
 
 
-def test_quick_entry_reports_success_without_the_error_colour(qtbot, tmp_path: Path) -> None:
+def test_entry_page_reports_success_without_the_error_colour(qtbot, tmp_path: Path) -> None:
     """成功不能長得像失敗。
 
     舊版把「交易已儲存。」寫進紅色的 `errorLabel` —— 每天最常做的動作，回饋是紅的。
@@ -341,7 +341,7 @@ def test_quick_entry_reports_success_without_the_error_colour(qtbot, tmp_path: P
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     window.show()
-    page = window.quick
+    page = window.entry
 
     page.select_entry_type("expense")
     page.amount.setText("85")
@@ -758,8 +758,8 @@ def test_overview_recomputes_when_you_come_back_to_it(qtbot, tmp_path: Path) -> 
     assert window.overview.total.text() == "0"
 
     window.show_page(PageId.ENTRY)
-    window.quick.amount.setText("85")
-    window.quick.submit()
+    window.entry.amount.setText("85")
+    window.entry.submit()
 
     window.show_page(PageId.OVERVIEW)
     assert window.overview.total.text() == "-85"

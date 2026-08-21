@@ -31,10 +31,10 @@ from tagcor_ledger.app.window_state import WindowGeometry, load_geometry, save_g
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.navigation import ALL_PAGES, LANDING_PAGE, PageId
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
+from tagcor_ledger.ui.pages.entry import EntryPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
 from tagcor_ledger.ui.pages.inbox import InboxPage
 from tagcor_ledger.ui.pages.overview import OverviewPage
-from tagcor_ledger.ui.pages.quick_entry import QuickEntryPage
 from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
 from tagcor_ledger.ui.pages.transactions import TransactionsPage
@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self.pages = QStackedWidget()
         self.overview = OverviewPage(self.controller)
-        self.quick = QuickEntryPage(self.controller)
+        self.entry = EntryPage(self.controller)
         self.balance = BalanceSnapshotPage(self.controller)
         self.inbox = InboxPage(self.controller)
         self.transactions = TransactionsPage(self.controller)
@@ -76,7 +76,7 @@ class MainWindow(QMainWindow):
 
         self._page_widgets: dict[PageId, QWidget] = {
             PageId.OVERVIEW: self.overview,
-            PageId.ENTRY: self.quick,
+            PageId.ENTRY: self.entry,
             PageId.INBOX: self.inbox,
             PageId.TRANSACTIONS: self.transactions,
             PageId.BALANCE: self.balance,
@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
 
         self.overview.inbox_requested.connect(lambda: self.show_page(PageId.INBOX))
         self.overview.balance_requested.connect(lambda: self.show_page(PageId.BALANCE))
-        self.quick.saved.connect(self._transaction_changed)
+        self.entry.saved.connect(self._transaction_changed)
         self.balance.changed.connect(self._balance_changed)
         self.balance.record_transaction_requested.connect(self._focus_new)
         self.transactions.duplicate_requested.connect(self._prefill_quick)
@@ -129,10 +129,10 @@ class MainWindow(QMainWindow):
         new_action.triggered.connect(self._focus_new)
         save_action = QAction("儲存交易", self)
         save_action.setShortcut(QKeySequence("Ctrl+S"))
-        save_action.triggered.connect(self.quick.submit)
+        save_action.triggered.connect(self.entry.submit)
         clear_action = QAction("清除", self)
         clear_action.setShortcut(QKeySequence("Esc"))
-        clear_action.triggered.connect(self.quick.clear_form)
+        clear_action.triggered.connect(self.entry.clear_form)
         self.addActions([new_action, save_action, clear_action])
 
     # --- 視窗幾何 -------------------------------------------------------------
@@ -179,10 +179,10 @@ class MainWindow(QMainWindow):
 
     def _focus_new(self) -> None:
         self.show_page(PageId.ENTRY)
-        self.quick.amount.setFocus()
+        self.entry.amount.setFocus()
 
     def _prefill_quick(self, draft: dict[str, Any]) -> None:
-        self.quick.apply_draft(draft)
+        self.entry.apply_draft(draft)
         self.show_page(PageId.ENTRY)
 
     def _transaction_changed(self) -> None:
@@ -193,7 +193,7 @@ class MainWindow(QMainWindow):
         self.balance.refresh()
 
     def _catalog_changed(self) -> None:
-        self.quick.reload_options()
+        self.entry.reload_options()
         self.balance.reload_accounts()
         self.transactions.reload_filters()
         self.system_settings.reload()
@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
         self.inbox.refresh()
 
     def _settings_changed(self) -> None:
-        self.quick.apply_defaults()
+        self.entry.apply_defaults()
         self.transactions.first_page()
         self.balance.reload_accounts()
 
@@ -213,8 +213,8 @@ class MainWindow(QMainWindow):
         # 狀態列只放**暫時**訊息。資料庫路徑常駐在這裡吃掉一整行，而它是一年看兩次的
         # 東西 —— 現在住在「系統設定 → 資料路徑」。
         self.statusBar().showMessage("資料庫已重新載入。", 6000)
-        self.quick.reload_options()
-        self.quick.apply_defaults()
+        self.entry.reload_options()
+        self.entry.apply_defaults()
         self.balance.reload_accounts()
         self.transactions.reload_filters()
         self.transactions.first_page()

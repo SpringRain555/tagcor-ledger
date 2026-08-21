@@ -42,7 +42,7 @@ from tagcor_ledger.ui.widgets.table import set_button_role
 ENTRY_TYPES = ("expense", "income", "transfer")
 
 
-class QuickEntryPage(QWidget):
+class EntryPage(QWidget):
     saved = Signal()
 
     def __init__(self, controller: LedgerController) -> None:

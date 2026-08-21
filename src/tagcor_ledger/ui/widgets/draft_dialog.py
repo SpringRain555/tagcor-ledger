@@ -73,7 +73,7 @@ class DraftDialog(QDialog):
         self.has_end.toggled.connect(self.end_date.setEnabled)
         self.end_date.setEnabled(False)
         self.error.setObjectName("errorLabel")
-        # 同 QuickEntryPage：留參考給 _sync_flow 用 setRowVisible 一起收掉標籤。
+        # 同 EntryPage：留參考給 _sync_flow 用 setRowVisible 一起收掉標籤。
         self.form = QFormLayout()
         form = self.form
         form.addRow("名稱", self.name)

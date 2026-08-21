@@ -95,7 +95,7 @@ def test_entry_form_is_much_narrower_than_the_transactions_table(qtbot, tmp_path
 
     window.show_page(PageId.ENTRY)
     QApplication.processEvents()
-    form_panel_widget = content_panel(window.quick)
+    form_panel_widget = content_panel(window.entry)
     window.show_page(PageId.TRANSACTIONS)
     QApplication.processEvents()
     table_panel = content_panel(window.transactions)
