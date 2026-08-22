@@ -1,1 +1,1 @@
-"""Application bootstrap helpers."""
+"""啟動流程：路徑解析、系統路徑設定、日誌、單一實例與視窗幾何。"""

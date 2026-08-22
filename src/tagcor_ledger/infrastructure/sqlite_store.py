@@ -1,4 +1,4 @@
-"""SQLite-backed repositories for ledger application services.
+"""application 層用的 SQLite store。
 
 `LedgerStore` 是 application 層唯一該認得的 store。實作依聚合切在
 `tagcor_ledger.infrastructure.stores` 底下，這裡只負責組起來。

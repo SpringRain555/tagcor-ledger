@@ -1,4 +1,4 @@
-"""Money value object and parsing helpers."""
+"""金額值物件與解析。**整數 minor unit，禁止 float。**"""
 
 from __future__ import annotations
 
@@ -26,11 +26,10 @@ class MoneyError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Money:
-    """Integer-minor-unit money representation.
+    """以整數 minor unit 表示的金額。
 
-    TWD currently has a scale of zero. The currency field is retained so a
-    future migration can add other currencies without changing transaction
-    interfaces or storing binary floating-point values.
+    TWD 的 scale 是 0，所以 minor unit 就是元。`currency` 欄位留著是為了讓日後要加
+    別的幣別時**不必改交易介面**，也不必為了小數而改存浮點數。
     """
 
     amount_minor: int

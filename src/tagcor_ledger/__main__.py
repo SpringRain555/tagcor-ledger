@@ -1,4 +1,4 @@
-"""Module entry point for ``python -m tagcor_ledger``."""
+"""`python -m tagcor_ledger` 的進入點。"""
 
 from .main import main
 

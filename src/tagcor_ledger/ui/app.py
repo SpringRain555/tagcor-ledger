@@ -1,4 +1,4 @@
-"""PySide6 application runner."""
+"""PySide6 應用程式的啟動器。"""
 
 from __future__ import annotations
 

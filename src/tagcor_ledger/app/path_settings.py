@@ -1,4 +1,7 @@
-"""External system path settings for ledger and backup locations."""
+"""記帳資料與備份位置的系統路徑設定。
+
+**存在 ledger SQLite 之外的 JSON 檔。** 資料庫的位置本身沒辦法可靠地存在那個資料庫裡。
+"""
 
 from __future__ import annotations
 
@@ -19,11 +22,11 @@ SETTINGS_VERSION = 1
 
 
 class PathSettingsError(ValueError):
-    """Raised when ledger and backup paths are unsafe or not writable."""
+    """路徑不安全或不可寫入。訊息就是錯誤碼，翻譯在 `application/failures.py`。"""
 
 
 class PathSettingsService:
-    """Read and write path settings that cannot live inside the ledger database."""
+    """讀寫「沒辦法存在 ledger 資料庫裡」的那些路徑設定。"""
 
     def __init__(self, settings_path: Path | None = None) -> None:
         self.settings_path = settings_path or default_settings_path()
@@ -50,10 +53,11 @@ class PathSettingsService:
         return validated
 
     def write(self, validated: SystemPathSettings) -> None:
-        """Persist already-validated settings atomically.
+        """把已經驗證過的設定原子性寫入。
 
-        Callers that also move data must finish moving it before calling this, so a
-        failed move never leaves the pointer aimed at a location without a database.
+        **要搬資料的呼叫端一定要先搬完才呼叫這裡。** 順序反過來的話，搬移失敗就會
+        留下「指標指向新位置、資料還在舊位置」—— 下次啟動會在新位置建一個空資料庫，
+        看起來就像所有帳都消失了。順序是：先複製 → 確認成功 → **才**寫指標 → 再刪舊檔。
         """
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {

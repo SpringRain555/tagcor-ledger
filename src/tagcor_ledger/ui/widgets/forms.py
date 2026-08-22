@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QCalendarWidget,
     QComboBox,
     QDateEdit,
-    QDateTimeEdit,
     QLabel,
     QLayout,
     QWidget,
@@ -215,11 +214,3 @@ def iso_from_date(widget: QDateEdit, *, keep_time_from: str | None = None) -> st
         except ValueError:
             pass
     return datetime.combine(day, clock, tzinfo=TAIPEI).isoformat(timespec="seconds")
-
-
-def iso_datetime(widget: QDateTimeEdit) -> str:
-    """把畫面上的時間轉成帶時區的 ISO 字串。Qt 給的是 naive，一律當成台北時間。"""
-    value = cast(datetime, widget.dateTime().toPython())
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=TAIPEI)
-    return value.astimezone(TAIPEI).isoformat(timespec="seconds")

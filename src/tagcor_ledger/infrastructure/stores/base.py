@@ -18,11 +18,15 @@ from tagcor_ledger.infrastructure.clock import now_iso
 
 
 class StoreError(RuntimeError):
-    """Raised for persistence failures with stable application semantics."""
+    """寫入層的失敗。**訊息就是穩定的錯誤碼**，翻成中文是 `application/failures.py` 的事。
+
+    所以 `raise StoreError("ACCOUNT_IS_DEFAULT")`，不要 `raise StoreError("預設帳戶不能刪")`
+    ——後者會讓同一句話散在好幾個檔案裡，而且改一個字就沒有人查得到它。
+    """
 
 
 class NotFoundError(StoreError):
-    """Raised when a requested entity does not exist."""
+    """找不到指定的資料。訊息同樣是錯誤碼（`ACCOUNT_NOT_FOUND` 這種）。"""
 
 
 class StoreBase:

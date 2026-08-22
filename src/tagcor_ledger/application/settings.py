@@ -1,4 +1,7 @@
-"""Application preferences stored in SQLite."""
+"""存在 SQLite 裡的操作偏好（預設帳戶、盤點提醒⋯⋯）。
+
+**資料路徑不在這裡** —— 那是 `app/path_settings.py` 的外部 JSON。
+"""
 
 from __future__ import annotations
 

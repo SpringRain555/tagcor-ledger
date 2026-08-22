@@ -1,1 +1,1 @@
-"""Packaged resources for TagCor Ledger."""
+"""打包進安裝檔的資源（目前只有 `styles.qss`）。**不放字型檔與圖檔。**"""

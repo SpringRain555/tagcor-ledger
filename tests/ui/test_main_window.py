@@ -289,6 +289,46 @@ def test_main_window_applies_scoped_dark_theme(qtbot, tmp_path: Path) -> None:
     assert colors.BG in styles
 
 
+def test_the_theme_is_only_applied_once_per_process(qtbot, tmp_path: Path) -> None:
+    """第二個 `MainWindow` 不得再套一次全域主題。
+
+    `setFont` / `setPalette` / `setStyleSheet` 是 **application 層級**的操作 —— Qt
+    要把改變傳播給當下活著的每一個 widget。所以重複套用的成本隨 process 裡的 widget
+    數量成長，而且比線性還快。2026-08-22 實測：活著 25 個視窗時，再建一個 `MainWindow`
+    要 **49.7 秒**（沒有其他視窗時是 0.26 秒）。整包 UI 測試因此跑 32 分鐘。
+
+    正式執行只開一個視窗，所以使用者看不到這件事 —— **這是測試才會爆炸的成本**，
+    但它會讓每一次改動都變得昂貴，於是沒有人願意跑完整套件。
+
+    這裡量的是「有沒有再套一次」而不是「花了多久」—— 時間會因機器而異，
+    而語意不會。
+    """
+    app = QApplication.instance()
+    assert app is not None
+
+    # 兩個都要交給 qtbot 管。沒有 `addWidget` 的話 Python 一 GC 掉 MainWindow，
+    # C++ 那邊就先沒了，而 `bind_selection` 掛在 model 上的 `sync` 還會再被叫一次
+    # —— 直譯器關閉時噴 "Internal C++ object already deleted"。
+    first = MainWindow(resolve_app_paths(tmp_path / "first"))
+    qtbot.addWidget(first)
+
+    calls: list[str] = []
+    original = app.setStyleSheet
+    app.setStyleSheet = lambda sheet: calls.append(sheet)  # type: ignore[method-assign]
+    try:
+        second = MainWindow(resolve_app_paths(tmp_path / "second"))
+        qtbot.addWidget(second)
+    finally:
+        app.setStyleSheet = original  # type: ignore[method-assign]
+
+    assert calls == [], (
+        "第二個 MainWindow 又套了一次全域樣式表 —— "
+        f"呼叫了 {len(calls)} 次。apply_dark_theme 的「只套一次」守門失效了。"
+    )
+    # 但主題**必須仍然在生效**，否則就只是把 bug 換成另一個 bug。
+    assert colors.BG in app.styleSheet()
+
+
 def test_entry_page_switches_transfer_fields_and_saves(qtbot, tmp_path: Path) -> None:
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)

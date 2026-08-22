@@ -1,4 +1,4 @@
-"""Canonical domain models used by application services and repositories."""
+"""application 層與 store 共用的領域模型正本。"""
 
 from __future__ import annotations
 

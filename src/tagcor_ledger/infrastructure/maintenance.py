@@ -1,4 +1,4 @@
-"""Consistent SQLite backup, restore, reset, and human-readable CSV export."""
+"""一致性備份、還原、重製，以及人看得懂的 CSV 匯出。"""
 
 from __future__ import annotations
 

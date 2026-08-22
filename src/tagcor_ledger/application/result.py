@@ -1,4 +1,8 @@
-"""Common Result type for application use cases."""
+"""use case 共用的 `Result`。
+
+`message` 是**畫面上唯一會出現的那句話**；`details["detail"]` 只給診斷用，永遠不顯示。
+`details["reason"]` 是廢除的 key，見 `failures.py`。
+"""
 
 from __future__ import annotations
 

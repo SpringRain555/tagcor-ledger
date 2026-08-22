@@ -1,4 +1,7 @@
-"""Presentation controller for the PySide6 interface."""
+"""介面與 use case 之間的 controller。
+
+頁面只認得這裡的方法，不直接碰 application 層，**更不寫 SQL**。
+"""
 
 from __future__ import annotations
 

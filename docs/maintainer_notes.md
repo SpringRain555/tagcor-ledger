@@ -37,7 +37,9 @@
 | 金額顏色不對、紅綠被壓成白 | `ui/widgets/table.py::amount_color` ＋ QSS**不得**設 `color` | `test_amount_colours_survive_the_stylesheet` |
 | 錯誤訊息看不懂、太籠統、印出英文碼或 SQLite 原文 | [`application/failures.py`](../src/tagcor_ledger/application/failures.py) 的 `ERROR_MESSAGES`（碼 → 中文，一個碼一個地方） | `tests/unit/test_failure_messages.py`、`tests/unit/test_error_codes.py` |
 | 想加一個新的 `raise ValueError("SOME_CODE")` | 加完要在 `ERROR_MESSAGES` 補一列，並在 [error-codes](architecture/error-codes.md) 補一列 | 兩條都會紅，訊息會告訴你缺哪一個 |
+| 備份刪不掉、清單看不懂哪一份是哪一份 | `infrastructure/maintenance.py`（每個 `sqlite3.connect()` 都要包 `closing`）＋ `ui/formatting.py::backup_row_text` | `tests/integration/test_backup_deletion.py` |
 | 查詢變慢 | `infrastructure/stores/` 的 SQL | `tests/integration/test_query_plans.py` |
+| **測試**變慢（尤其是越後面越慢） | `ui/theme.py::apply_dark_theme` —— application 層級的操作要傳播給每一個活著的 widget，一個 process 只能套一次 | `test_the_theme_is_only_applied_once_per_process` |
 | 文件與程式對不上 | `docs/architecture/ui-workflows.md` | `tests/unit/test_docs_drift.py` |
 | 圖跟文字對不上 | `docs/architecture/*.md` 的 mermaid 區塊 | `tests/unit/test_diagrams_drift.py` |
 | 畫面上出現不該有的用詞 | `ui/` 的字串常數 | `test_architecture.py` 的 `RETIRED_UI_WORDS` |

@@ -1,4 +1,4 @@
-"""Command entry point for TagCor Ledger."""
+"""TagCor Ledger 的命令列進入點。"""
 
 from __future__ import annotations
 

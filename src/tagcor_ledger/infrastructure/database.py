@@ -1,4 +1,4 @@
-"""SQLite connection, migration, and default seeding."""
+"""SQLite 連線、migration 與預設資料建立。"""
 
 from __future__ import annotations
 

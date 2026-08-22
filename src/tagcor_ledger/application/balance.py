@@ -1,4 +1,7 @@
-"""Balance snapshot use cases and gap calculations."""
+"""餘額盤點的 use case 與未解釋差額計算。
+
+**盤點不入帳**：不建立交易、不建立 posting、不改變帳戶餘額。
+"""
 
 from __future__ import annotations
 

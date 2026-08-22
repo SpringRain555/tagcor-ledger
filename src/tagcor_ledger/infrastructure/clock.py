@@ -1,4 +1,4 @@
-"""Shared local-time helpers."""
+"""共用的本地時間工具。目前固定 Asia/Taipei。"""
 
 from __future__ import annotations
 

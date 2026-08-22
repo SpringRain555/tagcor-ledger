@@ -1,4 +1,4 @@
-"""Path resolution for user data and packaged resources."""
+"""解析使用者資料與打包資源的位置。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Resource helpers that work in editable and packaged installs."""
+"""取得打包資源。editable 安裝與打包安裝兩種情況都要能找到。"""
 
 from __future__ import annotations
 

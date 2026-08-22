@@ -1,4 +1,7 @@
-"""Use cases for templates, schedules, and pending occurrences."""
+"""模板、定期收支與待確認項目的 use case。
+
+UI 上叫「定期收支」，schema 仍是 `recurring_schedules` —— 那是兩件事，見 glossary。
+"""
 
 from __future__ import annotations
 

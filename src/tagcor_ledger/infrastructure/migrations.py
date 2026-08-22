@@ -1,4 +1,8 @@
-"""Ordered SQLite schema migrations."""
+"""依序執行的 SQLite schema migration。
+
+**schema 變更一定要新增一版**，不可以改舊的那一版 —— 改了對已經跑過那一版的
+資料庫毫無效果，而那正是使用者手上那一個。
+"""
 
 from __future__ import annotations
 

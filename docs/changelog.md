@@ -1,5 +1,94 @@
 # Changelog
 
+## 0.16.3 - 清掉 Phase 1 留下來的化石註解與兩段死碼
+
+行為零改變。這一版處理的是**註解與文件說了一件跟程式不一樣的事**。
+
+### 三處註解在說謊
+
+| 位置 | 說的 | 實際 |
+|---|---|---|
+| `infrastructure/stores/__init__.py` | 「`LedgerStore` 把這裡的**四個** store 組起來」 | 六個。`AutomationStore` 2026-08 收進 `stores/` 時沒補進 re-export，docstring 也停在四 |
+| `ui/__init__.py` | 「**PyQt** UI package placeholder for Phase 2」 | PySide6。而 `AGENTS.md` 的「不做的事」**明文禁止**重新加入 PyQt6 |
+| `ui/formatting.py` | 「這裡是**唯一**決定畫面上中文長什麼樣子的地方」 | 頁面裡還有 22 處中文 `setText()`。真正的分界是「這句話會不會在別的地方也要用同一個講法」 |
+
+第一條特別值得記：**一份沒有人 import 的 re-export 清單不會有任何測試提醒你它過期。**
+`from tagcor_ledger.infrastructure.stores import ...` 在整個專案裡是零次。
+
+### 兩段死碼，而且各自掛著一個編出來的存在理由
+
+- `application/transaction_service.py::ListRecentTransactions` ——
+  docstring 寫「Compatibility query retained for existing integrations」。
+  這是一個**不連網的本機程式**，沒有任何 integration；`src` 與 `tests` 裡零次呼叫，
+  唯一的出處在 `docs/archive/phase-0-2/`。
+- `ui/widgets/forms.py::iso_datetime()` —— 它服務的是 `QDateTimeEdit`，
+  而 `AGENTS.md` 寫著「日期欄位一律用 `date_field()`，**不要用 `QDateTimeEdit`**」。
+  留著一個專門服務被禁用元件的 helper，等於讓那個元件看起來還受支援。
+
+兩段都刪掉。**「留著也不礙事」是錯的** —— 礙事的不是那幾行，是它們附帶的那句
+「這個東西還有人在用」。
+
+### 註解與文件全部改回繁體中文
+
+專案自己的規則是「介面文字、錯誤訊息、註解、文件全部繁體中文」，但每個模組的
+**第一行 docstring** 都還是 Phase 1／2 留下來的英文 —— 之後補的註解都是中文，
+於是每個檔案長成「英文開頭 ＋ 中文內文」。
+
+那一層英文正是漂移最嚴重的地方，上面三條有兩條就出在裡面。原因不難理解：
+**沒有人會回頭讀那一行。** 30 處全部改寫，其中幾處順便把散在 `AGENTS.md` 的硬規則
+搬到它真正該在的地方：
+
+- `app/path_settings.py::write()` —— 寫指標檔的順序（先搬完再寫指標，反了就等於資料消失）
+- `infrastructure/migrations.py` —— 不可以改舊的 migration
+- `ui/theme.py::apply_dark_theme()` —— 要在任何 widget 建出來之前呼叫
+- `infrastructure/stores/base.py::StoreError` —— 訊息就是錯誤碼，不是中文句子
+
+### 主題一個 process 只套一次（UI 測試從 32 分鐘掉下來）
+
+量 `--durations=25` 的時候發現前 25 名**全部**是 `tests/ui/test_main_window.py`，
+36～65 秒一條，佔掉整包 1,931 秒裡的 1,243 秒。
+
+關鍵不在那些數字，在**排名**：最慢的那條在檔案第 2101 行，接著是 2071、2030、1991、
+1946⋯⋯**慢的排名就是它在檔案裡的位置排名。**成本是累積的，不是單次的。
+單獨跑最慢那一條只要 **0.73 秒**（在完整套件裡 65.6 秒，90 倍）。
+
+隔離量測（探針不進版控）：
+
+| process 裡活著的 MainWindow | 再建一個要多久 | 把 `apply_dark_theme` 換成 no-op |
+|---:|---:|---:|
+| 0 | 261 ms | 115 ms |
+| 5 | 1,614 ms | 97 ms |
+| 15 | 12,814 ms | 100 ms |
+| 25 | **49,705 ms** | 104 ms |
+
+**百分之百出在 `apply_dark_theme()`。** `setFont` / `setPalette` / `setStyleSheet` 是
+**application 層級**的操作，Qt 得把改變傳播給當下活著的每一個 widget 並重跑 style
+polish —— 所以第 N 次呼叫要走過前面 N−1 個視窗的所有子元件。
+
+修法是在 `QApplication` 上留一個標記，**同一個 process 只套一次**（`force=True`
+留給真的要重套的情況，目前沒有呼叫端）。第二次套用在語意上本來就是 no-op ——
+同一份字體、同一份 palette、同一份 QSS。修完同一條曲線是平的（298 ms → 323 ms）。
+
+`AGENTS.md` 那條「要在任何 widget 建出來之前套用」**沒有被削弱，反而更強** ——
+第一個視窗照樣先套，後面的視窗一出生就已經在主題底下，不必再被重新 polish 一次。
+
+> **這不是使用者在付的成本。** 正式執行只開一個視窗，`apply_dark_theme` 在零個其他
+> widget 的情況下跑，約 150 ms，開程式時付一次。它只在測試裡爆炸 —— 而那的代價是
+> **沒有人願意跑完整套件**，於是守門形同虛設。
+
+守門：`test_the_theme_is_only_applied_once_per_process`。它量的是「有沒有再套一次」
+不是「花了多久」—— 時間會因機器而異，語意不會。陽性對照驗過（拿掉早退就紅）。
+
+### 文件：roadmap 不再是第二份 changelog
+
+`docs/roadmap.md` 每發一版就長出一節「這一版最值得記住的一件事」，而且長在
+**「後續候選 Phase」底下** —— 已完成的東西排在待辦清單中間。四節裡有三節的內容
+與 `docs/lessons.md` 重疊。
+
+四節收成「已完成」底下的一張四列表格，`AGENTS.md` 的「文件維護」補上三份文件
+各自寫什麼、**不要**寫什麼。第四節（0.16.2 那條守門誤判）本來就該在 `lessons.md`
+卻不在，補上了。
+
 ## 0.16.2 - 備份清單看得懂了，而且「返」不再被當成簡體字
 
 兩件小事，都是 0.16.1 收尾時記下來的已知問題。

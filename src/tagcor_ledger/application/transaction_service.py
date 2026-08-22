@@ -1,4 +1,7 @@
-"""Transaction commands and keyset-paginated queries."""
+"""交易的命令與 keyset 分頁查詢。
+
+**分頁、篩選、排序一律在 SQL 裡做**，不要撈進 Python 再處理。
+"""
 
 from __future__ import annotations
 
@@ -313,16 +316,6 @@ class ListTransactions:
                 fallback_code="LIST_TRANSACTIONS_FAILED",
                 fallback_message="交易列表無法載入。請匯出診斷資訊回報。",
             )
-
-
-class ListRecentTransactions:
-    """Compatibility query retained for existing integrations."""
-
-    def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
-        self.query = ListTransactions(paths, store)
-
-    def execute(self, limit: int = 20) -> Result:
-        return self.query.execute(TransactionQuery(limit=limit))
 
 
 def transaction_to_dict(transaction: TransactionRecord) -> dict[str, Any]:

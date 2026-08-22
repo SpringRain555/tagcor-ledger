@@ -1,4 +1,4 @@
-"""Account and category management use cases."""
+"""帳戶與類別／項目的管理 use case。"""
 
 from __future__ import annotations
 

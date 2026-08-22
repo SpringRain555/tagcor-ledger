@@ -1,4 +1,4 @@
-"""Application bootstrap and dependency wiring."""
+"""啟動與相依組裝：CLI、GUI 與測試共用同一條路徑解析流程。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from tagcor_ledger.app.resources import resource_exists
 
 @dataclass(frozen=True)
 class StartupContext:
-    """Resolved startup state shared by CLI, GUI, and tests."""
+    """解析完成的啟動狀態。CLI、GUI 與測試共用同一份，路徑才不會有第二種算法。"""
 
     paths: AppPaths
     styles_available: bool
