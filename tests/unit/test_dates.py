@@ -1,7 +1,7 @@
 """守門：ISO 日期字串上的月份運算。
 
 這一份補的是 2026-08-22 掃出來的缺口。`add_months()` 的「目標月份沒有那一天就退到
-當月最後一天」只寫在 docstring 裡，`_monthly_dates()` 則是連一條測試都沒有 ——
+當月最後一天」只寫在 docstring 裡，`monthly_dates()` 則是連一條測試都沒有 ——
 而定存的每一期到期日、每一次領息與每一次續存都建立在這兩個函式上。
 
 （`next_due_date()` 的月底與閏年已經有直接測試，在
@@ -18,8 +18,12 @@ from datetime import date
 
 import pytest
 
-from tagcor_ledger.application.deposits import _days_in_month, _monthly_dates, add_months
-from tagcor_ledger.infrastructure.stores.automation import next_due_date
+from tagcor_ledger.domain.dates import (
+    add_months,
+    days_in_month,
+    monthly_dates,
+    next_due_date,
+)
 
 
 # --- 加月份 ----------------------------------------------------------------------
@@ -35,7 +39,7 @@ from tagcor_ledger.infrastructure.stores.automation import next_due_date
         ("2026-01-31", 12, "2027-01-31"),  # 整整一年回到同一天
         ("2026-01-31", 24, "2028-01-31"),
         ("2026-08-22", 0, "2026-08-22"),  # 加 0 是原地
-        ("2026-03-31", -1, "2026-02-28"),  # 往回也要夾（`_monthly_dates` 不用，但別人可能會）
+        ("2026-03-31", -1, "2026-02-28"),  # 往回也要夾（`monthly_dates` 不用，但別人可能會）
         ("2026-05-31", 1, "2026-06-30"),  # 小月
     ],
 )
@@ -62,9 +66,9 @@ def test_clamping_is_not_cumulative() -> None:
     ("year", "month", "expected"),
     [(2026, 1, 31), (2026, 2, 28), (2028, 2, 29), (2026, 4, 30), (2026, 12, 31)],
 )
-def test_days_in_month(year: int, month: int, expected: int) -> None:
+def testdays_in_month(year: int, month: int, expected: int) -> None:
     """12 月是特例（要跨年才算得出下個月的第一天），所以一定要有那一格。"""
-    assert _days_in_month(year, month) == expected
+    assert days_in_month(year, month) == expected
 
 
 # --- 每月同日 --------------------------------------------------------------------
@@ -72,14 +76,14 @@ def test_days_in_month(year: int, month: int, expected: int) -> None:
 
 def test_monthly_dates_stop_at_today() -> None:
     """只產生**已經發生**的期數。到期日在未來的那幾期還不該出現在待確認裡。"""
-    assert _monthly_dates("2026-01-01", "2026-12-01", "2026-03-15") == [
+    assert monthly_dates("2026-01-01", "2026-12-01", "2026-03-15") == [
         "2026-02-01",
         "2026-03-01",
     ]
 
 
 def test_monthly_dates_stop_at_maturity_even_if_today_is_much_later() -> None:
-    assert _monthly_dates("2026-01-01", "2026-03-01", "2026-12-31") == [
+    assert monthly_dates("2026-01-01", "2026-03-01", "2026-12-31") == [
         "2026-02-01",
         "2026-03-01",
     ]
@@ -87,7 +91,7 @@ def test_monthly_dates_stop_at_maturity_even_if_today_is_much_later() -> None:
 
 def test_the_start_date_itself_is_not_a_payout() -> None:
     """第一期是起存日的**一個月後**，不是起存日當天 —— 那天錢才剛存進去。"""
-    assert _monthly_dates("2026-01-01", "2026-12-01", "2026-01-31") == []
+    assert monthly_dates("2026-01-01", "2026-12-01", "2026-01-31") == []
 
 
 @pytest.mark.parametrize(
@@ -100,7 +104,7 @@ def test_the_start_date_itself_is_not_a_payout() -> None:
 def test_a_term_with_nothing_due_yet_produces_no_dates(
     start: str, maturity: str, today: str
 ) -> None:
-    assert _monthly_dates(start, maturity, today) == []
+    assert monthly_dates(start, maturity, today) == []
 
 
 def test_monthly_dates_do_not_drift_off_the_month_end() -> None:
@@ -109,7 +113,7 @@ def test_monthly_dates_do_not_drift_off_the_month_end() -> None:
     這一條與 `test_clamping_is_not_cumulative` 是同一個危險的兩個層次：
     上面驗運算本身，這裡驗**呼叫端沒有把它用成遞推**。
     """
-    assert _monthly_dates("2026-01-31", "2026-12-31", "2026-04-01") == [
+    assert monthly_dates("2026-01-31", "2026-12-31", "2026-04-01") == [
         "2026-02-28",
         "2026-03-31",
     ]

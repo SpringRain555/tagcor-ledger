@@ -8,7 +8,7 @@ from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.application.automation import AutomationService
 from tagcor_ledger.domain.models import RecurringSchedule
 from tagcor_ledger.infrastructure.database import connect_database
-from tagcor_ledger.infrastructure.stores.automation import next_due_date
+from tagcor_ledger.domain.dates import next_due_date
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 

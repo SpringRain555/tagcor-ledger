@@ -37,7 +37,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
 import sqlite3
 from uuid import uuid4
 
@@ -62,6 +61,7 @@ from tagcor_ledger.domain.deposits import (
     suggest_interest_minor,
     suggest_monthly_interest_minor,
 )
+from tagcor_ledger.domain.dates import add_months, monthly_dates, shift_days
 from tagcor_ledger.domain.money import Money
 from tagcor_ledger.infrastructure.clock import today_taipei
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
@@ -317,7 +317,7 @@ class DepositService:
         同一件事只會出現一次。
         """
         current = today or today_taipei().isoformat()
-        horizon = _shift_days(current, MATURITY_LEAD_DAYS)
+        horizon = shift_days(current, MATURITY_LEAD_DAYS)
         generated = 0
         try:
             for term in self.store.list_active_terms():
@@ -343,7 +343,7 @@ class DepositService:
             suggested = suggest_monthly_interest_minor(
                 principal_minor=term.principal_minor, annual_rate_ppm=term.annual_rate_ppm
             )
-            for due in _monthly_dates(term.start_date, term.maturity_date, today):
+            for due in monthly_dates(term.start_date, term.maturity_date, today):
                 if self.store.add_event(
                     term_id=term.term_id,
                     event_type=str(DepositEventType.INTEREST_PAYOUT),
@@ -354,7 +354,7 @@ class DepositService:
                     generated += 1
 
         if method is InterestMethod.INSTALLMENT_SAVINGS:
-            for due in _monthly_dates(term.start_date, term.maturity_date, today):
+            for due in monthly_dates(term.start_date, term.maturity_date, today):
                 if self.store.add_event(
                     term_id=term.term_id,
                     event_type=str(DepositEventType.INSTALLMENT),
@@ -605,39 +605,6 @@ class DepositService:
             note="續存，利率請依當時牌告填入",
         )
         return renewed.term_id
-
-
-def add_months(iso_date: str, months: int) -> str:
-    """加月份。目標月份沒有那一天時退到當月最後一天（1/31 加一個月是 2/28）。"""
-    base = date.fromisoformat(iso_date)
-    total = base.month - 1 + months
-    year = base.year + total // 12
-    month = total % 12 + 1
-    day = min(base.day, _days_in_month(year, month))
-    return date(year, month, day).isoformat()
-
-
-def _days_in_month(year: int, month: int) -> int:
-    if month == 12:
-        return 31
-    return (date(year, month + 1, 1) - timedelta(days=1)).day
-
-
-def _shift_days(iso_date: str, days: int) -> str:
-    return (date.fromisoformat(iso_date) + timedelta(days=days)).isoformat()
-
-
-def _monthly_dates(start_date: str, maturity_date: str, today: str) -> list[str]:
-    """從起存日到今天（不超過到期日）之間的每月同日。"""
-    dates: list[str] = []
-    index = 1
-    while True:
-        due = add_months(start_date, index)
-        if due > maturity_date or due > today:
-            break
-        dates.append(due)
-        index += 1
-    return dates
 
 
 def _contract_view(contract: DepositContract) -> dict[str, object]:

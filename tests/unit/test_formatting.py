@@ -33,7 +33,7 @@ from tagcor_ledger.ui.formatting import (
     signed_amount_text,
     template_values,
 )
-from tagcor_ledger.ui.formatting import _time_from_backup_id
+from tagcor_ledger.ui.formatting.messages import _time_from_backup_id
 
 
 # --- 金額 ------------------------------------------------------------------------

@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 
 from tagcor_ledger.app.paths import resolve_app_paths
-from tagcor_ledger.application.deposits import DepositService, add_months
+from tagcor_ledger.application.deposits import DepositService
+from tagcor_ledger.domain.dates import add_months
 from tagcor_ledger.domain.deposits import (
     DepositEventType,
     DepositTermStatus,

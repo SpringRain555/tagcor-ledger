@@ -10,7 +10,7 @@
 ```mermaid
 flowchart TD
     UI["ui/<br/>PySide6 頁面與 widget"]
-    CTRL["ui/controller.py<br/>LedgerController<br/><i>UI 唯一的入口</i>"]
+    CTRL["ui/controller/<br/>LedgerController<br/><i>UI 唯一的入口</i>"]
     APP["application/<br/>use case ＋ Result"]
     INFRA["infrastructure/<br/>stores・migration・備份・CSV"]
     DOM["domain/<br/>Money・帳戶・類別・交易・定存"]
@@ -43,7 +43,7 @@ flowchart TD
 src/tagcor_ledger/
 ├── __main__.py         python -m tagcor_ledger
 ├── main.py             CLI 參數、--json、單一實例、啟動失敗分類
-├── domain/             models、deposits、money
+├── domain/             models、deposits、dates、money
 ├── application/
 │   ├── transaction_service.py  收入／支出／轉帳／編輯／作廢／替換轉帳／列表
 │   ├── catalogs.py     帳戶、類別／項目
@@ -59,14 +59,19 @@ src/tagcor_ledger/
 │   ├── migrations.py   v1 → v7 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
-│   ├── stores/         base ＋ accounts／categories／transactions／balance／
-│   │                   deposits／automation
+│   ├── stores/         一個聚合一個檔：accounts／categories／transactions／
+│   │                   balance／deposit_contracts／deposit_terms／deposit_events／
+│   │                   templates／schedules／occurrences ＋ base（共用）
+│   │                   ＋ drafts（模板與定期收支共用的草稿驗證，不是 store）
 │   ├── maintenance.py  備份、驗證、還原、重製、CSV 匯出
 │   └── clock.py        台北時區的「今天」
 ├── ui/
 │   ├── navigation.py   PageId、側邊欄順序、顯示文字（改 LABELS 不影響任何查表）
-│   ├── controller.py   LedgerController：UI 唯一的入口
-│   ├── formatting.py   dict → 顯示字串（唯一決定畫面中文長相的地方）
+│   ├── controller/     LedgerController：UI 唯一的入口。用繼承把 wiring／ledger／
+│   │                   automation／deposits／balance／maintenance／data_paths／
+│   │                   overview 幾段組起來，`__init__.py` 只放組裝不放方法
+│   ├── formatting/     dict → 顯示字串（唯一決定畫面中文長相的地方）。
+│   │                   primitives（金額／日期／名稱表）、rows（每一列）、messages
 │   ├── main_window.py  側邊欄、頁面堆疊，以及頁面之間所有的連動
 │   ├── theme.py        apply_dark_theme：Fusion style、字體、palette、QSS
 │   ├── colors.py       色票的正本
@@ -79,10 +84,16 @@ src/tagcor_ledger/
 
 ### 交易只有一個寫入點
 
-**`LedgerStore` 用繼承把 `stores/` 底下六個聚合組起來，不是委派。**
-理由寫在 `sqlite_store.py` 的 module docstring：六個 store 共用同一份 `AppPaths` 與
+**`LedgerStore` 用繼承把 `stores/` 底下十個聚合組起來，不是委派。**
+理由寫在 `sqlite_store.py` 的 module docstring：這些 store 共用同一份 `AppPaths` 與
 同一套「每次呼叫自己開連線」的模型，對外一直是單一物件；用繼承組裝時拆檔只是
-「這個 `def` 放在哪個檔案」，換成委派要手寫三十幾個轉發方法。
+「這個 `def` 放在哪個檔案」，換成委派要手寫幾十個轉發方法。
+
+**`LedgerController` 用的是同一套論證。** 2026-08-22 它從單一的 700 行 `controller.py`
+（剛好貼著上限）拆成 `ui/controller/` 套件，呼叫端一個字都不用改 ——
+`from tagcor_ledger.ui.controller import LedgerController` 現在解析到套件的 `__init__`。
+section 之間**彼此不呼叫對方**，唯一的例外是 `OverviewSection`：資產總覽這一頁的內容
+就是「帳戶 ＋ 定存 ＋ 待確認 ＋ 盤點差額」湊起來的，所以它明說自己是聚合層並繼承那幾段。
 
 **「一筆交易長什麼樣」的知識集中在 `StoreBase._write_transaction()` /
 `_write_transfer()`。** 它們寫 transactions 一列、posting（轉帳兩列）、allocation、
@@ -93,9 +104,10 @@ FTS 索引與稽核列，然後就結束 —— **收 `connection`，不自己�
 | 情境 | 誰 | 為什麼 |
 |---|---|---|
 | 「就寫這一筆」 | `TransactionStore.create_transaction()` | 自己開一個 transaction 包住寫入器 |
-| 「建交易 ＋ 改別的表的狀態」 | `AutomationStore.confirm_occurrence()` | 兩件事必須同一個 transaction，否則會出現「狀態是 confirmed 但交易沒建出來」 |
+| 「建交易 ＋ 改別的表的狀態」 | `OccurrenceStore.confirm_occurrence()` | 兩件事必須同一個 transaction，否則會出現「狀態是 confirmed 但交易沒建出來」 |
 
-2026-08-21 之前 `AutomationStore` 站在 `stores/` 外面，也**自己重寫了一份寫入路徑**
+2026-08-21 之前 `AutomationStore`（2026-08-22 拆成 templates／schedules／occurrences
+三個）站在 `stores/` 外面，也**自己重寫了一份寫入路徑**
 （約 70 行），原因就是舊的 `create_transaction()` 會自己開 transaction、塞不進外層。
 代價不是重複而是**分岔**：兩份 `_refresh_fts` 的 SQL 一字不差，只有一份會先 `DELETE`；
 兩份 `_audit` 只有一份收 `correlation_id`。詳情見 [失敗紀錄](../lessons.md)。
@@ -155,6 +167,10 @@ sequenceDiagram
 | `test_ui_layer_contains_no_sql` | `ui/` 的字串常數不得出現 SQL |
 | `test_only_one_module_writes_a_transaction` | 交易、FTS 索引與稽核列各只有一個寫入點 |
 | `test_every_store_lives_in_the_stores_package` | store 一律放在 `infrastructure/stores/` |
+| `test_the_store_package_reexports_exactly_what_ledger_store_composes` | `stores/__init__.py` 的 `__all__` 與 `LedgerStore` 的基底一致 |
+| `test_the_controller_assembly_file_holds_no_logic` | `ui/controller/__init__.py` 不得定義任何方法 |
+| `test_every_controller_method_lives_in_a_section_module` | controller 的方法都住在 `ui/controller/` 底下 |
+| `test_no_page_builds_its_own_table_row` | 「一列長什麼樣」只由 `ui/formatting/` 決定 |
 | `test_no_module_grows_back_into_a_monolith` | 單一模組不得超過 700 行 |
 | `test_extractor_separates_documentation_from_values` | **陽性對照**：純字串陳述算文件、不算值 |
 | `test_ui_does_not_use_retired_wording` | `ui/` 的字串常數不得出現已淘汰的 UI 用詞 |

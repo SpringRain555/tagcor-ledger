@@ -18,11 +18,15 @@ from __future__ import annotations
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.infrastructure.database import connect_database, initialize_database
 from tagcor_ledger.infrastructure.stores.accounts import AccountStore
-from tagcor_ledger.infrastructure.stores.automation import AutomationStore
 from tagcor_ledger.infrastructure.stores.balance import BalanceStore
 from tagcor_ledger.infrastructure.stores.base import NotFoundError, StoreError
 from tagcor_ledger.infrastructure.stores.categories import CategoryStore
-from tagcor_ledger.infrastructure.stores.deposits import DepositStore
+from tagcor_ledger.infrastructure.stores.deposit_contracts import DepositContractStore
+from tagcor_ledger.infrastructure.stores.deposit_events import DepositEventStore
+from tagcor_ledger.infrastructure.stores.deposit_terms import DepositTermStore
+from tagcor_ledger.infrastructure.stores.occurrences import OccurrenceStore
+from tagcor_ledger.infrastructure.stores.schedules import ScheduleStore
+from tagcor_ledger.infrastructure.stores.templates import TemplateStore
 from tagcor_ledger.infrastructure.stores.transactions import TransactionStore
 
 __all__ = ["LedgerStore", "NotFoundError", "StoreError"]
@@ -33,8 +37,12 @@ class LedgerStore(
     CategoryStore,
     TransactionStore,
     BalanceStore,
-    DepositStore,
-    AutomationStore,
+    DepositContractStore,
+    DepositTermStore,
+    DepositEventStore,
+    TemplateStore,
+    ScheduleStore,
+    OccurrenceStore,
 ):
     def __init__(self, paths: AppPaths) -> None:
         super().__init__(paths)

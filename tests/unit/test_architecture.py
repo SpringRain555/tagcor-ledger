@@ -209,6 +209,120 @@ def test_every_store_lives_in_the_stores_package() -> None:
         )
 
 
+# controller 的組裝檔。它只能宣告 `LedgerController` 繼承哪幾段，不能自己長方法。
+CONTROLLER_PACKAGE = "tagcor_ledger.ui.controller"
+
+
+def test_the_controller_assembly_file_holds_no_logic() -> None:
+    """`ui/controller/__init__.py` 不得定義任何函式或方法。
+
+    2026-08-22 拆檔之前 `ui/controller.py` 是 700 行，**剛好貼著上限** ——
+    上一版是靠壓縮註解才過關的。拆成套件之後，最可能的退化路徑就是「這個方法很短，
+    先放組裝檔就好」，然後組裝檔慢慢變回原本那個檔案。
+    """
+    path = SOURCE_ROOT / "ui" / "controller" / "__init__.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    defined = [
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    ]
+    assert not defined, (
+        f"ui/controller/__init__.py 定義了 {defined} —— 組裝檔只放 class 陳述，"
+        "方法請放到對應的 section 模組"
+    )
+
+
+def test_every_controller_method_lives_in_a_section_module() -> None:
+    """`LedgerController` 的每一個方法都必須定義在某一個 section 模組裡。
+
+    這條與上面那條是一組：上面擋「組裝檔長方法」，這條擋「方法跑到套件外面去」
+    （例如有人為了方便把一個 helper 放回 `ui/formatting.py` 再混進來）。
+    """
+    from tagcor_ledger.ui.controller import LedgerController
+
+    strays: list[str] = []
+    checked = 0
+    for name in dir(LedgerController):
+        if name.startswith("__"):
+            continue
+        owner = next(
+            (klass for klass in LedgerController.__mro__ if name in vars(klass)), None
+        )
+        if owner is None or not callable(vars(owner)[name]):
+            continue
+        checked += 1
+        module = owner.__module__
+        if not module.startswith(f"{CONTROLLER_PACKAGE}.") or module == CONTROLLER_PACKAGE:
+            strays.append(f"  {name}（定義在 {module}）")
+
+    assert checked >= 50, f"只掃到 {checked} 個方法，抽取邏輯可能壞了"
+    if strays:
+        pytest.fail(
+            "controller 的方法必須住在 ui/controller/ 底下的 section 模組：\n"
+            + "\n".join(strays)
+        )
+
+
+def test_no_page_builds_its_own_table_row() -> None:
+    """「一列長什麼樣」只由 `ui/formatting/` 決定，`ui/pages/` 不得自己定義 `*_values`。
+
+    同一個狀態一旦有兩個拼法，兩張表就會對同一筆資料講不同的話 —— 而那種不一致
+    很難在畫面上看出來，因為兩張表通常不會同時出現在眼前。
+
+    抓的是**函式定義**不是呼叫：頁面當然要呼叫這些函式，它只是不能自己寫一個。
+
+    判準是「名字以 `_values` 結尾**而且真的 `return [...]`**」，不是只看名字 ——
+    `CatalogPage._values` 是子類要填的抽象掛鉤（`raise NotImplementedError`），
+    子類填的是 `staticmethod(account_values)`，那正是我們要的做法。
+    """
+    offenders: list[str] = []
+    checked = 0
+    for path in _modules("ui/pages"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            checked += 1
+            if not node.name.endswith("_values"):
+                continue
+            builds_a_row = any(
+                isinstance(inner, ast.Return) and isinstance(inner.value, ast.List)
+                for inner in ast.walk(node)
+            )
+            if builds_a_row:
+                offenders.append(f"  {path.relative_to(PROJECT_ROOT)}::{node.name}")
+    assert checked >= 50, f"只掃到 {checked} 個函式，掃描路徑可能寫錯了"
+    if offenders:
+        pytest.fail(
+            "頁面不得自己拼列內容，請放到 ui/formatting/rows.py：\n" + "\n".join(offenders)
+        )
+
+
+def test_the_store_package_reexports_exactly_what_ledger_store_composes() -> None:
+    """`stores/__init__.py` 的 `__all__` 要與 `LedgerStore` 的基底一致。
+
+    這條是補一個**已經發生過的**漏更新：`AutomationStore` 在 2026-08 被收進
+    `stores/` 時忘了加進 re-export 清單，那份 docstring 也跟著停在「四個」。
+    沒有人使用的 re-export 清單不會有任何東西提醒你它過期了 —— 所以現在有了。
+    """
+    from tagcor_ledger.infrastructure import stores
+    from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
+
+    composed = {base.__name__ for base in LedgerStore.__bases__}
+    exported = set(stores.__all__)
+    # 這三個不是聚合，是共用的基底與例外，所以清單裡有、`LedgerStore` 的基底裡沒有。
+    exported -= {"StoreBase", "StoreError", "NotFoundError"}
+
+    assert len(composed) >= 8, f"只掃到 {composed}，LedgerStore 的組法可能改了"
+    if composed != exported:
+        pytest.fail(
+            "stores/__init__.py 的 __all__ 與 LedgerStore 的基底對不上：\n"
+            f"  組進去但沒 re-export：{sorted(composed - exported) or '（無）'}\n"
+            f"  re-export 但沒組進去：{sorted(exported - composed) or '（無）'}"
+        )
+
+
 def test_ui_layer_contains_no_sql() -> None:
     """UI 要查資料就經過 controller 與 application，不自己寫 SQL。"""
     paths = _modules("ui")

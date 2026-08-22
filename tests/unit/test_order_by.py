@@ -89,7 +89,7 @@ def test_the_real_whitelists_only_hold_fixed_expressions() -> None:
     引號的形式，而放行引號等於讓「哪一個引號是安全的」變成要逐一判斷的事。
     """
     from tagcor_ledger.infrastructure.stores.accounts import ACCOUNT_SORT_FIELDS
-    from tagcor_ledger.infrastructure.stores.automation import TEMPLATE_SORT_FIELDS
+    from tagcor_ledger.infrastructure.stores.templates import TEMPLATE_SORT_FIELDS
     from tagcor_ledger.infrastructure.stores.categories import CATEGORY_SORT_FIELDS
 
     tables = {

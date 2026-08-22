@@ -52,6 +52,21 @@ def order_by(
     return ", ".join([*terms, *tiebreakers])
 
 
+def new_correlation_id() -> str:
+    """一次操作一個 id，把它在不同表留下的列串起來。
+
+    **不要在寫稽核列的當下才生** —— 那樣同一次操作的每一列都會拿到不同的值，
+    而 `correlation_id` 存在的唯一目的就是把它們串起來。2026-08 之前
+    `occurrence.confirm` 的稽核列與它建立的交易就是這樣串不起來的。
+
+    `application/result.py` 有一個同名同實作的函式，**那一份不動** ——
+    infrastructure 不得 import application（分層規則，不是疏忽），
+    而把它下推到 domain 又會讓一個純粹的 id 產生器變成領域概念。
+    兩行重複換分層乾淨，這個取捨是知情的。
+    """
+    return f"corr_{uuid4().hex}"
+
+
 class StoreError(RuntimeError):
     """寫入層的失敗。**訊息就是穩定的錯誤碼**，翻成中文是 `application/failures.py` 的事。
 
