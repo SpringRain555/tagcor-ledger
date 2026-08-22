@@ -37,11 +37,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import sqlite3
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.application.failures import failure
+from tagcor_ledger.application.failures import STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result, new_correlation_id
 from tagcor_ledger.domain.deposits import (
     DEPOSIT_EVENT_TYPE_NAMES,
@@ -64,7 +63,7 @@ from tagcor_ledger.domain.deposits import (
 from tagcor_ledger.domain.dates import add_months, monthly_dates, shift_days
 from tagcor_ledger.domain.money import Money
 from tagcor_ledger.infrastructure.clock import today_taipei
-from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
+from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 # 到期前幾天產生待確認項目。給「不自動轉存」留反應時間 —— 那種情況要本人去郵局處理。
 MATURITY_LEAD_DAYS = 7
@@ -164,7 +163,7 @@ class DepositService:
                 annual_rate_ppm=annual_rate_ppm,
                 monthly_deposit_minor=monthly_minor,
             )
-        except (ValueError, sqlite3.Error, NotFoundError) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="DEPOSIT_CONTRACT_CREATE_FAILED",
@@ -205,7 +204,7 @@ class DepositService:
                 interest_destination_account_id=interest_destination_account_id,
                 note=note,
             )
-        except (ValueError, sqlite3.Error, NotFoundError) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="DEPOSIT_CONTRACT_UPDATE_FAILED",
@@ -222,7 +221,7 @@ class DepositService:
         """
         try:
             self.store.delete_contract(contract_id)
-        except (ValueError, sqlite3.Error, NotFoundError) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="DEPOSIT_CONTRACT_DELETE_FAILED",
@@ -265,7 +264,7 @@ class DepositService:
                 monthly_deposit_minor=monthly_minor,
                 note=note,
             )
-        except (ValueError, sqlite3.Error, NotFoundError) as exc:
+        except STORE_FAILURES as exc:
             # 以前這裡有一個 `except NotFoundError:` 無條件回 `DEPOSIT_TERM_NOT_EDITABLE`
             # 的分支 —— 但 store 的 `NotFoundError` 也可能是 `DEPOSIT_TERM_NOT_FOUND`，
             # 那句「只有存續中的期可以修改」會在「這一期根本不存在」時說錯話。
@@ -323,7 +322,7 @@ class DepositService:
             for term in self.store.list_active_terms():
                 contract = self.store.get_contract(term.contract_id)
                 generated += self._generate_for_term(contract, term, current, horizon)
-        except (sqlite3.Error, NotFoundError, ValueError) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="DEPOSIT_GENERATE_FAILED",
@@ -455,8 +454,13 @@ class DepositService:
         correlation_id = new_correlation_id()
         try:
             event = self.store.get_event(event_id)
-        except NotFoundError:
-            return Result.fail("DEPOSIT_EVENT_NOT_FOUND", "找不到這件定存項目。")
+        except STORE_FAILURES as exc:
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_CONFIRM_FAILED",
+                fallback_message="定存項目無法確認入帳。請匯出診斷資訊回報。",
+                correlation_id=correlation_id,
+            )
         if event.status != DepositEventStatus.PENDING:
             return Result.fail("DEPOSIT_EVENT_NOT_PENDING", "這件項目已經處理過了。")
 
@@ -481,7 +485,7 @@ class DepositService:
                 transaction_id=transaction_id,
             )
             renewed = self._advance_term(event, amount)
-        except (ValueError, sqlite3.Error, NotFoundError) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="DEPOSIT_CONFIRM_FAILED",
@@ -497,8 +501,15 @@ class DepositService:
     def skip(self, event_id: str) -> Result:
         try:
             self.store.settle_event(event_id, status=str(DepositEventStatus.SKIPPED))
-        except NotFoundError:
-            return Result.fail("DEPOSIT_EVENT_NOT_PENDING", "這件項目已經處理過了。")
+        except STORE_FAILURES as exc:
+            # 以前這裡無條件回 `DEPOSIT_EVENT_NOT_PENDING`，但 `settle_event()` 的
+            # `NotFoundError` 也可能是 `DEPOSIT_EVENT_NOT_FOUND` —— 那句「已經處理過了」
+            # 會在「這件項目根本不存在」時說錯話。同 `update_term()` 那個修法。
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_SKIP_FAILED",
+                fallback_message="定存項目無法略過。請匯出診斷資訊回報。",
+            )
         return Result.ok("已略過這件定存項目。")
 
     def _write_postings(self, postings: list[DepositPosting]) -> str | None:

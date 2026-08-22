@@ -12,11 +12,11 @@ from typing import Any
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.application.failures import failure
+from tagcor_ledger.application.failures import DOMAIN_FAILURES, STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result, new_correlation_id
 from tagcor_ledger.domain.models import TransactionFilter, TransactionRecord
-from tagcor_ledger.domain.money import Money, MoneyError
-from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
+from tagcor_ledger.domain.money import Money
+from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +115,7 @@ class AddTransaction:
                 details={"transaction": transaction_to_dict(record)},
                 correlation_id=correlation_id,
             )
-        except (MoneyError, ValueError) as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="VALIDATION_FAILED",
@@ -154,7 +154,7 @@ class AddTransfer:
                 details={"transaction": transaction_to_dict(record)},
                 correlation_id=correlation_id,
             )
-        except (MoneyError, ValueError) as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="VALIDATION_FAILED",
@@ -194,7 +194,7 @@ class UpdateTransaction:
                 details={"transaction": transaction_to_dict(record)},
                 correlation_id=correlation_id,
             )
-        except (MoneyError, ValueError, NotFoundError) as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="TRANSACTION_UPDATE_FAILED",
@@ -234,7 +234,7 @@ class ReplaceTransfer:
                 details={"transaction": transaction_to_dict(record)},
                 correlation_id=correlation_id,
             )
-        except (MoneyError, ValueError, NotFoundError) as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="TRANSFER_REPLACE_FAILED",
@@ -259,7 +259,7 @@ class VoidTransaction:
         try:
             self.store.void_transaction(transaction_id, correlation_id)
             return Result.ok("交易已作廢。", correlation_id=correlation_id)
-        except NotFoundError as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="TRANSACTION_NOT_FOUND",
@@ -310,7 +310,7 @@ class ListTransactions:
                     ),
                 },
             )
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="LIST_TRANSACTIONS_FAILED",

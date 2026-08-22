@@ -199,7 +199,7 @@
 | `DEPOSIT_AMOUNT_REQUIRED` | 確認時沒有金額，而且利率空白算不出建議值 | **照存摺填實際金額。** 或先回定存頁補上年利率 |
 | `DEPOSIT_CONTRACT_IN_USE` | 想刪掉已經有入帳紀錄的定存 | **改用「結束合約」。** 刪除只允許從未入帳過的，否則帳本裡的交易會失去來歷 |
 | `DEPOSIT_TERM_NOT_EDITABLE` | 想修改已續約或已結清的期 | 只有「存續中」的期能改。已經產生過交易的改了會對不起帳 |
-| `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
+| `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` / `DEPOSIT_SKIP_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
 
 ## 備份
 

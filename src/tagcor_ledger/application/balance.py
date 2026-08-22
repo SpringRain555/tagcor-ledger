@@ -14,7 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.application.failures import failure
+from tagcor_ledger.application.failures import DOMAIN_FAILURES, STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result, new_correlation_id
 from tagcor_ledger.application.transaction_service import transaction_to_dict
 from tagcor_ledger.domain.models import (
@@ -23,9 +23,9 @@ from tagcor_ledger.domain.models import (
     BalanceSnapshotFilter,
     CreateBalanceSnapshotRequest,
 )
-from tagcor_ledger.domain.money import Money, MoneyError
+from tagcor_ledger.domain.money import Money
 from tagcor_ledger.infrastructure.clock import today_taipei
-from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
+from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +65,7 @@ class BalanceSnapshotService:
                 details={"gap": balance_gap_to_dict(gap)},
                 correlation_id=correlation_id,
             )
-        except (MoneyError, ValueError) as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="BALANCE_SNAPSHOT_VALIDATION_FAILED",
@@ -103,7 +103,7 @@ class BalanceSnapshotService:
                 details={"gap": balance_gap_to_dict(gap)},
                 correlation_id=correlation_id,
             )
-        except (MoneyError, ValueError, NotFoundError) as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="BALANCE_SNAPSHOT_UPDATE_FAILED",
@@ -123,7 +123,7 @@ class BalanceSnapshotService:
         try:
             self.store.void_balance_snapshot(snapshot_id, correlation_id)
             return Result.ok("餘額盤點已作廢。", correlation_id=correlation_id)
-        except NotFoundError as exc:
+        except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="BALANCE_SNAPSHOT_NOT_FOUND",
@@ -154,7 +154,7 @@ class BalanceSnapshotService:
                 "餘額盤點已載入。",
                 details={"gaps": [balance_gap_to_dict(gap) for gap in gaps]},
             )
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="BALANCE_SNAPSHOT_LIST_FAILED",
@@ -167,6 +167,15 @@ class BalanceSnapshotService:
             return Result.ok(
                 "最近餘額盤點已載入。",
                 details={"gap": balance_gap_to_dict(gap) if gap is not None else None},
+            )
+        except DOMAIN_FAILURES as exc:
+            # `latest_balance_gap()` 會走到 `_balance_gap_for_snapshot()`，那裡對
+            # 「盤點還在但帳戶不見了」丟 `NotFoundError`。以前這一層只接 `sqlite3.Error`，
+            # 於是那個防禦性檢查真的觸發時，使用者看到的是全域錯誤對話框。
+            return failure(
+                exc,
+                fallback_code="BALANCE_GAP_LOAD_FAILED",
+                fallback_message="最近餘額盤點無法載入。請匯出診斷資訊回報。",
             )
         except sqlite3.Error as exc:
             return Result.fail(
@@ -198,7 +207,7 @@ class BalanceSnapshotService:
                     ]
                 },
             )
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="BALANCE_GAP_TRANSACTIONS_FAILED",

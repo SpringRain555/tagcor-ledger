@@ -42,8 +42,32 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import sqlite3
 
 from tagcor_ledger.application.result import Result
+from tagcor_ledger.infrastructure.stores.base import NotFoundError
+
+
+DOMAIN_FAILURES: tuple[type[BaseException], ...] = (ValueError, NotFoundError)
+"""「這次操作的內容有問題」或「要動的東西不在了」—— 兩者都翻得出使用者能懂的一句話。
+
+**`NotFoundError` 繼承 `RuntimeError` 不是 `ValueError`**（`stores/base.py`），
+所以它一定要自己列出來 —— 這是 2026-08-22 盤點時發現 15 個 handler 漏掉它的原因。
+**`MoneyError` 不必列** —— 它繼承 `ValueError`，寫上去只是雜訊。
+
+用在**兩層寫入路徑**的第一層：交易與餘額盤點的寫入區分「內容有問題」與「資料庫寫不進去」，
+後者要另外講一句「什麼都沒變」，所以不能跟前者共用一個 handler。
+"""
+
+STORE_FAILURES: tuple[type[BaseException], ...] = (*DOMAIN_FAILURES, sqlite3.Error)
+"""寫入層可能丟出來的**全部**東西。用在單層 handler —— 包一個 store 呼叫，交給 `failure()`。
+
+`failure()` 認得出碼就用那個碼的中文，認不出來（`sqlite3.Error` 的英文原文）才退回
+呼叫端給的 `fallback_code`。所以這三種擺在同一個 handler 裡不會混淆，
+它們的分歧在 `failure()` 內部處理。
+
+**`sqlite3.IntegrityError` 不必列** —— 它繼承 `sqlite3.Error`。
+"""
 
 
 ERROR_MESSAGES: dict[str, str] = {
@@ -82,7 +106,7 @@ ERROR_MESSAGES: dict[str, str] = {
         "所屬類別不存在或已封存。請先在「類別」分頁選一個使用中的類別 —— 只有第一層"
         "能當所屬類別，沒有第三層。"
     ),
-    "CATEGORY_PARENT_NOT_ACTIVE": "上層類別已經封存了。請先恢復上層類別，再恢復這個項目。",
+    "CATEGORY_PARENT_NOT_ACTIVE": "所屬類別已經封存了。請先恢復它，再恢復這個項目。",
     "CATEGORY_HAS_CHILDREN": "這個類別底下還有項目，不能刪除。請先處理掉所有子項目。",
     "CATEGORY_HAS_ACTIVE_CHILDREN": (
         "這個類別底下還有使用中的項目，不能封存。請先把子項目封存 —— 否則會出現"
@@ -118,7 +142,7 @@ ERROR_MESSAGES: dict[str, str] = {
     "BALANCE_SNAPSHOT_NEGATIVE": "盤點金額不能是負數。",
     "BALANCE_SNAPSHOT_NOT_FOUND": "找不到這筆餘額盤點。請重新整理。",
     "BALANCE_SNAPSHOT_STATUS_FILTER_INVALID": "狀態篩選值不合法。正常操作不會發生，請回報。",
-    # ---- 模板、排程與待確認 ----
+    # ---- 模板、定期收支與待確認 ----
     "AUTOMATION_ID_REQUIRED": (
         "這筆模板或定期收支沒有識別碼，無法儲存。正常操作不會發生，請匯出診斷資訊回報。"
     ),
@@ -127,7 +151,7 @@ ERROR_MESSAGES: dict[str, str] = {
     "TRANSACTION_DRAFT_INVALID": "收入與支出都要選類別。",
     "TRANSFER_DRAFT_INVALID": "轉帳要有轉入帳戶，而且不要選類別。",
     "TEMPLATE_NOT_FOUND": "找不到這個模板。請重新整理。",
-    "SCHEDULE_NOT_FOUND": "找不到這個排程。請重新整理。",
+    "SCHEDULE_NOT_FOUND": "找不到這筆定期收支。請重新整理。",
     "SCHEDULE_FREQUENCY_INVALID": "頻率只能是每日、每週、每月或每年。",
     "SCHEDULE_INTERVAL_INVALID": "間隔要是正整數，例如「每 2 個月」的 2。",
     "OCCURRENCE_NOT_PENDING": (

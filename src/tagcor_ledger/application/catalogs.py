@@ -11,11 +11,11 @@ from collections.abc import Sequence
 import sqlite3
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.application.failures import failure
+from tagcor_ledger.application.failures import STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import CategoryTreeFilter, SortLevel
 from tagcor_ledger.domain.money import Money, MoneyError
-from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
+from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
 class AccountService:
@@ -129,7 +129,7 @@ class AccountService:
         try:
             self.store.archive_account(account_id)
             return Result.ok("帳戶已封存。")
-        except (NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="ACCOUNT_ARCHIVE_FAILED",
@@ -140,7 +140,7 @@ class AccountService:
         try:
             self.store.rename_account(account_id, name)
             return Result.ok("帳戶名稱已更新。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="ACCOUNT_RENAME_FAILED",
@@ -151,7 +151,7 @@ class AccountService:
         try:
             self.store.restore_account(account_id)
             return Result.ok("帳戶已恢復使用。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="ACCOUNT_RESTORE_FAILED",
@@ -170,7 +170,7 @@ class AccountService:
         try:
             self.store.delete_account(account_id)
             return Result.ok("帳戶已刪除。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="ACCOUNT_DELETE_FAILED",
@@ -182,7 +182,7 @@ class AccountService:
         try:
             self.store.set_account_order(list(ordered_ids))
             return Result.ok("順序已更新。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="ACCOUNT_REORDER_FAILED",
@@ -317,7 +317,7 @@ class CategoryService:
         try:
             self.store.archive_category(category_id)
             return Result.ok("類別／項目已封存。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="CATEGORY_ARCHIVE_FAILED",
@@ -328,7 +328,7 @@ class CategoryService:
         try:
             self.store.rename_category(category_id, name)
             return Result.ok("類別／項目名稱已更新。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="CATEGORY_RENAME_FAILED",
@@ -348,7 +348,7 @@ class CategoryService:
                 list(ordered_ids), parent_id=parent_id, level=level
             )
             return Result.ok("順序已更新。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="CATEGORY_REORDER_FAILED",
@@ -359,7 +359,7 @@ class CategoryService:
         try:
             self.store.restore_category(category_id)
             return Result.ok("類別／項目已恢復使用。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="CATEGORY_RESTORE_FAILED",
@@ -377,7 +377,7 @@ class CategoryService:
         try:
             self.store.delete_category(category_id)
             return Result.ok("類別／項目已刪除。")
-        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="CATEGORY_DELETE_FAILED",

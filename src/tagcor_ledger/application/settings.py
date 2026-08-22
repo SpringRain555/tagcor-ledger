@@ -14,10 +14,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import json
-import sqlite3
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.application.failures import failure
+from tagcor_ledger.application.failures import STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import ApplicationSettings, SortLevel, SortSpec
 from tagcor_ledger.infrastructure.clock import now_iso
@@ -88,7 +87,7 @@ class SettingsService:
                     (key, payload, now_iso()),
                 )
             return Result.ok("排序方式已儲存。")
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="SORT_SPEC_SAVE_FAILED",
@@ -144,7 +143,7 @@ class SettingsService:
                         (key, value, timestamp),
                     )
             return Result.ok("設定已儲存。")
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             # `DEFAULT_ACCOUNT_NOT_ACTIVE` 是這裡自己 raise 的（上面幾行），
             # 所以它會被 `failure()` 認出來，不會塌成 `SETTINGS_SAVE_FAILED`。
             return failure(

@@ -334,6 +334,105 @@ def test_the_store_package_reexports_exactly_what_ledger_store_composes() -> Non
         )
 
 
+# `application/` 底下**整個模組**都不經過寫入層，所以它們的例外不是「寫入層失敗」。
+# 這兩個是名單而不是猜測 —— 它們自己開連線，`self.store` 根本不存在。
+NON_STORE_MODULES = {
+    "diagnostics.py": "健檢自己開連線跑 PRAGMA 與 COUNT，不經過 store",
+    "reference.py": "法規參考庫是另一個唯讀資料庫，不經過 store",
+}
+
+# 這些 handler 包的**不是** store 呼叫，或是刻意收窄的。key 是（檔名, 函式名, 形狀）。
+# 加一筆進來要寫得出理由 —— 寫不出來的就該用 STORE_FAILURES。
+EXPECTED_SPECIAL_HANDLERS = {
+    ("balance.py", "export_csv", "(OSError, sqlite3.Error, ValueError)"): (
+        "寫 CSV 檔，OSError 是本質的（磁碟滿、沒有權限），不是寫入層失敗"
+    ),
+    ("catalogs.py", "create", "MoneyError"): "解析期初餘額，還沒碰到 store",
+    ("catalogs.py", "create", "(ValueError, sqlite3.IntegrityError)"): (
+        "刻意收窄：走到這裡表示上面三道重名檢查都沒攔到，那是預期外的。"
+        "放寬成 STORE_FAILURES 會把真正的 bug 藏成一句客氣的中文"
+    ),
+    ("deposits.py", "create_contract", "ValueError"): "建列舉與解析金額，還沒碰到 store",
+    ("deposits.py", "update_contract", "ValueError"): "建列舉，還沒碰到 store",
+    ("deposits.py", "update_term", "ValueError"): "解析金額，還沒碰到 store",
+    ("settings.py", "get_sort_spec", "(TypeError, ValueError)"): (
+        "壞掉的 JSON 靜靜退回預設，這是偏好設定不是寫入失敗"
+    ),
+}
+
+
+def _except_handlers(path: Path) -> list[tuple[str, str, bool]]:
+    """這個模組的每一個 except handler：（函式名, 形狀, 是不是兩層寫入路徑的第二層）。
+
+    「第二層」用**結構**判斷，不靠名單：同一個 `try` 裡，第一個 handler 是
+    `DOMAIN_FAILURES` 時，後面那些就是「內容沒問題但寫不進去」的那一層。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    owner: dict[int, str] = {}
+    for function in ast.walk(tree):
+        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for node in ast.walk(function):
+                owner[id(node)] = function.name
+
+    found: list[tuple[str, str, bool]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        first = node.handlers[0] if node.handlers else None
+        tiered = (
+            first is not None
+            and isinstance(first.type, ast.Name)
+            and first.type.id == "DOMAIN_FAILURES"
+        )
+        for index, handler in enumerate(node.handlers):
+            shape = ast.unparse(handler.type) if handler.type else "bare"
+            found.append((owner.get(id(handler), "?"), shape, tiered and index > 0))
+    return found
+
+
+def test_the_application_layer_catches_store_failures_by_name() -> None:
+    """`application/` 的 except 只能是那兩個具名常數，其餘要在名單上帶理由。
+
+    2026-08-22 盤點時，這一層有 **70 個 handler、17 種形狀**，而其中 15 個包著會丟
+    `NotFoundError` 的 store 方法卻沒有列它 —— `NotFoundError` 繼承的是
+    `RuntimeError`，`except (ValueError, sqlite3.Error)` 接不到。
+
+    **17 種形狀不是 17 個疏忽。** 裡面有刻意的兩層寫入路徑、有還沒碰到 store 的
+    輸入解析、有刻意收窄以免把 bug 藏起來的。所以這條守的不是「全部長一樣」，
+    是「**每一個不一樣的地方都說得出為什麼**」。
+    """
+    offenders: list[str] = []
+    total = 0
+    for path in _modules("application"):
+        if path.name in NON_STORE_MODULES:
+            continue
+        for function, shape, is_tier_two in _except_handlers(path):
+            total += 1
+            if shape in ("STORE_FAILURES", "DOMAIN_FAILURES"):
+                continue
+            if is_tier_two:
+                continue
+            if (path.name, function, shape) in EXPECTED_SPECIAL_HANDLERS:
+                continue
+            offenders.append(f"  {path.name}::{function} —— except {shape}")
+
+    assert total >= 40, f"只掃到 {total} 個 handler，掃描路徑可能寫錯了"
+    if offenders:
+        pytest.fail(
+            "application/ 的 except 要用 STORE_FAILURES 或 DOMAIN_FAILURES：\n"
+            + "\n".join(offenders)
+            + "\n\n真的不該用的話，加進 EXPECTED_SPECIAL_HANDLERS 並寫下理由。"
+        )
+
+
+def test_the_handler_extractor_sees_both_tiers() -> None:
+    """陽性對照：抽取器認不出兩層結構的話，上面那條會把第二層全部誤報成違規。"""
+    shapes = _except_handlers(SOURCE_ROOT / "application" / "transaction_service.py")
+    assert ("execute", "DOMAIN_FAILURES", False) in shapes, "抓不到第一層"
+    assert ("execute", "sqlite3.Error", True) in shapes, "第二層沒有被認出來"
+    assert any(shape == "STORE_FAILURES" for _, shape, _ in shapes), "抓不到單層 handler"
+
+
 def test_ui_layer_contains_no_sql() -> None:
     """UI 要查資料就經過 controller 與 application，不自己寫 SQL。"""
     paths = _modules("ui")
@@ -430,9 +529,14 @@ def test_ui_does_not_use_retired_wording() -> None:
     這條攔的是**漏改**。2026-08-20 把「週期排程」改成「定期收支」時，分頁標籤與按鈕都
     改了，但重製確認框裡那份 `COUNT_LABELS` 差點漏掉 —— 那一行只有在按下「重製」時
     才看得到，實機點過去的機率很低。
+
+    **2026-08-22 把掃描範圍從 `ui/` 擴到 `application/`。** 那一層的
+    `Result.ok("排程已儲存。")` 與 `fallback_message` 一樣會走到畫面上
+    （`recurring.py::_finish()` 失敗時直接進 `QMessageBox`），而舊的守門只掃 `ui/`，
+    於是「定期收支」這一頁存檔失敗時跳出來的訊息裡寫的是「排程」。
     """
     offenders: list[str] = []
-    for path in _modules("ui"):
+    for path in _modules("ui", "application"):
         for value in _value_strings(path):
             for retired, replacement in RETIRED_UI_WORDS.items():
                 if retired in value:
@@ -441,7 +545,40 @@ def test_ui_does_not_use_retired_wording() -> None:
                         f"（「{retired}」應為「{replacement}」）"
                     )
     if offenders:
-        pytest.fail("UI 字串裡還有淘汰的用詞：\n" + "\n".join(offenders))
+        pytest.fail("使用者看得到的字串裡還有淘汰的用詞：\n" + "\n".join(offenders))
+
+
+def test_no_chinese_sentence_ends_with_a_half_width_period() -> None:
+    """中文句子的句號要用全形「。」。
+
+    這條守的是一個**只有一處、但會回來**的錯誤：`automation.py` 的
+    「待確認項目已載入.」在整個專案裡是唯一的半形句號，而它就長在一句中文後面。
+    半形句號在中文字旁邊會貼著上一個字，看起來像雜訊而不是標點。
+
+    只認「CJK 字元 ＋ 半形句號 ＋ 結尾」這一種形狀 —— 英文縮寫、副檔名、版本號、
+    路徑都不會誤判。
+    """
+    offenders: list[str] = []
+    for path in _modules("ui", "application", "domain", "infrastructure", "app"):
+        for value in _value_strings(path):
+            text = value.rstrip()
+            if len(text) >= 2 and text.endswith(".") and _is_cjk(text[-2]):
+                offenders.append(f"  {path.relative_to(PROJECT_ROOT)}：{value!r}")
+    if offenders:
+        pytest.fail("中文句尾要用全形句號「。」：\n" + "\n".join(offenders))
+
+
+def _is_cjk(char: str) -> bool:
+    return "一" <= char <= "鿿"
+
+
+def test_the_half_width_period_detector_can_tell_the_difference() -> None:
+    """陽性對照：偵測器要抓得到中文句尾的半形句號，又不能誤傷英文與版本號。"""
+    assert _is_cjk("載") and not _is_cjk("d") and not _is_cjk("。")
+    caught = "待確認項目已載入."
+    assert caught.endswith(".") and _is_cjk(caught[-2]), "抓不到目標形狀"
+    for innocent in ("0.20.0", "ledger.sqlite3", "e.g.", "已載入。"):
+        assert not (innocent.endswith(".") and _is_cjk(innocent[-2])), innocent
 
 
 # 日期欄的唯一工廠。`QDateEdit` 直接建出來的話，`date_field()` 裡那些防護

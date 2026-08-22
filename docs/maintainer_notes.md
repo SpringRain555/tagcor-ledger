@@ -36,6 +36,9 @@
 | 表格被切掉、欄寬不對 | `ui/widgets/table.py` 的 `fit_to_contents` / `fit_to_rows` | `tests/ui/test_layout.py` |
 | 金額顏色不對、紅綠被壓成白 | `ui/widgets/table.py::amount_color` ＋ QSS**不得**設 `color` | `test_amount_colours_survive_the_stylesheet` |
 | 錯誤訊息看不懂、太籠統、印出英文碼或 SQLite 原文 | [`application/failures.py`](../src/tagcor_ledger/application/failures.py) 的 `ERROR_MESSAGES`（碼 → 中文，一個碼一個地方） | `tests/unit/test_failure_messages.py`、`tests/unit/test_error_codes.py` |
+| 例外沒被接住、跳出全域錯誤對話框而不是中文 | [`application/failures.py`](../src/tagcor_ledger/application/failures.py) 的 `STORE_FAILURES` / `DOMAIN_FAILURES`。`NotFoundError` 繼承 `RuntimeError`，自己拼的 tuple 接不到它 | `tests/integration/test_store_failures.py`、`test_the_application_layer_catches_store_failures_by_name` |
+| 到期日跳月、月底的日期算錯 | [`domain/dates.py`](../src/tagcor_ledger/domain/dates.py) | `tests/unit/test_dates.py` |
+| 模板或定期收支存成空 id | [`stores/drafts.py`](../src/tagcor_ledger/infrastructure/stores/drafts.py)`::validate_draft` | `test_phase2_automation.py` 的空主鍵那兩條 |
 | 想加一個新的 `raise ValueError("SOME_CODE")` | 加完要在 `ERROR_MESSAGES` 補一列，並在 [error-codes](architecture/error-codes.md) 補一列 | 兩條都會紅，訊息會告訴你缺哪一個 |
 | 備份刪不掉、清單看不懂哪一份是哪一份 | `infrastructure/maintenance.py`（每個 `sqlite3.connect()` 都要包 `closing`）＋ `ui/formatting/messages.py::backup_row_text` | `tests/integration/test_backup_deletion.py`、`tests/unit/test_formatting.py` |
 | 到期日跳月、續存日期不對、每月領息少一期 | `domain/dates.py`（`add_months` 夾月底、`next_due_date` 夾 `anchor_day`，**兩者語意不同**） | `tests/unit/test_dates.py` |

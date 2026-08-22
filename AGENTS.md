@@ -62,8 +62,28 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - **`LedgerController` 由 `ui/controller/` 底下的 section 用繼承組起來**，比照 `LedgerStore`。`__init__.py` 只放組裝、不得定義任何方法；section 之間**彼此不呼叫對方**（唯一的例外是 `OverviewSection`，它明說自己是聚合層）。有測試守著。
 - **「一列長什麼樣」只由 `ui/formatting/` 決定**，`ui/pages/` 不得自己定義會 `return [...]` 的 `*_values`。同一個狀態有兩個拼法，兩張表就會對同一筆資料講不同的話。
 - 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔（資料庫路徑本身不能可靠地存在資料庫裡）。
+- **`application/` 的 `except` 只能用 `failures.py` 的兩個具名常數**，見下一節。
 
 **這幾條由 `tests/unit/test_architecture.py` 用 AST 守著**，不是只寫在文件上。同一份測試還會擋檔案過大：`src/` **700 行**、`tests/` **1200 行**（測試本來就比實作長，但 2026-08-22 拆掉的那個 UI 測試檔已經 2,153 行 66 條、橫跨八個頁面，因為當時只掃 `src/`）。完整的檔案地圖見 `docs/architecture/overview.md`。
+
+### `application/` 怎麼接例外
+
+**只用 `application/failures.py` 的兩個常數**，不要自己拼 tuple：
+
+| 常數 | 內容 | 用在哪 |
+|---|---|---|
+| `STORE_FAILURES` | `(ValueError, NotFoundError, sqlite3.Error)` | **單層** handler —— 包一個 store 呼叫，整包交給 `failure()` |
+| `DOMAIN_FAILURES` | `(ValueError, NotFoundError)` | **兩層寫入路徑**的第一層 |
+
+**`NotFoundError` 繼承 `RuntimeError` 不是 `ValueError`**，所以 `except (ValueError, sqlite3.Error)` 接不到它。2026-08-22 盤點時，這一層有 70 個 handler、17 種形狀，其中 **15 個包著會丟 `NotFoundError` 的 store 方法卻沒有列它** —— 真的觸發時使用者看到的是全域錯誤對話框，不是中文。`MoneyError`（繼承 `ValueError`）與 `sqlite3.IntegrityError`（繼承 `sqlite3.Error`）**不要另外列**，那只是雜訊。
+
+**兩層寫入路徑**是刻意的，不要為了整齊把它壓成一層：交易與餘額盤點的寫入要分開講「內容有問題」（第一層，`failure()` 保留原碼）與「內容沒問題但寫不進去」（第二層，`except sqlite3.Error` ＋ 一句「什麼都沒變」）。守門用**結構**認第二層（同一個 `try` 裡第一個 handler 是 `DOMAIN_FAILURES`），不靠名單。
+
+三種**允許不一樣**的情形，都要在 `test_architecture.py` 的名單裡帶一句理由：
+
+1. **還沒碰到 store** —— 解析金額、建列舉。那是輸入驗證，不是寫入層失敗。
+2. **刻意收窄** —— `catalogs.create` 的 `(ValueError, sqlite3.IntegrityError)`：走到那裡表示上面三道重名檢查都沒攔到，放寬會把真正的 bug 藏成一句客氣的中文。
+3. **整個模組不經過 store** —— `diagnostics.py`（自己開連線跑 PRAGMA）、`reference.py`（另一個唯讀資料庫）。
 
 ## 重要規則
 

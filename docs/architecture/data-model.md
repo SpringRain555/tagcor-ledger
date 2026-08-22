@@ -65,6 +65,9 @@ erDiagram
 
 > **`adjustment` 從 v1 就在 `CHECK` 約束裡，但沒有任何程式碼會建立它**
 > （見 [狀態機 §1](state-machines.md)）。圖上照實列出，免得有人以為漏實作了什麼。
+> `accounts.account_type` 同理 —— 永遠是 `cash`，介面沒有地方能改。
+> 兩者都由 `tests/unit/test_reserved_schema.py` 守著「保持沒有人用」，並在
+> [REQ-0010](../requirements/REQ-0010-reconciliation-gap.md) 的 2026-10 評估時一併處理。
 
 Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snapshot`。
 

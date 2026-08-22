@@ -7,11 +7,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import asdict
-import sqlite3
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.application.failures import failure
+from tagcor_ledger.application.failures import STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import (
     RecurringSchedule,
@@ -50,7 +49,7 @@ class AutomationService:
         try:
             saved = self.store.save_template(template)
             return Result.ok("模板已儲存。", details={"template": asdict(saved)})
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="TEMPLATE_SAVE_FAILED",
@@ -86,7 +85,7 @@ class AutomationService:
         try:
             self.store.archive_template(template_id)
             return Result.ok("模板已封存。")
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="TEMPLATE_ARCHIVE_FAILED",
@@ -98,7 +97,7 @@ class AutomationService:
         try:
             self.store.set_template_order(ordered_ids)
             return Result.ok("順序已更新。")
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="TEMPLATE_REORDER_FAILED",
@@ -107,7 +106,7 @@ class AutomationService:
 
     def list_schedules(self, *, include_archived: bool = False) -> Result:
         return Result.ok(
-            "排程已載入。",
+            "定期收支已載入。",
             details={
                 "schedules": [
                     asdict(item)
@@ -119,12 +118,12 @@ class AutomationService:
     def save_schedule(self, schedule: RecurringSchedule) -> Result:
         try:
             saved = self.store.save_schedule(schedule)
-            return Result.ok("排程已儲存。", details={"schedule": asdict(saved)})
-        except (ValueError, sqlite3.Error) as exc:
+            return Result.ok("定期收支已儲存。", details={"schedule": asdict(saved)})
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="SCHEDULE_SAVE_FAILED",
-                fallback_message="排程無法儲存。請匯出診斷資訊回報。",
+                fallback_message="定期收支無法儲存。請匯出診斷資訊回報。",
             )
 
     def new_schedule(
@@ -163,12 +162,12 @@ class AutomationService:
     def archive_schedule(self, schedule_id: str) -> Result:
         try:
             self.store.archive_schedule(schedule_id)
-            return Result.ok("排程已封存。")
-        except (ValueError, sqlite3.Error) as exc:
+            return Result.ok("定期收支已封存。")
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="SCHEDULE_ARCHIVE_FAILED",
-                fallback_message="排程無法封存。請匯出診斷資訊回報。",
+                fallback_message="定期收支無法封存。請匯出診斷資訊回報。",
             )
 
     def generate_due(self, *, through_date: str | None = None) -> Result:
@@ -181,7 +180,7 @@ class AutomationService:
                 "到期項目已更新。",
                 details={"generated": generated, "has_more": has_more},
             )
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="SCHEDULE_GENERATE_FAILED",
@@ -191,7 +190,7 @@ class AutomationService:
     def list_pending(self) -> Result:
         items: list[ScheduledOccurrence] = self.store.list_occurrences(status="pending")
         return Result.ok(
-            "待確認項目已載入.",
+            "待確認項目已載入。",
             details={"occurrences": [asdict(item) for item in items]},
         )
 
@@ -215,7 +214,7 @@ class AutomationService:
                 description=description,
             )
             return Result.ok("待確認項目已更新。")
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="OCCURRENCE_UPDATE_FAILED",
@@ -229,7 +228,7 @@ class AutomationService:
                 "待確認項目已入帳。",
                 details={"transaction_id": transaction_id},
             )
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="OCCURRENCE_CONFIRM_FAILED",
@@ -240,7 +239,7 @@ class AutomationService:
         try:
             self.store.skip_occurrence(occurrence_id)
             return Result.ok("待確認項目已略過。")
-        except (ValueError, sqlite3.Error) as exc:
+        except STORE_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="OCCURRENCE_SKIP_FAILED",
@@ -257,7 +256,7 @@ class AutomationService:
             try:
                 self.store.confirm_occurrence(item.occurrence_id)
                 confirmed += 1
-            except (ValueError, sqlite3.Error):
+            except STORE_FAILURES:
                 failed += 1
         return Result.ok(
             "批次確認完成。",
