@@ -74,6 +74,45 @@ v0.20.0 把 `add_months()` 與 `next_due_date()` 的兩份月底夾取搬到 `do
 
 **八個頁面的實機截圖與 v0.20.0 逐位元組相同。**
 
+### 走過那 14 行「有寫、但沒有任何測試碰過」的防禦分支
+
+行追蹤掃出來的缺口，分兩種：
+
+- **UI 走不到但 store 走得到** —— `CURRENCY_MISMATCH`（介面沒有建外幣帳戶的入口，
+  但 `create_account(currency=...)` 有）、`CATEGORY_NOT_ACTIVE`、`_refresh_fts()`
+  的 early return。
+- **UI 那層擋過了但 store 那道沒人驗** —— `TRANSFER_SAME_ACCOUNT`。兩道檢查是刻意的，
+  但只測上面那道的話，下面那道被刪掉不會有任何東西變紅。
+
+加上 `SettingsService.update()` 的三個驗證分支（含 `DEFAULT_ACCOUNT_NOT_ACTIVE`
+的「不存在」與「已封存」兩條路），`application/settings.py`、`stores/base.py`、
+`domain/dates.py`、`domain/deposits.py` 現在**四個都是全覆蓋**。
+整體行覆蓋率 85.1% → 85.9%。
+
+### `derive_annual_rate_ppm` 沒有效能問題（量出來的）
+
+它拿 `suggest_interest_minor()` 做二分搜尋，240 期零存整付約 4,800 次 `Decimal`
+冪運算 —— 帳面上很嚇人。實測：
+
+| 計息方式 | 12 期 | 60 期 | 240 期 |
+|---|---|---|---|
+| 整存整付 | 0.047 ms | 0.048 ms | 0.046 ms |
+| 存本取息 | 0.033 ms | 0.034 ms | 0.031 ms |
+| 零存整付 | 0.167 ms | 0.844 ms | **3.832 ms** |
+
+**最壞 3.8 毫秒。** 迭代乘法或封閉解能砍成 1/240，但 `Decimal` 的 `**` 是照 context
+精度正確捨入的，換成累乘會累積誤差 —— 為了省 3.8 毫秒去動利息的進位不划算。
+改成在 `performance` marker 底下釘一個 50 ms 的上界，這件事就此關閉。
+
+### pre-commit 加上真正的閘門
+
+這個 repo 沒有 remote，GitHub Actions 沒地方跑，本機 hook 是唯一能自動化的。
+既有的 `.githooks/pre-commit`（共用慣例，只擋 >5 MB）後面加一段本專案專屬的
+ruff ＋ mypy —— 實測加起來不到 2 秒。
+
+**pytest 刻意不進去**：整包 52 秒會讓人習慣性打 `--no-verify`，而一個被習慣性繞過的
+閘門比沒有閘門更糟，它讓人以為有守。
+
 ### 其他
 
 - 全專案唯一一個半形句號（「待確認項目已載入.」）改成全形，並加了一條守門 ——

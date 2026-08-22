@@ -49,4 +49,38 @@ MSG
 	exit 1
 fi
 
+# ============================================================================
+# 以下為 tagcor-ledger 專屬。**上面那一段是 D:\Projects 的共用慣例，不要改它。**
+#
+# 為什麼是 hook 而不是 CI：這個 repo 沒有 remote，GitHub Actions 沒地方跑。
+# 本機 hook 是唯一能自動化的閘門。
+#
+# 為什麼只有 ruff 與 mypy：實測 ruff 0.1 秒、mypy 1.6 秒，加起來感覺不到。
+# **pytest 不進來** —— 整包 52 秒，那會讓人習慣性打 --no-verify，
+# 而一個被習慣性繞過的閘門比沒有閘門更糟（它讓人以為有守）。
+# 完整驗證仍然是 .\Verify.ps1 -Ui，那是發版前的事。
+# ============================================================================
+
+PYTHON='<conda-root>/envs/tagcor-ledger/python.exe'
+
+# 找不到直譯器就放行 —— 在別台機器 clone 下來時不該連 commit 都不能做。
+if [ ! -x "$PYTHON" ]; then
+	echo "  提示：找不到專案的 conda 直譯器，略過 lint／型別閘門。"
+	exit 0
+fi
+
+if ! "$PYTHON" -m ruff check --no-cache . ; then
+	echo ""
+	echo "✗ ruff 沒過。修好再 commit，或 git commit --no-verify。"
+	exit 1
+fi
+
+# 這裡**不加 --no-incremental**（Verify.ps1 才加）。hook 要快，
+# 而 mypy 的快取判斷對「檔案剛改完就檢查」這個情境是準的。
+if ! "$PYTHON" -m mypy src ; then
+	echo ""
+	echo "✗ mypy --strict 沒過。修好再 commit，或 git commit --no-verify。"
+	exit 1
+fi
+
 exit 0

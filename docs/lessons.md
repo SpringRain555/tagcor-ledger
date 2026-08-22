@@ -16,6 +16,31 @@
 
 ---
 
+## 2026-08-22 按行號切檔案，把 `@dataclass` 留在了原本那個檔案
+
+**情境**：把 `application/deposits.py`（658 行）拆成套件。方法本體**逐行搬、一個字不改**
+是刻意的 —— 重打就等於重寫，而重寫沒有辦法證明行為沒變。
+
+**做了什麼**：用 AST 取出每個區塊的 `lineno`／`end_lineno`，照行號切原始碼。
+`DepositPosting` 的 `ClassDef.lineno` 是 73，於是切了 73–80。
+
+**為什麼失敗**：**`ClassDef.lineno` 指的是 `class` 那一行，不是裝飾器那一行。**
+`@dataclass(frozen=True, slots=True)` 在第 72 行，被留在原地跟著原檔一起刪掉了。
+搬過去的 `DepositPosting` 變成一個只有註解的普通 class —— 它照樣 import 得進來、
+照樣有型別註解看起來很正常，但 `DepositPosting(entry_type=..., ...)` 會炸。
+
+ruff 不會抓（語法完全合法），測試也不會先抓到（那條路要跑到才炸）。
+**先紅的是 `mypy --strict`：20 個 "Unexpected keyword argument"。**
+
+**結論**：按行號切帶裝飾器的定義時，起點要用 `min(node.lineno, *[d.lineno for d in
+node.decorator_list])`。或者更簡單：切完之後跑 mypy，它會告訴你少了什麼。
+
+**不要再做**：
+- 不要假設 `node.lineno` 涵蓋裝飾器。`ast` 的 `decorator_list` 在節點外面。
+- 拆檔之後**不要只跑 pytest 就宣告完成**。這次是 mypy 先紅的 —— 如果那個 class
+  剛好只在某條沒被測到的路徑上用，pytest 會全綠。三道閘門（ruff／mypy／pytest）
+  各自看得到不同的東西，這就是為什麼 `Verify.ps1` 三個都跑。
+
 ## 2026-08-22 陽性對照全部回報 OK，然後 `Verify.ps1` 紅了，而 `git diff` 是空的
 
 **情境**：M1 加了兩條「保留欄位不得被使用」的守門，寫了陽性對照腳本逐一破壞、確認會紅。

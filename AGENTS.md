@@ -212,6 +212,10 @@ python -m tagcor_ledger --gui
 .\Verify.ps1 -Performance    # 加跑 20 萬筆效能測試
 ```
 
+**`git commit` 會自動跑 ruff ＋ mypy**（`.githooks/pre-commit`，約 2 秒）。這個 repo 沒有 remote，所以本機 hook 是唯一能自動化的閘門。**pytest 刻意不在 hook 裡** —— 整包 52 秒會讓人習慣性打 `--no-verify`，而一個被習慣性繞過的閘門比沒有閘門更糟。完整驗證仍然是 `.\Verify.ps1 -Ui`。
+
+hook 沒生效的話跑一次 `git config core.hooksPath .githooks`。
+
 ## 語言與編碼
 
 - **中文一律繁體。** 不得混入簡體字。`tests/unit/test_traditional_chinese.py` 是自動守門，`Verify.ps1` 每次都會跑。它只收「簡體專用」字，繁簡同形的字（量、常、伙、台…）不列入，所以零誤報。
