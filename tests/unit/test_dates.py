@@ -66,7 +66,7 @@ def test_clamping_is_not_cumulative() -> None:
     ("year", "month", "expected"),
     [(2026, 1, 31), (2026, 2, 28), (2028, 2, 29), (2026, 4, 30), (2026, 12, 31)],
 )
-def testdays_in_month(year: int, month: int, expected: int) -> None:
+def test_days_in_month(year: int, month: int, expected: int) -> None:
     """12 月是特例（要跨年才算得出下個月的第一天），所以一定要有那一格。"""
     assert days_in_month(year, month) == expected
 

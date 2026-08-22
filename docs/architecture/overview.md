@@ -49,7 +49,9 @@ src/tagcor_ledger/
 │   ├── catalogs.py     帳戶、類別／項目
 │   ├── balance.py      餘額盤點與未解釋差額
 │   ├── automation.py   模板與定期收支
-│   ├── deposits.py     定存：計息、到期、續存
+│   ├── deposits/       定存。用繼承把 contracts（合約與期）／events（產生待確認）／
+│   │                   postings（確認入帳與續約）組成 DepositService；
+│   │                   base（共同基底＋DepositPosting）、views（送給 UI 的 dict）
 │   ├── reference.py    離線法規庫（唯讀）
 │   ├── settings.py     ledger 內的一般偏好
 │   ├── diagnostics.py  診斷資訊匯出
@@ -94,6 +96,11 @@ src/tagcor_ledger/
 `from tagcor_ledger.ui.controller import LedgerController` 現在解析到套件的 `__init__`。
 section 之間**彼此不呼叫對方**，唯一的例外是 `OverviewSection`：資產總覽這一頁的內容
 就是「帳戶 ＋ 定存 ＋ 待確認 ＋ 盤點差額」湊起來的，所以它明說自己是聚合層並繼承那幾段。
+
+**`DepositService` 是第三個。** 2026-08-22 `application/deposits.py` 658 行、
+`DepositService` 裝了合約／期／事件／入帳規劃四件事，拆成 `application/deposits/` 套件。
+這一個**沒有聚合層例外** —— 拆之前用 AST 確認過二十個方法的 `self.*` 呼叫全部落在
+自己的 section 裡，`test_no_deposit_section_calls_another_section` 守著它保持這樣。
 
 **「一筆交易長什麼樣」的知識集中在 `StoreBase._write_transaction()` /
 `_write_transfer()`。** 它們寫 transactions 一列、posting（轉帳兩列）、allocation、
@@ -168,12 +175,16 @@ sequenceDiagram
 | `test_only_one_module_writes_a_transaction` | 交易、FTS 索引與稽核列各只有一個寫入點 |
 | `test_every_store_lives_in_the_stores_package` | store 一律放在 `infrastructure/stores/` |
 | `test_the_store_package_reexports_exactly_what_ledger_store_composes` | `stores/__init__.py` 的 `__all__` 與 `LedgerStore` 的基底一致 |
-| `test_the_controller_assembly_file_holds_no_logic` | `ui/controller/__init__.py` 不得定義任何方法 |
+| `test_the_assembly_file_holds_no_logic` | 用繼承組裝的 `__init__.py`（controller、deposits）不得定義任何方法 |
 | `test_every_controller_method_lives_in_a_section_module` | controller 的方法都住在 `ui/controller/` 底下 |
+| `test_no_deposit_section_calls_another_section` | `application/deposits/` 的 section 之間不得互相呼叫 |
 | `test_no_page_builds_its_own_table_row` | 「一列長什麼樣」只由 `ui/formatting/` 決定 |
 | `test_no_module_grows_back_into_a_monolith` | 單一模組不得超過 700 行 |
 | `test_extractor_separates_documentation_from_values` | **陽性對照**：純字串陳述算文件、不算值 |
-| `test_ui_does_not_use_retired_wording` | `ui/` 的字串常數不得出現已淘汰的 UI 用詞 |
+| `test_ui_does_not_use_retired_wording` | `ui/` 與 `application/` 的字串常數不得出現已淘汰的 UI 用詞 |
+| `test_no_chinese_sentence_ends_with_a_half_width_period` | 中文句尾要用全形「。」 |
+| `test_the_application_layer_catches_store_failures_by_name` | `application/` 的 `except` 只能用 `STORE_FAILURES` / `DOMAIN_FAILURES` |
+| `test_the_handler_extractor_sees_both_tiers` | **陽性對照**：認不出兩層寫入路徑的話，上一條會把第二層全部誤報 |
 
 700 行那條是**煙霧偵測器不是規矩**：2026-08 拆檔前 `main_window_phase12.py` 長到
 2,114 行、`sqlite_store.py` 長到 1,381 行，都是沒人注意就長大的。

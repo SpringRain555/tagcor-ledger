@@ -4,14 +4,12 @@
 任何東西報錯 —— 所以這裡有測試盯著。
 """
 
-from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QTableView,
 )
 
-from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.navigation import PageId
 from tagcor_ledger.ui.widgets.sidebar import BADGE_ROLE
@@ -60,15 +58,12 @@ def _make_deposit(controller) -> None:
     assert result.success, result.message
 
 
-def test_the_inbox_is_one_table_with_a_source_column(qtbot, tmp_path: Path) -> None:
+def test_the_inbox_is_one_table_with_a_source_column(window) -> None:
     """定期收支與定存**在同一張表**，靠「來源」欄分辨。
 
     以前是上下兩張表加六顆按鈕：「我還有幾件事要處理」要自己把兩個數字加起來，
     按按鈕之前還得先想清楚哪三顆是對上面那張表的。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     _make_schedule(controller, "房租", "2026-06-01")
@@ -93,14 +88,11 @@ def test_the_inbox_is_one_table_with_a_source_column(qtbot, tmp_path: Path) -> N
     assert all("/" in date_text for date_text in dates), dates
 
 
-def test_the_inbox_explains_itself_when_it_is_empty(qtbot, tmp_path: Path) -> None:
+def test_the_inbox_explains_itself_when_it_is_empty(window) -> None:
     """**這一段文字就是「我忘記這頁是做什麼的」的正解。**
 
     空表格加三顆停用的按鈕說不出任何事情。沒有項目時整組操作收起來，換成說明。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     window.show_page(PageId.INBOX)
 
     page = window.inbox
@@ -125,14 +117,11 @@ def test_the_inbox_explains_itself_when_it_is_empty(qtbot, tmp_path: Path) -> No
     assert page.confirm_button.isVisibleTo(page)
 
 
-def test_confirming_dispatches_by_source(qtbot, tmp_path: Path, monkeypatch) -> None:
+def test_confirming_dispatches_by_source(window, monkeypatch) -> None:
     """「確認入帳」對定期收支開修改對話框，對定存問實際金額。
 
     兩種來源在同一張表裡，所以分派錯了不會有任何錯誤訊息 —— 只會開錯一個視窗。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
     _make_deposit(controller)
     assert controller.generate_due().success
@@ -161,17 +150,12 @@ def test_confirming_dispatches_by_source(qtbot, tmp_path: Path, monkeypatch) -> 
     assert controller.inbox_count() == before - 1
 
 
-def test_confirm_all_leaves_deposits_alone_and_says_so(
-    qtbot, tmp_path: Path, monkeypatch
-) -> None:
+def test_confirm_all_leaves_deposits_alone_and_says_so(window, monkeypatch) -> None:
     """**「全部確認」不碰定存。**
 
     定存的權威金額在存摺上，建議值只是試算 —— 批次套用試算值等於替使用者決定了一個
     他沒看過的數字。但也不能默默跳過，訊息要講清楚還剩幾件。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
     _make_schedule(controller, "房租", "2026-06-01")
     _make_deposit(controller)
@@ -190,17 +174,12 @@ def test_confirm_all_leaves_deposits_alone_and_says_so(
     assert remaining == {"deposit"}, f"定存不該被批次確認掉：{remaining}"
 
 
-def test_generate_button_only_shows_up_when_there_is_more_to_generate(
-    qtbot, tmp_path: Path
-) -> None:
+def test_generate_button_only_shows_up_when_there_is_more_to_generate(window) -> None:
     """「繼續產生」平常不出現。
 
     啟動時本來就會產生一次，所以平常按它什麼都不會發生 —— **一顆按了沒反應的按鈕
     比沒有按鈕更糟**。只有真的還有漏期時才浮出一行提示與一顆行內按鈕。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     page = window.inbox
 
     assert not window.controller.generation_has_more
@@ -213,16 +192,11 @@ def test_generate_button_only_shows_up_when_there_is_more_to_generate(
     assert "漏期" in page.more_hint.text()
 
 
-def test_confirming_an_inbox_item_refreshes_the_transaction_list(
-    qtbot, tmp_path: Path
-) -> None:
+def test_confirming_an_inbox_item_refreshes_the_transaction_list(window) -> None:
     """待確認按下確認入帳會建立**真的交易**，所以交易紀錄與側邊欄數字都要跟著動。
 
     以前 `inbox.changed` 只接到側邊欄徽章，於是確認完房租切到交易紀錄，那一筆不在那裡。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     schedule = controller.new_schedule(

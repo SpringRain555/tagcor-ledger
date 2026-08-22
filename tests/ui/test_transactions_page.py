@@ -4,7 +4,6 @@
 那會把紅綠壓成同一個白，而這裡就是抓那件事的地方。
 """
 
-from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -12,16 +11,11 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.ui import colors
-from tagcor_ledger.ui.main_window import MainWindow
 
 
-def test_action_buttons_are_disabled_until_a_row_is_selected(qtbot, tmp_path: Path) -> None:
+def test_action_buttons_are_disabled_until_a_row_is_selected(window) -> None:
     """沒選取就按按鈕，以前是**完全沒有反應** —— 沒有訊息、沒有變化，像當掉。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
 
     table = window.transactions.table
     buttons = [
@@ -46,15 +40,12 @@ def test_action_buttons_are_disabled_until_a_row_is_selected(qtbot, tmp_path: Pa
     assert all(button.isEnabled() for button in buttons)
 
 
-def test_transaction_amounts_are_signed_right_aligned_and_coloured(qtbot, tmp_path: Path) -> None:
+def test_transaction_amounts_are_signed_right_aligned_and_coloured(window) -> None:
     """金額欄是整個帳本最常被掃的一欄。
 
     QSS 的 `color` / `selection-color` 會蓋掉 model 的 `ForegroundRole`，
     所以這裡連**選取狀態**都要驗 —— 2026-08-19 截圖比對時就是這樣發現紅綠沒出現的。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     for entry_type, amount in (("expense", "1200"), ("income", "36000")):
@@ -118,16 +109,13 @@ def _rendered_text_colour(table, row: int, column: int) -> str:
     return furthest.upper()
 
 
-def test_amount_colours_survive_the_stylesheet(qtbot, tmp_path: Path) -> None:
+def test_amount_colours_survive_the_stylesheet(window, qtbot) -> None:
     """**這條要看畫出來的像素，不能只看 model。**
 
     QSS 的 `QTableView::item { color: ... }` 會蓋掉 model 的 `ForegroundRole`：
     model 照樣回報紅色，畫面上卻是白的。只驗 model 的測試在那個 bug 下**照樣通過** ——
     2026-08-19 實際注入驗證過。所以這裡把儲存格畫出來取像素。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
     for entry_type, amount in (("expense", "1200"), ("income", "36000")):
         controller.submit(
@@ -154,16 +142,13 @@ def test_amount_colours_survive_the_stylesheet(qtbot, tmp_path: Path) -> None:
         )
 
 
-def test_duplicating_a_transaction_keeps_the_original_item(qtbot, tmp_path: Path) -> None:
+def test_duplicating_a_transaction_keeps_the_original_item(window) -> None:
     """「複製到記帳」要帶回**原本那個項目**，不是該類別的第一個。
 
     交易紀錄送出的 dict 裡 `category_id` 是類別（第一層）、`subcategory_id` 才是項目，
     而記帳頁的 `_select_category()` 要的是項目 id。以前餵的是父層，比對必然落空，
     結果類別對了、項目卻被靜靜換成第一個 —— 而 README 明寫會帶入「類別/項目」。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     created = controller.create_category("早餐", "cat_food")

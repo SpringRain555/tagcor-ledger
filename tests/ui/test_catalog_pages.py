@@ -18,7 +18,7 @@ from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.widgets.simple_form import SimpleFormDialog, TextField
 
 
-def test_a_category_with_items_can_be_selected_and_renamed(qtbot, tmp_path: Path, monkeypatch) -> None:
+def test_a_category_with_items_can_be_selected_and_renamed(window, monkeypatch) -> None:
     """**有子項目的類別必須有自己的一列。**
 
     舊的 `CatalogPage` 只在類別「沒有」子項目時才把它自己加成一列，所以「伙食」永遠
@@ -28,9 +28,6 @@ def test_a_category_with_items_can_be_selected_and_renamed(qtbot, tmp_path: Path
     這裡不能只斷言「畫面上有『伙食』兩個字」—— 那在壞掉的版本裡照樣成立。
     要比對的是**那一列的 category_id**。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     page = window.operation_settings.categories
@@ -74,14 +71,11 @@ def test_a_category_with_items_can_be_selected_and_renamed(qtbot, tmp_path: Path
     assert window.transactions.model.index(0, 3).data() == "伙食費 / 7-11"
 
 
-def test_operation_settings_has_six_tabs_in_the_agreed_order(qtbot, tmp_path: Path) -> None:
+def test_operation_settings_has_six_tabs_in_the_agreed_order(window) -> None:
     """**順序本身就是分組**：前四個是記帳會用到的名冊，後兩個是會自己到期的東西。
 
     所以這裡連順序一起釘住，不只是「有沒有這六個」。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
 
     tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
     assert tabs is not None
@@ -105,15 +99,12 @@ def test_operation_settings_has_six_tabs_in_the_agreed_order(qtbot, tmp_path: Pa
     ]
 
 
-def test_the_word_schedule_no_longer_appears_in_the_ui(qtbot, tmp_path: Path) -> None:
+def test_the_word_schedule_no_longer_appears_in_the_ui(window) -> None:
     """「週期排程」是實作的名字，使用者想的是「每個月會自動扣款的那些」。
 
     程式識別字 `recurring_schedules` / `schedule_id` **不動** —— 那是 schema，
     改它要 migration，而使用者看不到它。這條只掃畫面上的字。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
 
     texts = [
         button.text() for button in window.operation_settings.findChildren(QPushButton)
@@ -127,11 +118,8 @@ def test_the_word_schedule_no_longer_appears_in_the_ui(qtbot, tmp_path: Path) ->
     assert not offenders, f"畫面上還有「排程」：{offenders}"
 
 
-def test_items_page_filters_by_category(qtbot, tmp_path: Path) -> None:
+def test_items_page_filters_by_category(window) -> None:
     """項目一多就找不到自己要的那一個，所以「項目」分頁上方有類別篩選。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     transport = controller.create_category("交通")
@@ -164,11 +152,8 @@ def test_items_page_filters_by_category(qtbot, tmp_path: Path) -> None:
     assert page.model.rowCount() == 2
 
 
-def test_categories_page_counts_its_items(qtbot, tmp_path: Path) -> None:
+def test_categories_page_counts_its_items(window) -> None:
     """「項目數」是一起查出來的，不是每個類別再查一次。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     assert window.controller.create_category("早餐店", "cat_food").success
     assert window.controller.create_category("交通").success
 
@@ -206,17 +191,12 @@ def test_the_simple_form_disables_ok_until_required_fields_are_filled(qtbot) -> 
     assert dialog.values() == {"name": "郵局", "balance": "0"}
 
 
-def test_adding_an_item_asks_everything_in_one_dialog(
-    qtbot, tmp_path: Path, monkeypatch
-) -> None:
+def test_adding_an_item_asks_everything_in_one_dialog(window, monkeypatch) -> None:
     """新增項目**只開一次對話框**，而且類別是用 id 帶的不是用名字反查的。
 
     舊版是兩個連續的 `QInputDialog`：先選上層類別按 OK，再打名稱按 OK ——
     取消第二個，第一個選的類別就靜靜消失了。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
     assert controller.create_category("交通").success
     transport_id = next(
@@ -249,13 +229,8 @@ def test_adding_an_item_asks_everything_in_one_dialog(
     assert "捷運" in children, f"項目沒有建在「交通」底下：{children}"
 
 
-def test_adding_an_account_asks_everything_in_one_dialog(
-    qtbot, tmp_path: Path, monkeypatch
-) -> None:
+def test_adding_an_account_asks_everything_in_one_dialog(window, monkeypatch) -> None:
     """新增帳戶也是一次問完，而且第一格叫「帳戶名稱」不是「名稱」。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
 
     asked: list[list[Any]] = []
     monkeypatch.setattr(
@@ -273,13 +248,17 @@ def test_adding_an_account_asks_everything_in_one_dialog(
 
 
 def test_creating_a_duplicate_category_says_which_name_clashed(
-    qtbot, tmp_path: Path
+    window,
+    qtbot,
+    tmp_path: Path,
 ) -> None:
     """同名衝突要有自己的錯誤碼與說法，不要塌成一句「請確認名稱沒有重複且上層類別有效」。
 
     以前三種失敗共用 `CATEGORY_CREATE_FAILED`，訊息後面還接著 SQLite 原文
     —— 一句同時指控兩個欄位、又沒說是哪個名字重複的話。
     """
+    # 不用 `window` fixture：這一條刻意**不 `show()`**，它驗的是「還沒顯示就先呼叫
+    # 建立」的那條路。fixture 一律會 show。
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     controller = window.controller
@@ -303,17 +282,12 @@ def _column(page: Any, column: int) -> list[str]:
     ]
 
 
-def test_catalog_pages_filter_by_search_status_and_parent(
-    qtbot, tmp_path: Path
-) -> None:
+def test_catalog_pages_filter_by_search_status_and_parent(window) -> None:
     """搜尋、狀態、所屬類別三個條件都要真的縮短清單。
 
     **項目也要能用類別名搜到** —— 打「交通」就該列出交通底下的每一項，
     不然使用者得先知道項目叫什麼才找得到它。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     transport = controller.create_category("交通")
@@ -359,7 +333,7 @@ def test_catalog_pages_filter_by_search_status_and_parent(
     assert "7-11" in _column(page, 1)
 
 
-def test_the_header_is_no_longer_a_sorting_entry_point(qtbot, tmp_path: Path) -> None:
+def test_the_header_is_no_longer_a_sorting_entry_point(window) -> None:
     """點表頭排序在 v0.19.0 拿掉了，排序只有「排序…」視窗一個入口。
 
     以前兩種入口並存：點表頭會把使用者在視窗裡設好的多層規格整個換成單層，
@@ -368,9 +342,6 @@ def test_the_header_is_no_longer_a_sorting_entry_point(qtbot, tmp_path: Path) ->
     `setSortingEnabled` 仍然要是 False —— 那會讓 `QTableView` 在 Python 裡排序，
     是 `AGENTS.md` 明文禁止的事。拿掉表頭排序不代表可以改用那條路。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     for page in (
         window.operation_settings.categories,
         window.operation_settings.items,
@@ -388,13 +359,8 @@ def test_the_header_is_no_longer_a_sorting_entry_point(qtbot, tmp_path: Path) ->
         )
 
 
-def test_the_parent_dropdown_keeps_every_category_while_searching(
-    qtbot, tmp_path: Path
-) -> None:
+def test_the_parent_dropdown_keeps_every_category_while_searching(window) -> None:
     """搜尋縮短了清單，**「所屬類別」下拉不能跟著只剩搜到的那幾個** —— 否則換不回去。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     assert window.controller.create_category("交通").success
 
     page = window.operation_settings.items

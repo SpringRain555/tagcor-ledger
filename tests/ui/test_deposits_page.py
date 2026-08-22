@@ -1,18 +1,12 @@
 """定存頁：合約清單、期、到期流進待確認，以及編輯合約的欄位可見性。"""
 
-from pathlib import Path
 
 
-from tagcor_ledger.app.paths import resolve_app_paths
-from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.pages.deposits import DepositContractDialog
 
 
-def test_deposits_tab_and_pending_deposit_section_exist(qtbot, tmp_path: Path) -> None:
+def test_deposits_tab_and_pending_deposit_section_exist(window) -> None:
     """定存有自己的分頁，但到期處理一律在「待確認」頁 —— 不要有第二個入帳入口。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
 
     deposits = window.operation_settings.deposits
     assert deposits.contract_model.rowCount() == 0
@@ -31,10 +25,7 @@ def test_deposits_tab_and_pending_deposit_section_exist(qtbot, tmp_path: Path) -
     assert not page.confirm_button.isVisibleTo(page)
 
 
-def test_deposit_contract_flows_into_pending_inbox(qtbot, tmp_path: Path) -> None:
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
+def test_deposit_contract_flows_into_pending_inbox(window) -> None:
     controller = window.controller
 
     account_id = str(controller.account_options()[0]["account_id"])
@@ -64,17 +55,12 @@ def test_deposit_contract_flows_into_pending_inbox(qtbot, tmp_path: Path) -> Non
     assert "deposit" in sources
 
 
-def test_adding_an_account_that_already_exists_just_selects_it(
-    qtbot, tmp_path: Path, monkeypatch
-) -> None:
+def test_adding_an_account_that_already_exists_just_selects_it(window, qtbot, monkeypatch) -> None:
     """定存對話框的「新增帳戶…」打到既有名字時，要把它選起來而不是丟錯誤。
 
     預設值是「郵局定存」，也就是最可能已經開過的名字 —— 第二次按必然撞名。
     舊版丟一個警告框，內容還帶著 `UNIQUE constraint failed: accounts.name`。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     assert window.controller.create_account("郵局定存", "100000").success
 
     dialog = DepositContractDialog(window.controller, window)
@@ -102,15 +88,12 @@ def test_adding_an_account_that_already_exists_just_selects_it(
     assert dialog.account.currentText() == "郵局定存", "沒有把既有的那個帳戶選起來"
 
 
-def test_editing_a_deposit_contract_keeps_its_note(qtbot, tmp_path: Path) -> None:
+def test_editing_a_deposit_contract_keeps_its_note(window) -> None:
     """修改定存合約**不可以動到備註**。
 
     對話框沒有備註欄位，以前卻永遠送 `note=""` 進去，而 store 無條件寫
     `note = ?` —— 使用者沒有任何機會發現備註被洗掉了。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     assert controller.create_account("郵局", "0").success
@@ -148,17 +131,12 @@ def test_editing_a_deposit_contract_keeps_its_note(qtbot, tmp_path: Path) -> Non
     assert after["note"] == "分行 001，單號 12345", "改個名字把備註洗掉了"
 
 
-def test_editing_a_deposit_contract_hides_the_term_only_fields(
-    qtbot, tmp_path: Path
-) -> None:
+def test_editing_a_deposit_contract_hides_the_term_only_fields(window, qtbot) -> None:
     """修改合約時不顯示起存日與本金 —— 它們是「期」的欄位，這裡沒有值可以回填。
 
     以前那幾格是停用但**仍然顯示建立用的預設值**：起存日＝今天、本金＝空白。
     一個灰掉卻寫著今天的「起存日」比沒有那一列更糟，它看起來像事實。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     contract = {

@@ -3,24 +3,18 @@
 **這一頁是「切過去就重算」，不接跨頁連動的訊號** —— 理由在 `pages/overview.py`。
 """
 
-from pathlib import Path
 
 
-from tagcor_ledger.app.paths import resolve_app_paths
-from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.navigation import PageId
 from tagcor_ledger.ui.widgets.sidebar import BADGE_ROLE
 
 
-def test_overview_total_is_the_sum_of_active_accounts(qtbot, tmp_path: Path) -> None:
+def test_overview_total_is_the_sum_of_active_accounts(window) -> None:
     """總資產 = 各帳戶餘額相加，而且**封存的不算進去、但要講出來**。
 
     封存的意思是不再出現在選單，不是錢消失了 —— 默默把它漏掉，使用者拿這個數字去對
     存摺就會對不起來，而且找不到差在哪。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     assert controller.create_account("郵局活儲", "1000").success
@@ -54,16 +48,13 @@ def test_overview_total_is_the_sum_of_active_accounts(qtbot, tmp_path: Path) -> 
     assert "1,000" in page.archived_note.text()
 
 
-def test_overview_recomputes_when_you_come_back_to_it(qtbot, tmp_path: Path) -> None:
+def test_overview_recomputes_when_you_come_back_to_it(window) -> None:
     """在別頁改了資料，切回總覽必須是新的數字。
 
     這條守的是「切過去就重算」那個機制。改成在 `main_window` 的每個 `_..._changed`
     各記一筆的話，總有一天會漏掉一項，而漏掉的症狀是總資產停在舊數字 ——
     看起來像算錯帳，不像忘記重新整理。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
 
     window.show_page(PageId.OVERVIEW)
     assert window.overview.total.text() == "0"
@@ -76,14 +67,11 @@ def test_overview_recomputes_when_you_come_back_to_it(qtbot, tmp_path: Path) -> 
     assert window.overview.total.text() == "-85"
 
 
-def test_the_inbox_number_is_the_same_everywhere(qtbot, tmp_path: Path) -> None:
+def test_the_inbox_number_is_the_same_everywhere(window) -> None:
     """側邊欄的數字與總覽的數字走同一個來源，而且**定存也算在內**。
 
     兩邊各自算就會出現「側邊欄說 2、總覽說 3」，使用者沒有辦法知道哪一個才對。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
 
     account_id = str(controller.account_options()[0]["account_id"])
@@ -114,11 +102,8 @@ def test_the_inbox_number_is_the_same_everywhere(qtbot, tmp_path: Path) -> None:
     assert "2021/01/15" in window.overview.deposit_note.text()
 
 
-def test_overview_hides_what_it_has_nothing_to_say_about(qtbot, tmp_path: Path) -> None:
+def test_overview_hides_what_it_has_nothing_to_say_about(window) -> None:
     """空的區塊要整段消失。**留一個沒有內容的標題看起來像壞掉或還沒載入。**"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     window.show_page(PageId.OVERVIEW)
 
     page = window.overview
@@ -130,16 +115,11 @@ def test_overview_hides_what_it_has_nothing_to_say_about(qtbot, tmp_path: Path) 
     assert not page.inbox_button.isVisible()
 
 
-def test_the_snapshot_reminder_lives_on_the_page_not_the_status_bar(
-    qtbot, tmp_path: Path
-) -> None:
+def test_the_snapshot_reminder_lives_on_the_page_not_the_status_bar(window) -> None:
     """盤點提醒是**頁面上的一行字加一顆按鈕**，不是 10 秒就消失的狀態列訊息。
 
     去泡杯茶回來就看不到的提醒等於沒有提醒。按下「去盤點」要真的跳到餘額盤點頁。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     window.show_page(PageId.OVERVIEW)
 
     page = window.overview

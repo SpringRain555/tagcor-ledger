@@ -39,6 +39,8 @@ from tagcor_ledger.ui.widgets.layout import (
 SCREEN_BUDGET = (1024, 880)
 
 
+# 這個檔案不用 `window` fixture：版面測試要在 `show()` **之前** `resize()`，
+# 而視窗一旦顯示過再改大小，量到的是動畫中途的尺寸。
 def _open(qtbot, tmp_path: Path, *, size: tuple[int, int] = (1440, 900)) -> MainWindow:
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)

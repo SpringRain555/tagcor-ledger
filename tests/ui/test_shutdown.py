@@ -32,6 +32,7 @@ def run():
     seed = LedgerController(paths)
     seed.create_backup()
     del seed
+    # 不用 `window` fixture：要先用同一個 `paths` 造一份備份再開視窗。
     window = MainWindow(paths)
     window.show()
     assert window.system_settings.maintenance.list.count() >= 1, "備份清單是空的"

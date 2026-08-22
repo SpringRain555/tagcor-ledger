@@ -43,10 +43,43 @@ bug 藏成一句客氣中文的。所以做法是**先分類再收**：
 改成 `tests/unit/test_reserved_schema.py` 鎖住「保持沒有人用」，期限寫在檔案自己的
 docstring 裡：那次評估**兩種結論都會讓那份守門消失**。
 
+### 月底夾取其實不需要「合併」
+
+v0.20.0 把 `add_months()` 與 `next_due_date()` 的兩份月底夾取搬到 `domain/dates.py`
+並排，當時的註解說「合併要動到目前正常運作的邏輯，留給下一輪」。**那個判斷是錯的。**
+兩者的差別從來不在夾取，在**誰當 anchor** —— 而那是呼叫端的事。抽出
+`clamped_date(year, month, anchor_day)`，`add_months()` 傳來源日期自己的日、
+`next_due_date()` 傳起存日的日，實作只剩一份，語意差留在呼叫端。
+
+`tests/unit/test_dates.py` 一個字都沒改而且全綠，那就是「沒改行為」的證據。
+順帶驗過 1900–2200 全部 3,600 個月份，`days_in_month()` 與 `calendar.monthrange()`
+完全一致。
+
+### `application/deposits.py` 658 行 → 六個檔
+
+`DepositService` 裝了合約／期／事件／入帳規劃四件事。照 `LedgerStore` 與
+`LedgerController` 的做法拆成套件，**呼叫端一個字都沒改**。
+
+這一個沒有 `OverviewSection` 那種聚合層例外 —— 拆之前用 AST 確認過二十個方法的
+`self.*` 呼叫全部落在自己的 section 裡，並加了一條守門保持這樣。
+
+最大的 src 模組從 658 降到 570（`ui/pages/catalog.py`）。
+
+### `tests/ui` 的三行前導重複 50 次
+
+新增 `tests/ui/conftest.py`（**這個專案的第一個 `conftest.py`**）提供 `window` fixture，
+50 處換掉。剩下的九處都是真的有理由 —— 要在 `show()` 之前 `resize()`、刻意不 `show()`、
+要開第二個視窗、要先拿到 `paths` —— 每一處都留了一行說明。
+`test_reorder.py` 自己那個 `_window()` 工廠也一併收掉：兩種解法並存比重複更糟。
+
+**八個頁面的實機截圖與 v0.20.0 逐位元組相同。**
+
 ### 其他
 
 - 全專案唯一一個半形句號（「待確認項目已載入.」）改成全形，並加了一條守門 ——
   只認「CJK 字元 ＋ 半形句號 ＋ 結尾」，英文縮寫、版本號、副檔名都不會誤判。
+- `tests/unit/test_dates.py` 有一個測試叫 `testdays_in_month`（漏了底線）。
+  pytest 靠 `test*` 前綴還是收得到，所以它一直有在跑，只是名字錯了。
 
 ## 0.20.0 - 補邊界測試、依功能拆檔、收技術債
 

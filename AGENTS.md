@@ -60,6 +60,7 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - **「一筆交易長什麼樣」只有一個地方說了算**：`StoreBase._write_transaction()` / `_write_transfer()`。它們收 `connection` 而不是自己開，所以「就寫這一筆」與「建交易＋改別的表的狀態」兩種情境都能用同一份實作。`transactions`、`transaction_fts`、`audit_events` 三張表**只能有一個寫入點**（`stores/base.py`），`tests/unit/test_architecture.py` 會擋。要寫交易就呼叫那兩個，不要再開一條路 —— 分岔過一次，代價寫在 `docs/lessons.md`。
 - `ui/`：PySide6 視圖與 controller；**不得直接撰寫 SQL**。一個檔案一個畫面放在 `ui/pages/`，頁面之間不互相 import，跨頁連動一律集中在 `ui/main_window.py`。
 - **`LedgerController` 由 `ui/controller/` 底下的 section 用繼承組起來**，比照 `LedgerStore`。`__init__.py` 只放組裝、不得定義任何方法；section 之間**彼此不呼叫對方**（唯一的例外是 `OverviewSection`，它明說自己是聚合層）。有測試守著。
+- **`DepositService` 由 `application/deposits/` 底下的 section 用繼承組起來**，同一套做法。它**沒有**聚合層例外 —— section 之間完全不互相呼叫，`test_no_deposit_section_calls_another_section` 守著。
 - **「一列長什麼樣」只由 `ui/formatting/` 決定**，`ui/pages/` 不得自己定義會 `return [...]` 的 `*_values`。同一個狀態有兩個拼法，兩張表就會對同一筆資料講不同的話。
 - 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔（資料庫路徑本身不能可靠地存在資料庫裡）。
 - **`application/` 的 `except` 只能用 `failures.py` 的兩個具名常數**，見下一節。

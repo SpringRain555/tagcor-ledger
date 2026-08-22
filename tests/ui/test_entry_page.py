@@ -5,7 +5,6 @@
 """
 
 from datetime import date, datetime
-from pathlib import Path
 
 from PySide6.QtCore import QDate, QPoint, Qt
 from PySide6.QtWidgets import (
@@ -17,18 +16,13 @@ from PySide6.QtWidgets import (
     QTableView,
 )
 
-from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.infrastructure.clock import TAIPEI
-from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.theme import apply_dark_theme
 from tagcor_ledger.ui.widgets import forms
 from tagcor_ledger.ui.widgets.forms import date_field, iso_from_date
 
 
-def test_entry_page_switches_transfer_fields_and_saves(qtbot, tmp_path: Path) -> None:
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
+def test_entry_page_switches_transfer_fields_and_saves(window) -> None:
     page = window.entry
 
     page.select_entry_type("transfer")
@@ -47,11 +41,8 @@ def test_entry_page_switches_transfer_fields_and_saves(qtbot, tmp_path: Path) ->
     assert "payee_name" not in transaction
 
 
-def test_entry_page_hides_the_label_together_with_the_field(qtbot, tmp_path: Path) -> None:
+def test_entry_page_hides_the_label_together_with_the_field(window) -> None:
     """QFormLayout 的標籤是獨立 widget，只藏欄位會留下孤兒標籤（2026-08-18 實機發現）。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     page = window.entry
 
     page.select_entry_type("expense")
@@ -65,15 +56,12 @@ def test_entry_page_hides_the_label_together_with_the_field(qtbot, tmp_path: Pat
     assert page.form.labelForField(page.detail).isHidden() is True
 
 
-def test_entry_page_reports_success_without_the_error_colour(qtbot, tmp_path: Path) -> None:
+def test_entry_page_reports_success_without_the_error_colour(window) -> None:
     """成功不能長得像失敗。
 
     舊版把「交易已儲存。」寫進紅色的 `errorLabel` —— 每天最常做的動作，回饋是紅的。
     現在用同一個標籤但帶 `state` 屬性，成功綠、失敗紅。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     page = window.entry
 
     page.select_entry_type("expense")
@@ -121,11 +109,8 @@ def test_editing_keeps_the_original_time_of_day(qtbot) -> None:
     )
 
 
-def test_lists_show_the_date_without_a_made_up_time(qtbot, tmp_path: Path) -> None:
+def test_lists_show_the_date_without_a_made_up_time(window) -> None:
     """時分秒是程式補的，印出來會讓人以為那是真的記錄時間。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     window.controller.submit(
         occurred_at="2026-08-19T13:45:00+08:00",
         entry_type="expense",
@@ -286,17 +271,12 @@ def test_the_calendar_is_tall_enough_for_six_week_rows(qtbot) -> None:
     )
 
 
-def test_a_fresh_transfer_does_not_default_to_the_same_account(
-    qtbot, tmp_path: Path
-) -> None:
+def test_a_fresh_transfer_does_not_default_to_the_same_account(window) -> None:
     """剛開程式選「轉帳」按下儲存，**不該必定失敗**。
 
     兩個下拉填的是同一份清單、預設都停在第 0 項，所以以前一定會撞
     `TRANSFER_SAME_ACCOUNT` —— 一個照著做就一定失敗的預設值。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     assert window.controller.create_account("郵局", "0").success
     window.entry.reload_options()
 
@@ -316,17 +296,12 @@ def test_a_fresh_transfer_does_not_default_to_the_same_account(
     assert page.destination.currentData() != page.account.currentData()
 
 
-def test_transfer_scope_switches_the_fields_and_the_account_label(
-    qtbot, tmp_path: Path
-) -> None:
+def test_transfer_scope_switches_the_fields_and_the_account_label(window) -> None:
     """三種對象各自顯示對的欄位，而「帳戶」那一列要說出它現在問的是什麼。
 
     對外轉帳要類別／項目（它存成收入或支出），內部轉帳要轉入帳戶 —— 三種各不相同，
     而且**標籤要跟著欄位一起收**（`QFormLayout` 的標籤是獨立 widget）。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     page = window.entry
 
     page.select_entry_type("expense")
@@ -357,15 +332,12 @@ def test_transfer_scope_switches_the_fields_and_the_account_label(
     assert page.form.labelForField(page.account).text() == "帳戶"
 
 
-def test_each_transfer_scope_saves_the_right_entry_type(qtbot, tmp_path: Path) -> None:
+def test_each_transfer_scope_saves_the_right_entry_type(window) -> None:
     """**資料庫只有一種轉帳。** 對外的兩種存成收入與支出，總資產才會跟著動。
 
     這是與 `state-machines.md`「利息記成收入，不是轉帳」同一個原則：
     錢有沒有離開你的總資產，才是收支與轉帳的分界。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     controller = window.controller
     assert controller.create_account("郵局", "0").success
     window.entry.reload_options()

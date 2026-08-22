@@ -224,14 +224,26 @@ def test_every_store_lives_in_the_stores_package() -> None:
 CONTROLLER_PACKAGE = "tagcor_ledger.ui.controller"
 
 
-def test_the_controller_assembly_file_holds_no_logic() -> None:
-    """`ui/controller/__init__.py` 不得定義任何函式或方法。
+# 用繼承組裝的套件。它們的 `__init__.py` 只放 class 陳述，方法在各 section 模組裡。
+ASSEMBLY_PACKAGES = [
+    "ui/controller",
+    "application/deposits",
+]
+
+
+@pytest.mark.parametrize("package", ASSEMBLY_PACKAGES)
+def test_the_assembly_file_holds_no_logic(package: str) -> None:
+    """組裝用的 `__init__.py` 不得定義任何函式或方法。
 
     2026-08-22 拆檔之前 `ui/controller.py` 是 700 行，**剛好貼著上限** ——
     上一版是靠壓縮註解才過關的。拆成套件之後，最可能的退化路徑就是「這個方法很短，
     先放組裝檔就好」，然後組裝檔慢慢變回原本那個檔案。
+
+    2026-08-22 `application/deposits.py`（658 行、四件事）也拆成同樣的形狀，
+    所以這條改成 parametrize —— 下一個用繼承組裝的套件加一行就好。
     """
-    path = SOURCE_ROOT / "ui" / "controller" / "__init__.py"
+    path = SOURCE_ROOT / package / "__init__.py"
+    assert path.exists(), f"{package}/__init__.py 不見了，ASSEMBLY_PACKAGES 要跟著改"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     defined = [
         node.name
@@ -239,9 +251,53 @@ def test_the_controller_assembly_file_holds_no_logic() -> None:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
     ]
     assert not defined, (
-        f"ui/controller/__init__.py 定義了 {defined} —— 組裝檔只放 class 陳述，"
+        f"{package}/__init__.py 定義了 {defined} —— 組裝檔只放 class 陳述，"
         "方法請放到對應的 section 模組"
     )
+
+
+def test_no_deposit_section_calls_another_section() -> None:
+    """`application/deposits/` 的 section 之間不得互相呼叫。
+
+    與 `stores/` 同一條紀律，理由也一樣：section 一旦互相呼叫，「這個方法屬於哪一段」
+    就不再是檔案位置決定的，而拆檔的唯一好處就是那個。
+
+    拆檔前用 AST 確認過二十個方法的呼叫關係全部落在自己的 section 裡，所以這裡
+    **不需要** `ui/controller/overview.py` 那種聚合層例外。真的需要了再加，
+    但要像 `OverviewSection` 一樣明說自己是聚合層。
+    """
+    from tagcor_ledger.application import deposits
+
+    sections = {
+        name: klass
+        for name, klass in vars(deposits).items()
+        if isinstance(klass, type) and name.endswith("Section")
+    }
+    assert len(sections) >= 3, f"只找到 {sorted(sections)}，組裝方式可能改了"
+
+    owner_of = {
+        method: name
+        for name, klass in sections.items()
+        for method in vars(klass)
+        if not method.startswith("__")
+    }
+
+    offenders: list[str] = []
+    for name, klass in sections.items():
+        path = Path(str(klass.__module__).replace(".", "/"))
+        source = (PROJECT_ROOT / "src" / path).with_suffix(".py").read_text(encoding="utf-8")
+        for node in ast.walk(ast.parse(source)):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "self"
+            ):
+                target = owner_of.get(node.func.attr)
+                if target is not None and target != name:
+                    offenders.append(f"  {name} 呼叫了 {target}.{node.func.attr}()")
+    if offenders:
+        pytest.fail("定存的 section 之間不得互相呼叫：\n" + "\n".join(sorted(set(offenders))))
 
 
 def test_every_controller_method_lives_in_a_section_module() -> None:
@@ -352,9 +408,9 @@ EXPECTED_SPECIAL_HANDLERS = {
         "刻意收窄：走到這裡表示上面三道重名檢查都沒攔到，那是預期外的。"
         "放寬成 STORE_FAILURES 會把真正的 bug 藏成一句客氣的中文"
     ),
-    ("deposits.py", "create_contract", "ValueError"): "建列舉與解析金額，還沒碰到 store",
-    ("deposits.py", "update_contract", "ValueError"): "建列舉，還沒碰到 store",
-    ("deposits.py", "update_term", "ValueError"): "解析金額，還沒碰到 store",
+    ("contracts.py", "create_contract", "ValueError"): "建列舉與解析金額，還沒碰到 store",
+    ("contracts.py", "update_contract", "ValueError"): "建列舉，還沒碰到 store",
+    ("contracts.py", "update_term", "ValueError"): "解析金額，還沒碰到 store",
     ("settings.py", "get_sort_spec", "(TypeError, ValueError)"): (
         "壞掉的 JSON 靜靜退回預設，這是偏好設定不是寫入失敗"
     ),

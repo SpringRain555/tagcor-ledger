@@ -13,11 +13,8 @@ from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.ui.main_window import MainWindow
 
 
-def test_reset_confirmation_names_what_will_be_lost(qtbot, tmp_path: Path) -> None:
+def test_reset_confirmation_names_what_will_be_lost(window) -> None:
     """不可逆的操作要講得出「會失去什麼」，不能只說「這會清空資料」。"""
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
     window.controller.submit(
         occurred_at="2026-08-19T10:00:00+08:00",
         entry_type="expense",
@@ -33,12 +30,14 @@ def test_reset_confirmation_names_what_will_be_lost(qtbot, tmp_path: Path) -> No
     assert "帳戶 1 筆" in summary
 
 
-def test_the_paths_page_shows_the_data_root(qtbot, tmp_path: Path) -> None:
+def test_the_paths_page_shows_the_data_root(window, qtbot, tmp_path: Path) -> None:
     """「資料路徑」要看得到資料根目錄。
 
     `PATH_OUTSIDE_DATA_ROOT` 這個錯誤講的正是這個值，而它是從「記帳資料路徑」的
     上一層推出來的 —— 畫面上沒有它，使用者就只能猜訊息在說哪個資料夾。
     """
+    # 不用 `window` fixture：這一段要先拿到 `paths` 才建視窗（訊息裡要比對資料夾路徑），
+    # 而 fixture 只回視窗。這個檔案其餘幾處是刻意不 `show()`。
     paths = resolve_app_paths(tmp_path / "ledger-data")
     window = MainWindow(paths)
     qtbot.addWidget(window)
@@ -52,7 +51,7 @@ def test_the_paths_page_shows_the_data_root(qtbot, tmp_path: Path) -> None:
     assert str(paths.backup_dir).startswith(page.data_root.text())
 
 
-def test_backup_list_never_shows_a_raw_error_code(qtbot, tmp_path: Path) -> None:
+def test_backup_list_never_shows_a_raw_error_code(window, qtbot, tmp_path: Path) -> None:
     """備份清單那一欄以前印的是 `無效：BACKUP_CHECKSUM_MISMATCH`。
 
     這一頁是使用者遇到麻煩時才會來的地方 —— 在這裡丟一串英文碼給他，等於在他最
@@ -91,7 +90,7 @@ def test_backup_list_never_shows_a_raw_error_code(qtbot, tmp_path: Path) -> None
     assert "BACKUP_" not in page.result.text()
 
 
-def test_deleting_a_broken_backup_from_the_page(qtbot, tmp_path: Path, monkeypatch) -> None:
+def test_deleting_a_broken_backup_from_the_page(window, qtbot, tmp_path: Path, monkeypatch) -> None:
     """走**真正的按鈕路徑**：選一列 → 按刪除 → 確認 → 清單少一列、資料夾真的不見。
 
     不呼叫 `controller.delete_backup()` 了事 —— 那樣測不到選取綁定、確認框，
@@ -133,7 +132,10 @@ def test_deleting_a_broken_backup_from_the_page(qtbot, tmp_path: Path, monkeypat
 
 
 def test_the_last_usable_backup_says_so_before_it_goes(
-    qtbot, tmp_path: Path, monkeypatch
+    window,
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     """**不擋、只講。** 刪掉最後一份可用的備份是使用者的決定，但他要知道。"""
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
@@ -163,7 +165,9 @@ def test_the_last_usable_backup_says_so_before_it_goes(
 
 
 def test_backup_buttons_are_disabled_until_a_backup_is_selected(
-    qtbot, tmp_path: Path
+    window,
+    qtbot,
+    tmp_path: Path,
 ) -> None:
     """沒選取就停用 —— 對「刪除」這種不可逆的操作尤其不能按了沒反應。"""
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))

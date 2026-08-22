@@ -5,18 +5,20 @@
 `infrastructure/stores/automation.py` 兩邊，各自是私有函式 —— 於是
 「目標月份沒有那一天要退到月底」這條規則有兩份實作，而兩份都沒有直接的單元測試。
 
-## 已知的重複：兩份「月底夾取」
+## 月底夾取只有一份實作，但有兩個 anchor
 
-`add_months()` 夾的是**來源日期自己的日**，`next_due_date()` 夾的是**起存日的日**
-（`anchor_day`）。兩者看起來像同一段程式，語意卻不同：
+`clamped_date()` 是唯一實作「那個月裝不下就退到當月最後一天」的地方。
+v0.20.0 時 `add_months()` 與 `next_due_date()` 各有一份，當時的註解說「合併要動到
+正常運作的邏輯」—— **那個判斷是錯的**。兩者的差別從來不在夾取，在**誰當 anchor**，
+而那是呼叫端的事：
 
-- `add_months("2026-02-28", 1)` → `2026-03-28`（來源就是 28 號）
-- `next_due_date(2026-02-28, "monthly", 1, anchor_day=31)` → `2026-03-31`
-  （原本就是 31 號，只是二月裝不下）
+| 呼叫端 | anchor 是什麼 | 例子 |
+|---|---|---|
+| `add_months()` | 來源日期自己的日 | `add_months("2026-02-28", 1)` → `2026-03-28` |
+| `next_due_date()` | 起存日的日（`anchor_day`） | 2/28 起算、anchor 31 → `2026-03-31` |
 
-**第二種是對的行為**，而且是刻意的：少了 `anchor_day`，1/31 的月繳排程會在二月被
-夾成 28 之後永遠回不到 31 號。合併成一個函式做得到，但那要動到目前正常運作的邏輯，
-所以 v0.20.0 只把它們搬到一起，**沒有合併**。
+**第二種是刻意的**：少了 `anchor_day`，1/31 的月繳排程會在二月被夾成 28 之後永遠
+回不到 31 號。語意差留在呼叫端，實作只留一份。
 
 ## 命名
 
@@ -26,7 +28,6 @@
 
 from __future__ import annotations
 
-import calendar
 from datetime import date, timedelta
 
 
@@ -35,6 +36,14 @@ def days_in_month(year: int, month: int) -> int:
     if month == 12:
         return 31
     return (date(year, month + 1, 1) - timedelta(days=1)).day
+
+
+def clamped_date(year: int, month: int, anchor_day: int) -> date:
+    """那個月裝不下 `anchor_day` 就退到當月最後一天。
+
+    **`anchor_day` 由呼叫端決定要傳什麼** —— 那正是這個模組唯一的分歧點，見模組說明。
+    """
+    return date(year, month, min(anchor_day, days_in_month(year, month)))
 
 
 def add_months(iso_date: str, months: int) -> str:
@@ -47,8 +56,7 @@ def add_months(iso_date: str, months: int) -> str:
     total = base.month - 1 + months
     year = base.year + total // 12
     month = total % 12 + 1
-    day = min(base.day, days_in_month(year, month))
-    return date(year, month, day).isoformat()
+    return clamped_date(year, month, base.day).isoformat()
 
 
 def shift_days(iso_date: str, days: int) -> str:
@@ -86,11 +94,7 @@ def next_due_date(current: date, frequency: str, interval: int, anchor_day: int)
     if frequency == "monthly":
         month_index = current.year * 12 + current.month - 1 + interval
         year, month_zero = divmod(month_index, 12)
-        month = month_zero + 1
-        day = min(anchor_day, calendar.monthrange(year, month)[1])
-        return date(year, month, day)
+        return clamped_date(year, month_zero + 1, anchor_day)
     if frequency == "yearly":
-        year = current.year + interval
-        day = min(anchor_day, calendar.monthrange(year, current.month)[1])
-        return date(year, current.month, day)
+        return clamped_date(current.year + interval, current.month, anchor_day)
     raise ValueError("SCHEDULE_FREQUENCY_INVALID")

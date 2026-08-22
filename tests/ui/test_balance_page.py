@@ -3,20 +3,14 @@
 **盤點不建立交易、不改變餘額。** 它記的是「那一刻實際數出來多少」。
 """
 
-from pathlib import Path
 
 from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from tagcor_ledger.app.paths import resolve_app_paths
-from tagcor_ledger.ui.main_window import MainWindow
 
 
-def test_balance_snapshot_page_creates_snapshot_and_setting(qtbot, tmp_path: Path) -> None:
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
+def test_balance_snapshot_page_creates_snapshot_and_setting(window) -> None:
     page = window.balance
 
     page.amount.setText("0")
@@ -40,18 +34,13 @@ def _amount_in_summary(text: str) -> str:
     return text[index:]
 
 
-def test_voiding_a_transaction_recalculates_the_balance_gap(
-    qtbot, tmp_path: Path, monkeypatch
-) -> None:
+def test_voiding_a_transaction_recalculates_the_balance_gap(window, monkeypatch) -> None:
     """從交易紀錄作廢一筆帳，餘額盤點的未解釋差額要跟著變。
 
     未解釋差額 ＝ 盤點金額 － 期間內 posting 加總，所以任何一筆交易的增減都會改變它。
     以前 `TransactionsPage` 只重刷自己那張表、不對外發訊號，於是作廢一筆錯帳之後
     切到餘額盤點，差額還是舊的 —— 而那個數字正是那一頁存在的唯一理由。
     """
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
 
     window.balance.amount.setText("0")
     window.balance.create_snapshot()

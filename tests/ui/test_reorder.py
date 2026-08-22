@@ -18,13 +18,6 @@ from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.widgets import reorder_dialog as reorder_module
 
 
-def _window(qtbot: Any, tmp_path: Path) -> MainWindow:
-    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
-    qtbot.addWidget(window)
-    window.show()
-    return window
-
-
 def _rows(page: Any, column: int = 0) -> list[str]:
     return [page.model.index(row, column).data() for row in range(page.model.rowCount())]
 
@@ -62,10 +55,12 @@ def _move_last_to_top(order_list: Any) -> None:
 
 
 def test_the_dialog_opens_showing_the_order_that_is_on_screen(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """視窗一開就要是目前的順序 —— 不是名稱排、也不是資料庫的插入順序。"""
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -81,9 +76,11 @@ def test_the_dialog_opens_showing_the_order_that_is_on_screen(
 
 
 def test_moving_the_last_category_to_the_top_changes_the_page(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -101,11 +98,8 @@ def test_moving_the_last_category_to_the_top_changes_the_page(
     assert sorted(after) == sorted(before), "移動不該讓任何一列消失或多出來"
 
 
-def test_cancelling_changes_nothing(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_cancelling_changes_nothing(window, qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """拖到一半按取消要真的什麼都沒發生。"""
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -122,13 +116,15 @@ def test_cancelling_changes_nothing(
 
 
 def test_archived_entries_are_listed_and_marked(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """封存的也要在清單裡，而且看得出來是封存的。
 
     藏起來的話它的 `sort_order` 會停在舊值，日後恢復就出現在莫名其妙的位置。
     """
-    window = _window(qtbot, tmp_path)
     controller = window.controller
     assert controller.create_category("交通").success
     archived = next(
@@ -148,9 +144,11 @@ def test_archived_entries_are_listed_and_marked(
 
 
 def test_the_first_row_cannot_move_up_and_the_last_cannot_move_down(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
-    window = _window(qtbot, tmp_path)
     assert window.controller.create_category("交通").success
     page = window.operation_settings.categories
     page.refresh()
@@ -169,14 +167,16 @@ def test_the_first_row_cannot_move_up_and_the_last_cannot_move_down(
 
 
 def test_the_lists_are_tall_enough_that_nothing_is_cut_off(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """要拖曳的清單**看不到全部就沒辦法決定拖到哪裡**。
 
     2026-08-22 第一版沒設高度下限，實機截圖上五個項目就被切掉第五列 —— 純看程式碼
     看不出來。量的是捲軸範圍（geometry），不是「有沒有設定 minimumHeight」。
     """
-    window = _window(qtbot, tmp_path)
     controller = window.controller
     assert controller.create_category("交通").success
     transport = next(
@@ -225,10 +225,12 @@ def _with_transport_items(window: MainWindow, names: tuple[str, ...]) -> str:
 
 
 def test_the_items_dialog_has_two_panes_and_orders_within_one_category(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """項目的順序是「每個類別各自一組」，所以視窗是兩欄。"""
-    window = _window(qtbot, tmp_path)
     _with_transport_items(window, ("捷運", "公車", "計程車"))
     page = window.operation_settings.items
     page.refresh()
@@ -253,10 +255,12 @@ def test_the_items_dialog_has_two_panes_and_orders_within_one_category(
 
 
 def test_switching_categories_keeps_what_you_already_moved(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """左欄切走再切回來，右欄要記得剛才的順序 —— 否則使用者以為白拖了。"""
-    window = _window(qtbot, tmp_path)
     _with_transport_items(window, ("捷運", "公車"))
     page = window.operation_settings.items
     page.refresh()
@@ -278,10 +282,12 @@ def test_switching_categories_keeps_what_you_already_moved(
 
 
 def test_the_items_dialog_also_orders_the_categories(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """左欄就是「哪一組排前面」，它也要存得下去。"""
-    window = _window(qtbot, tmp_path)
     _with_transport_items(window, ("捷運",))
     page = window.operation_settings.items
     page.refresh()
@@ -303,10 +309,12 @@ def test_the_items_dialog_also_orders_the_categories(
 
 
 def test_the_custom_order_shows_up_in_the_entry_page_dropdown(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """名冊排好了但記帳頁下拉沒跟著，等於沒排。"""
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -327,9 +335,11 @@ def test_the_custom_order_shows_up_in_the_entry_page_dropdown(
 
 
 def test_accounts_can_be_reordered_and_the_dropdown_follows(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
-    window = _window(qtbot, tmp_path)
     for name in ("郵局", "悠遊付"):
         assert window.controller.create_account(name, "0").success
     page = window.operation_settings.accounts
@@ -344,10 +354,7 @@ def test_accounts_can_be_reordered_and_the_dropdown_follows(
     assert window.entry.account.itemText(0) == before[-1], "記帳頁的帳戶下拉沒有跟著"
 
 
-def test_templates_can_be_reordered(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
-    window = _window(qtbot, tmp_path)
+def test_templates_can_be_reordered(window, qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     controller = window.controller
     account = controller.account_options()[0]["account_id"]
     parent = controller.category_options()[0]["category_id"]
@@ -388,14 +395,16 @@ def _set_level(dialog: Any, row: int, field: str, descending: bool = False) -> N
 
 
 def test_the_dialog_shows_the_sort_spec_that_is_in_effect(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """視窗一開要顯示**目前生效的**規格，不是「下拉裡的第一個」。
 
     項目那頁的預設是兩層（所屬類別的自訂順序 → 項目的自訂順序）。開發時這裡真的
     出過錯：空規格填進去只剩第一層，同一個類別底下的項目掉回名稱順序。
     """
-    window = _window(qtbot, tmp_path)
     _with_transport_items(window, ("捷運", "公車"))
     page = window.operation_settings.items
     page.refresh()
@@ -410,9 +419,11 @@ def test_the_dialog_shows_the_sort_spec_that_is_in_effect(
 
 
 def test_choosing_a_field_reorders_the_table(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -425,10 +436,12 @@ def test_choosing_a_field_reorders_the_table(
 
 
 def test_the_second_level_breaks_ties_from_the_first(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """第一層是「狀態」（全部相同），第二層才是真正決定順序的那一個。"""
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -446,10 +459,12 @@ def test_the_second_level_breaks_ties_from_the_first(
 
 
 def test_the_sort_spec_survives_a_restart(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """記得住 —— 這是 Stage 2 的重點，關掉再開要還是那個排法。"""
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -457,7 +472,11 @@ def test_the_sort_spec_survives_a_restart(
     assert _open(monkeypatch, page, lambda d: (_set_level(d, 0, "name", True), True)[1])
     expected = _rows(page)
 
-    again = _window(qtbot, tmp_path)
+    # 這裡不能用 `window` fixture —— 整條測試的重點就是**第二個**視窗，
+    # 而且它要指向同一個資料夾。fixture 給的是第一個。
+    again = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(again)
+    again.show()
     reopened = again.operation_settings.categories
     assert _rows(reopened) == expected, "重開之後排序沒有留住"
     assert tuple(level.field for level in reopened.sort) == ("name",)
@@ -465,9 +484,11 @@ def test_the_sort_spec_survives_a_restart(
 
 
 def test_cancelling_does_not_save_the_sort_spec(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
@@ -481,13 +502,15 @@ def test_cancelling_does_not_save_the_sort_spec(
 
 
 def test_the_dialog_warns_when_the_spec_ignores_the_custom_order(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """排序方式沒用到自訂順序時，拖曳不會反映在清單上 —— 視窗要講出來。
 
     不講的話，使用者拖了半天按確定、清單卻沒變，看起來像功能壞掉。
     """
-    window = _window(qtbot, tmp_path)
     assert window.controller.create_category("交通").success
     page = window.operation_settings.categories
     page.refresh()
@@ -508,10 +531,12 @@ def test_the_dialog_warns_when_the_spec_ignores_the_custom_order(
 
 
 def test_the_direction_box_is_disabled_for_unused_levels(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """「（不使用）」那一列的升／降沒有意義，不要留一個轉得動卻沒作用的下拉。"""
-    window = _window(qtbot, tmp_path)
     page = window.operation_settings.categories
     page.refresh()
 
@@ -526,9 +551,11 @@ def test_the_direction_box_is_disabled_for_unused_levels(
 
 
 def test_templates_and_accounts_remember_their_sort_too(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
-    window = _window(qtbot, tmp_path)
     for name in ("郵局", "悠遊付"):
         assert window.controller.create_account(name, "0").success
     accounts = window.operation_settings.accounts
@@ -566,11 +593,13 @@ def test_templates_and_accounts_remember_their_sort_too(
 
 
 def test_the_entry_dropdown_ignores_the_page_sort_spec(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
+    window,
+    qtbot: Any,
+    tmp_path: Path,
+    monkeypatch: Any,
 ) -> None:
     """排序規格只影響那一頁。**下拉與資產總覽一律照自訂順序** ——
     它們沒有排序 UI，不該跟著某一頁的偏好變。"""
-    window = _window(qtbot, tmp_path)
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_account(name, "0").success
     accounts = window.operation_settings.accounts
