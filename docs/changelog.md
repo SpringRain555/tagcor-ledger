@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.16.4 - 關掉程式不再跳「發生未預期的錯誤」
+
+使用者實機回報：操作全程正常，**關掉視窗之後**跳出紅色驚嘆號：
+
+```
+RuntimeError: libshiboken: Internal C++ object
+(PySide6.QtWidgets.QListWidget) already deleted.
+  File "ui/widgets/table.py", line 237, in sync
+```
+
+### 這是 v0.16.1 進去的，日誌講得很清楚
+
+`app.log` 裡 0.8.0 到 0.14.3 共 **10 次關閉全部乾淨**，只有 0.16.3 這一次噴。
+中間動到這段程式的只有一處：**v0.16.1 把 `bind_selection` 從 `QTableView` 放寬到
+`QAbstractItemView`**，好讓維護頁的備份清單（`QListWidget`）也能綁選取狀態。
+
+### 為什麼只有 `QListWidget` 會炸
+
+`bind_selection` 把 `sync` 接到 model 的 `modelReset`。兩種 view 的差別在**誰擁有
+那個 model**：
+
+| view | model | 銷毀順序 |
+|---|---|---|
+| `QTableView` | `RowsModel`，**頁面自己持有的 Python 物件** | Python 說了算，view 先走 |
+| `QListWidget` | **C++ 那邊的內部子物件** | `~QListWidget` 期間它還會再發一次 `modelReset` |
+
+所以 `QListWidget` 那條路上，`sync` 會在 view 的 Python 包裝已經失效之後被呼叫，
+`table.selectionModel()` 當場丟 `RuntimeError`。
+
+修法是在 `sync` 開頭問一句 `shiboken6.isValid(table)`。**這不是把錯誤吞掉** ——
+「一個已經不存在的 widget 選了幾列」在那個時間點本來就不是一個成立的問題。
+
+### 守門：`tests/ui/test_shutdown.py`
+
+開**子行程**跑一次完整的「開啟 → 關閉 → 直譯器結束」，斷言 stderr 沒有
+`already deleted` 也沒有 `Traceback`。0.76 秒。
+
+必須開子行程，因為這件事發生在**直譯器關閉階段**。同一個 process 裡用
+`deleteLater()` ＋ `processEvents()` 抓不到 —— 前三次探針就是這樣落空的。
+
+那條測試裡有兩道防自欺的斷言：先確認驅動程式印出 `DRIVER_OK`（否則「沒有錯誤」
+可能只是它根本沒開起來），以及驅動程式裡先斷言備份清單**至少有一列**
+（清單是空的就走不到會出事的那條路，bug 還在測試也會綠）。
+
 ## 0.16.3 - 清掉 Phase 1 留下來的化石註解與兩段死碼
 
 行為零改變。這一版處理的是**註解與文件說了一件跟程式不一樣的事**。

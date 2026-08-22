@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableView,
 )
+from shiboken6 import isValid
 
 from tagcor_ledger.ui import colors
 
@@ -231,9 +232,26 @@ def bind_selection(table: QAbstractItemView, *buttons: QPushButton) -> None:
     **收 `QAbstractItemView` 而不是 `QTableView`**，因為維護頁的備份清單是
     `QListWidget`。同一條「沒選取就停用」的規則對它一樣成立，而且那一頁有
     「刪除所選備份」這種不可逆的操作 —— 正是最不該讓人按了沒反應的地方。
+
+    ## 為什麼 `sync` 要先問 view 還在不在
+
+    `QTableView` 用的 `RowsModel` 是**頁面自己持有**的 Python 物件，銷毀順序由
+    Python 決定，view 一定先走。`QListWidget` 不一樣：它的 model 是 **C++ 那邊的
+    內部子物件**，`~QListWidget` 期間它會再發一次 `modelReset` —— 那時候 C++ 物件
+    已經沒了，Python 包裝還在，`table.selectionModel()` 就丟
+    `RuntimeError: Internal C++ object already deleted`。
+
+    2026-08-22 使用者實機遇到：操作全程正常，**關掉程式的時候**跳出一個紅色驚嘆號。
+    這條路是 v0.16.1 把型別從 `QTableView` 放寬到 `QAbstractItemView` 時才第一次
+    被走到（日誌佐證：0.8.0～0.14.3 共 10 次關閉全部乾淨）。
+
+    「一個已經不存在的 widget 選了幾列」本來就沒有意義，所以直接跳過 ——
+    這不是把錯誤吞掉，是那個問題在那個時間點不成立。
     """
 
     def sync() -> None:
+        if not isValid(table):
+            return
         has_selection = bool(table.selectionModel().selectedRows())
         for button in buttons:
             button.setEnabled(has_selection)
