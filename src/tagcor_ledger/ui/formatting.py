@@ -127,18 +127,26 @@ def backup_state_text(valid: bool, error_code: Any) -> str:
 
 
 def backup_row_text(item: dict[str, Any]) -> str:
-    """備份清單的一列：時間｜狀態｜路徑。
+    """備份清單的一列：時間｜狀態｜資料夾名。
+
+    **不放完整路徑。** 那是一串上百字元的絕對路徑，會把清單撐出一條橫向捲軸，
+    而每一列前面那一大段又完全相同 —— 想分辨哪一份是哪一份，得先橫向捲到最後。
+    完整路徑放 tooltip（由 `MaintenancePage.refresh()` 設），刪除的確認框也會念出來
+    —— 那才是真的需要「確定是這一個」的時刻。
 
     **壞掉的備份也要有時間。** `validate_backup()` 一發現問題就回傳，`created_at`
     來自清單檔所以是空的 —— 於是壞掉那幾列開頭是一個空欄位。而使用者正是在
     「這幾份都壞了，該刪哪一份」的時候需要那個時間。資料夾名字本身就帶著時間戳
     （`backup_20260821_204129_147229`），讀不到清單檔時就用它。
+
+    資料夾名看起來跟時間欄重複，但它多了秒與微秒 —— 同一分鐘內建立的兩份備份
+    在時間欄上長得一模一樣，靠它才分得開。
     """
     path = Path(str(item["path"]))
     created = str(item.get("created_at") or "").strip()
     when = display_datetime(created) if created else _time_from_backup_id(path.name)
     state = backup_state_text(bool(item["valid"]), item.get("error_code"))
-    return f"{when}｜{state}｜{path}"
+    return f"{when}｜{state}｜{path.name}"
 
 
 def _time_from_backup_id(name: str) -> str:

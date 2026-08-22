@@ -2013,6 +2013,13 @@ def test_backup_list_never_shows_a_raw_error_code(qtbot, tmp_path: Path) -> None
     stamp = text.split("｜")[0]
     assert re.fullmatch(r"\d{4}/\d{2}/\d{2} \d{2}:\d{2}", stamp), stamp
 
+    # **完整路徑不進那一列** —— 上百字元的絕對路徑會把清單撐出一條橫向捲軸，
+    # 而每一列前面那一大段還完全相同。放 tooltip，滑過去就看得到。
+    item = page.list.item(0)
+    assert str(backup_dir) not in text, f"完整路徑跑進列裡了：{text}"
+    assert text.endswith(backup_dir.name), text
+    assert item.toolTip() == str(backup_dir), item.toolTip()
+
     # 按「驗證」要給完整說法，不是短標籤也不是英文碼。
     page.list.setCurrentRow(0)
     page.validate_selected()
@@ -2047,7 +2054,7 @@ def test_deleting_a_broken_backup_from_the_page(qtbot, tmp_path: Path, monkeypat
     row = next(
         index
         for index in range(page.list.count())
-        if str(drop) in page.list.item(index).text()
+        if page.list.item(index).data(Qt.ItemDataRole.UserRole) == str(drop)
     )
     page.list.setCurrentRow(row)
     page.delete_button.click()
@@ -2055,7 +2062,7 @@ def test_deleting_a_broken_backup_from_the_page(qtbot, tmp_path: Path, monkeypat
     assert not drop.exists(), "壞掉的備份要刪得掉 —— 那是這顆按鈕的主要用途"
     assert keep.is_dir(), "不該動到別的備份"
     assert page.list.count() == 1
-    assert str(keep) in page.list.item(0).text()
+    assert page.list.item(0).data(Qt.ItemDataRole.UserRole) == str(keep)
     # 確認框要念出這一份是什麼，還要說刪完還剩幾份可用的。
     assert str(drop) in asked[0], asked[0]
     assert "還有 1 份可用的備份" in asked[0], asked[0]

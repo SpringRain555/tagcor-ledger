@@ -103,10 +103,11 @@ class MaintenancePage(QWidget):
         self.list.clear()
         for backup in self.controller.list_backups():
             self.list.addItem(backup_row_text(backup))
-            self.list.item(self.list.count() - 1).setData(
-                Qt.ItemDataRole.UserRole,
-                backup["path"],
-            )
+            item = self.list.item(self.list.count() - 1)
+            item.setData(Qt.ItemDataRole.UserRole, backup["path"])
+            # 完整路徑不進那一列（會撐出橫向捲軸），但要拿得到 —— 尤其是設了
+            # 外部備份資料夾的時候，「這一份到底在哪個磁碟」是滑過去就該看到的事。
+            item.setToolTip(str(backup["path"]))
 
     def create_backup(self) -> None:
         try:
@@ -145,7 +146,9 @@ class MaintenancePage(QWidget):
         answer = QMessageBox.question(
             self,
             "確認刪除備份",
-            f"要永久刪除這一份備份嗎？\n\n{item.text()}\n\n"
+            # **這裡要有完整路徑。** 清單那一列只到資料夾名，而這是最後一次
+            # 能發現「我選到別顆磁碟上那一份了」的機會。
+            f"要永久刪除這一份備份嗎？\n\n{item.text()}\n{path}\n\n"
             f"{self._remaining_usable_text(path)}\n"
             "刪掉之後救不回來。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
