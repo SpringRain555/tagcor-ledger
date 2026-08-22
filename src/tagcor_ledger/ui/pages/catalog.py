@@ -43,6 +43,7 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.widgets.filters import CatalogFilterBar
+from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.simple_form import ChoiceField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
     SETTINGS_TABLE_ROWS,
@@ -119,9 +120,6 @@ class CatalogPage(QWidget):
     def _delete(self, identifier: str) -> Result:
         raise NotImplementedError
 
-    def _reorder(self, identifier: str, anchor_id: str, place: str) -> Result:
-        raise NotImplementedError
-
     def _make_filter_bar(self) -> CatalogFilterBar | None:
         """這一頁要不要篩選列。回傳 `None` 就沒有。
 
@@ -144,30 +142,21 @@ class CatalogPage(QWidget):
         for button in (add_button, rename, toggle, delete_button):
             row.addWidget(button)
         if self.REORDERABLE:
-            self.move_up = QPushButton("上移")
-            self.move_down = QPushButton("下移")
-            for button in (self.move_up, self.move_down):
-                button.setToolTip(
-                    "調整自訂順序。這個順序也會用在記帳頁的下拉選單 —— "
-                    "常用的排前面，每天都省一點時間。\n"
-                    "點表頭改成依某一欄排序時會停用（那時候看到的不是自訂順序）；"
-                    "再點一次表頭就回到自訂順序。"
-                )
-                row.addWidget(button)
-            self.move_up.clicked.connect(lambda: self.move_selected("before"))
-            self.move_down.clicked.connect(lambda: self.move_selected("after"))
+            # **排序是獨立視窗，不是表格上的兩顆按鈕。** 上一版把「上移／下移」放在
+            # 這裡，代價是依欄位排序時必須停用它們 —— 畫面上那一列的鄰居不是儲存
+            # 順序裡的鄰居。搬進視窗之後衝突就不存在了：那個視窗永遠顯示自訂順序。
+            self.order_button = QPushButton("排序…")
+            self.order_button.setToolTip(
+                "開一個視窗，用拖曳排出自己想要的順序。\n"
+                "這份順序也會用在記帳頁的下拉選單 —— 常用的排前面。"
+            )
+            self.order_button.clicked.connect(self.edit_order)
+            row.addWidget(self.order_button)
         row.addStretch()
 
         setup_table(self.table, self.model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
-        # 「新增」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
+        # 「新增」與「排序…」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
         bind_selection(self.table, rename, toggle, delete_button)
-        if self.REORDERABLE:
-            # **上移／下移不走 `bind_selection`。** 它們的條件比「有沒有選取」多兩個：
-            # 現在顯示的是不是自訂順序、以及同一組裡上／下還有沒有鄰居。
-            # 交給 `bind_selection` 再自己覆蓋一次，只會變成兩段程式輪流改同一個狀態。
-            self.table.selectionModel().selectionChanged.connect(
-                lambda *_: self._sync_move_buttons()
-            )
         layout = QVBoxLayout(self)
         layout.addLayout(row)
         # **篩選列自己一行**，不擠在按鈕列右邊 —— 四顆按鈕加一條搜尋框會把分頁的
@@ -226,76 +215,16 @@ class CatalogPage(QWidget):
 
     def refresh(self) -> None:
         self.model.replace_rows(self._rows())
-        self._sync_move_buttons()
 
     # --- 自訂順序 ---------------------------------------------------------------
 
-    def _sync_move_buttons(self) -> None:
-        """上移／下移能不能按。
+    def edit_order(self) -> None:
+        """開排序視窗。子類用 `_order_entries()` 與 `_save_order()` 回答內容與寫法。
 
-        三個條件都要成立：有選取、現在顯示的**是自訂順序**、同一組裡那個方向還有鄰居。
-
-        第二個條件是關鍵：依「項目數」排序時，「上移」要移到哪裡沒有答案 ——
-        畫面上那一列的上面那一列不是儲存順序裡的鄰居。讓它可以按，就是讓使用者按下去
-        看到一個無法解釋的結果。
+        **視窗裡的清單不受這一頁的搜尋與篩選影響。** 它排的是儲存順序，而儲存順序
+        是整組的 —— 只排看得見的那幾筆，剩下的位置就無法定義。
         """
-        if not self.REORDERABLE:
-            return
-        self.move_up.setEnabled(self._anchor_for("before") is not None)
-        self.move_down.setEnabled(self._anchor_for("after") is not None)
-
-    def _anchor_for(self, place: str) -> str | None:
-        """往上／往下找同一組裡的第一個鄰居，回傳它的 id。找不到就 `None`。
-
-        **找的是畫面上看得到的鄰居**，不是資料庫裡的。這一頁可以搜尋與篩選，
-        兩者不一定是同一個 —— 送畫面上那個，移動的結果才會跟眼睛看到的一致。
-        """
-        if self.sort_key != "default":
-            return None
-        item = self.model.selected_item(self.table)
-        if item is None:
-            return None
-        rows = self.model.items
-        identifier = str(item[self.ID_FIELD])
-        index = next(
-            (i for i, row in enumerate(rows) if str(row[self.ID_FIELD]) == identifier),
-            None,
-        )
-        if index is None:
-            return None
-        step = -1 if place == "before" else 1
-        position = index + step
-        while 0 <= position < len(rows):
-            if rows[position].get("parent_id") == item.get("parent_id"):
-                return str(rows[position][self.ID_FIELD])
-            position += step
-        return None
-
-    def move_selected(self, place: str) -> None:
-        """把所選那一列往上（`before`）或往下（`after`）移一格。
-
-        移完之後**要把它重新選起來** —— 否則按一次「上移」就掉了選取，想連按三次
-        得中間重新點三次。使用者要的是「一直往上」，不是「往上一格」。
-
-        **重新選取一定要排在 `_finish()` 之後。** `_finish()` 會發 `changed`，
-        而 `main_window._catalog_changed()` 接到之後又會把這一頁重整一次 ——
-        先選再發訊號的話，選取會被那一次重整洗掉（實測過，測試當場紅）。
-        """
-        item = self.model.selected_item(self.table)
-        anchor_id = self._anchor_for(place)
-        if item is None or anchor_id is None:
-            return
-        identifier = str(item[self.ID_FIELD])
-        result = self._reorder(identifier, anchor_id, place)
-        self._finish(result)
-        if result.success:
-            self._select_by_id(identifier)
-
-    def _select_by_id(self, identifier: str) -> None:
-        for row, item in enumerate(self.model.items):
-            if str(item[self.ID_FIELD]) == identifier:
-                self.table.selectRow(row)
-                return
+        raise NotImplementedError
 
     def selected_id(self) -> str | None:
         item = self.model.selected_item(self.table)
@@ -352,8 +281,32 @@ class AccountsPage(CatalogPage):
     ADD_LABEL = "新增帳戶"
     ID_FIELD = "account_id"
     NAME_LABEL = "帳戶名稱"
+    REORDERABLE = True
 
     _values = staticmethod(account_values)
+
+    def edit_order(self) -> None:
+        """帳戶只有一組，所以只有一份清單。
+
+        這份順序同時決定**記帳頁的帳戶下拉與資產總覽**的列法 —— 那正是排它的理由，
+        每天要選的那個帳戶不該埋在第五個。
+        """
+        rows = self.controller.account_options(include_archived=True)
+        dialog = ask_order(
+            self,
+            "帳戶順序",
+            [
+                ReorderEntry(
+                    identifier=str(row["account_id"]),
+                    name=str(row["name"]),
+                    archived=row["status"] != "active",
+                )
+                for row in rows
+            ],
+            caption="拖曳調整帳戶順序",
+        )
+        if dialog is not None:
+            self._finish(self.controller.set_account_order(dialog.parent_order()))
 
     def _rows(self) -> list[dict[str, Any]]:
         return self.controller.account_options(include_archived=True)
@@ -430,9 +383,19 @@ class CategoryPageBase(CatalogPage):
     def _delete(self, identifier: str) -> Result:
         return self.controller.delete_category(identifier)
 
-    def _reorder(self, identifier: str, anchor_id: str, place: str) -> Result:
-        return self.controller.reorder_category(
-            identifier, anchor_id=anchor_id, place=place
+    def _all_categories(self) -> list[dict[str, Any]]:
+        """整棵樹，**不套這一頁的篩選** —— 排序視窗排的是儲存順序，那是整組的。"""
+        return self.controller.category_tree(
+            tree_filter=CategoryTreeFilter(status="all")
+        )
+
+    @staticmethod
+    def _entry(row: dict[str, Any], children: tuple[ReorderEntry, ...] = ()) -> ReorderEntry:
+        return ReorderEntry(
+            identifier=str(row["category_id"]),
+            name=str(row["name"]),
+            archived=row["status"] != "active",
+            children=children,
         )
 
 
@@ -456,6 +419,22 @@ class CategoriesPage(CategoryPageBase):
         if values is None:
             return None
         return self.controller.create_category(str(values["name"]))
+
+    def edit_order(self) -> None:
+        """第一層全部是一組（`parent_id` 都是 `None`），所以只有一份清單。"""
+        rows = [row for row in self._all_categories() if int(row["level"]) == 1]
+        dialog = ask_order(
+            self,
+            "類別順序",
+            [self._entry(row) for row in rows],
+            caption="拖曳調整類別順序",
+        )
+        if dialog is not None:
+            self._finish(
+                self.controller.set_category_order(
+                    dialog.parent_order(), parent_id=None, level=1
+                )
+            )
 
 
 class ItemsPage(CategoryPageBase):
@@ -517,3 +496,45 @@ class ItemsPage(CategoryPageBase):
         return self.controller.create_category(
             str(values["name"]), str(values["parent_id"])
         )
+
+    def edit_order(self) -> None:
+        """兩層：左邊排類別，右邊排**所選類別底下**的項目。
+
+        項目的順序是「每個類別各自一組」（`sort_order` 只在同一組之內有意義），
+        一份平的清單表達不了它 —— 所以這個視窗一定是兩欄。
+
+        **左邊那份類別順序也會一起存。** 它就是決定「哪一組排在前面」的東西，
+        跟「這一組裡面誰在前面」是同一件事的兩層。
+        """
+        rows = self._all_categories()
+        children: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            if int(row["level"]) == 2:
+                children.setdefault(str(row["parent_id"]), []).append(row)
+        entries = [
+            self._entry(
+                row,
+                tuple(self._entry(child) for child in children.get(str(row["category_id"]), [])),
+            )
+            for row in rows
+            if int(row["level"]) == 1
+        ]
+        dialog = ask_order(
+            self,
+            "項目順序",
+            entries,
+            caption="類別順序",
+            child_caption="底下的項目",
+        )
+        if dialog is None:
+            return
+        result = self.controller.set_category_order(
+            dialog.parent_order(), parent_id=None, level=1
+        )
+        for parent_id, ordered in dialog.child_orders().items():
+            if not result.success:
+                break
+            result = self.controller.set_category_order(
+                ordered, parent_id=parent_id, level=2
+            )
+        self._finish(result)

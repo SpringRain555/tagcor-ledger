@@ -31,6 +31,33 @@ class AccountStore(StoreBase):
             ).fetchall()
         return [Account(**dict(row)) for row in rows]
 
+    def set_account_order(self, ordered_ids: list[str]) -> None:
+        """帳戶的自訂順序。帳戶只有一組，所以不必指名是哪一組。
+
+        這份順序同時決定記帳頁的帳戶下拉與資產總覽的列法 —— `list_accounts()`
+        本來就 `ORDER BY sort_order`，只是在這之前沒有人寫過那一欄。
+        """
+        with database_transaction(self.paths.database_path) as connection:
+            current = [
+                str(row["account_id"])
+                for row in connection.execute("SELECT account_id FROM accounts").fetchall()
+            ]
+            self._apply_sort_order(
+                connection,
+                table="accounts",
+                id_column="account_id",
+                current_ids=current,
+                ordered_ids=ordered_ids,
+            )
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="account.reorder",
+                entity_type="account",
+                entity_id="all",
+                details={"count": len(ordered_ids)},
+            )
+
     def create_account(
         self,
         *,

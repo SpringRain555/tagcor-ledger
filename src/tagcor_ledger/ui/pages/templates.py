@@ -23,6 +23,7 @@ from tagcor_ledger.application.result import Result
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, template_values
 from tagcor_ledger.ui.widgets.draft_dialog import DraftDialog
+from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.table import (
     SETTINGS_TABLE_ROWS,
     RowsModel,
@@ -53,12 +54,20 @@ class TemplatesPage(QWidget):
         edit_button = QPushButton("編輯模板")
         apply_button = QPushButton("套用到記帳")
         archive_button = QPushButton("封存模板")
+        self.order_button = QPushButton("排序…")
+        self.order_button.setToolTip("開一個視窗，用拖曳排出自己想要的模板順序。")
         set_button_role(add_button, "primary")
         set_button_role(apply_button, "primary")
         set_button_role(archive_button, "danger")
 
         row = QHBoxLayout()
-        for button in (add_button, edit_button, apply_button, archive_button):
+        for button in (
+            add_button,
+            edit_button,
+            apply_button,
+            archive_button,
+            self.order_button,
+        ):
             row.addWidget(button)
         row.addStretch()
 
@@ -76,6 +85,26 @@ class TemplatesPage(QWidget):
         edit_button.clicked.connect(self.edit_selected)
         apply_button.clicked.connect(self.apply_selected)
         archive_button.clicked.connect(self.archive_selected)
+        self.order_button.clicked.connect(self.edit_order)
+
+    def edit_order(self) -> None:
+        """模板只有一組。**排序視窗列出全部（含封存的）**，因為它排的是儲存順序。"""
+        rows = self.controller.list_templates(include_archived=True)
+        dialog = ask_order(
+            self,
+            "模板順序",
+            [
+                ReorderEntry(
+                    identifier=str(row["template_id"]),
+                    name=str(row["name"]),
+                    archived=row["status"] != "active",
+                )
+                for row in rows
+            ],
+            caption="拖曳調整模板順序",
+        )
+        if dialog is not None:
+            self._finish(self.controller.set_template_order(dialog.parent_order()))
 
     def refresh(self) -> None:
         self.model.replace_rows(self.controller.list_templates())

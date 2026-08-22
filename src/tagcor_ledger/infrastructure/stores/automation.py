@@ -56,6 +56,35 @@ class AutomationStore(StoreBase):
             ).fetchall()
         return [TransactionTemplate(**dict(row)) for row in rows]
 
+    def set_template_order(self, ordered_ids: list[str]) -> None:
+        """模板的自訂順序。模板只有一組。
+
+        **不走 `save_template()`。** 那條路會跑整套草稿驗證（帳戶、類別、金額），
+        而調順序不該因為某個模板的帳戶被封存了就失敗 —— 那兩件事無關。
+        """
+        with database_transaction(self.paths.database_path) as connection:
+            current = [
+                str(row["template_id"])
+                for row in connection.execute(
+                    "SELECT template_id FROM transaction_templates"
+                ).fetchall()
+            ]
+            self._apply_sort_order(
+                connection,
+                table="transaction_templates",
+                id_column="template_id",
+                current_ids=current,
+                ordered_ids=ordered_ids,
+            )
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="template.reorder",
+                entity_type="template",
+                entity_id="all",
+                details={"count": len(ordered_ids)},
+            )
+
     def save_template(self, template: TransactionTemplate) -> TransactionTemplate:
         self._validate_draft(template)
         timestamp = now_iso()

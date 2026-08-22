@@ -89,11 +89,10 @@ ERROR_MESSAGES: dict[str, str] = {
         "「類別封存了、項目還在選單裡」的矛盾。"
     ),
     "CATEGORY_IN_USE": "這個類別／項目已經有交易紀錄，不能刪除。請改用「封存」。",
-    "CATEGORY_REORDER_DIFFERENT_PARENT": (
-        "只能在同一個類別底下調整順序。要把項目換到別的類別，請改用重新命名或"
-        "在新的類別底下建一個。"
+    "REORDER_LIST_STALE": (
+        "清單在排序視窗開著的時候變了，順序沒有存下來。請關掉這個視窗、重新打開一次"
+        "再排 —— 直接存下去會把新增或刪掉的那一筆弄丟位置。"
     ),
-    "CATEGORY_REORDER_PLACE_INVALID": "移動方向不合法。正常操作不會發生，請回報。",
     # ---- 交易 ----
     "TRANSACTION_NOT_FOUND": "找不到這筆交易，它可能已經被刪除。請重新整理交易紀錄。",
     "TRANSACTION_VOIDED": "這筆交易已經作廢了，不能再修改。要更正就新增一筆。",

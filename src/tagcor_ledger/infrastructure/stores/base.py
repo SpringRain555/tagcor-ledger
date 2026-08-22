@@ -130,6 +130,39 @@ class StoreBase:
         if row is None or row["status"] != "active":
             raise ValueError("CATEGORY_NOT_ACTIVE")
 
+    @staticmethod
+    def _apply_sort_order(
+        connection: sqlite3.Connection,
+        *,
+        table: str,
+        id_column: str,
+        current_ids: list[str],
+        ordered_ids: list[str],
+    ) -> None:
+        """把一整組的 `sort_order` 重寫成 10、20、30⋯⋯
+
+        帳戶、類別／項目、模板三種聚合都用它，所以放在這裡（判準見模組說明：
+        「不只一個聚合會用到」）。`table` 與 `id_column` 是**呼叫端寫死的常數**，
+        不是使用者輸入 —— 它們會拼進 SQL，所以絕對不能變成參數化以外的來源。
+
+        **收整組的完整順序，不是「往上一格」。** 排序視窗本來就握有完整清單，
+        送整份進來就不必在資料庫裡算相對位置；而且順便擋得住「清單過期」——
+        送進來的 id 必須跟現況**完全一樣一組**，不多不少。
+
+        整組重編而不是找空隙：這些清單最多幾十列，而且現況全部都是同一個值
+        （`sort_order` 從 schema v1 就在，但一直沒有人寫過它），根本沒有空隙可找。
+        """
+        if sorted(ordered_ids) != sorted(current_ids) or len(set(ordered_ids)) != len(
+            ordered_ids
+        ):
+            raise ValueError("REORDER_LIST_STALE")
+        stamp = now_iso()
+        for position, identifier in enumerate(ordered_ids, 1):
+            connection.execute(
+                f"UPDATE {table} SET sort_order = ?, updated_at = ? WHERE {id_column} = ?",
+                (position * 10, stamp, identifier),
+            )
+
     @classmethod
     def _write_transaction(
         cls,

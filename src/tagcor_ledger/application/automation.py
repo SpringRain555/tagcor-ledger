@@ -84,6 +84,18 @@ class AutomationService:
                 fallback_message="模板無法封存。請匯出診斷資訊回報。",
             )
 
+    def set_template_order(self, ordered_ids: list[str]) -> Result:
+        """模板的自訂順序。"""
+        try:
+            self.store.set_template_order(ordered_ids)
+            return Result.ok("順序已更新。")
+        except (ValueError, sqlite3.Error) as exc:
+            return failure(
+                exc,
+                fallback_code="TEMPLATE_REORDER_FAILED",
+                fallback_message="順序無法更新。請匯出診斷資訊回報。",
+            )
+
     def list_schedules(self, *, include_archived: bool = False) -> Result:
         return Result.ok(
             "排程已載入。",

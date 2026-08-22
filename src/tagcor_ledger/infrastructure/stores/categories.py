@@ -290,74 +290,49 @@ class CategoryStore(StoreBase):
                 details={"name": clean_name},
             )
 
-    def reorder_category(self, category_id: str, *, anchor_id: str, place: str) -> None:
-        """把一個類別／項目移到同一層裡另一個的**前面或後面**。
+    def set_category_order(
+        self,
+        ordered_ids: list[str],
+        *,
+        parent_id: str | None,
+        level: int,
+    ) -> None:
+        """把**一整組**的自訂順序寫下來（同一個 `parent_id` 底下的同一層）。
 
-        **收的是「移到誰旁邊」，不是「往上一格」。** 名冊分頁可以搜尋與篩選，畫面上
-        那一列的鄰居不一定是儲存順序裡的鄰居 —— 由呼叫端把看得見的那個鄰居的 id
-        送進來，移動的結果才會跟使用者眼睛看到的一致。
+        **收整份清單，不是「往上一格」。** 排序視窗本來就握有完整順序，送整份進來
+        比在資料庫裡算相對位置簡單，也順便擋掉「清單過期」——`_apply_sort_order()`
+        會要求送進來的 id 與現況是**完全一樣的一組**，不多不少。
 
-        整組兄弟一起重新編號成 10、20、30⋯⋯。這一層最多幾十列，重編比在既有數字之間
-        找空隙簡單，而且**現在非重編不可**：`sort_order` 從 schema v1 就存在、預設排序
-        也一直在用它，但從來沒有人寫過它 —— 每一列都是 `create_category()` 寫死的
-        100，全部平手，實際順序是靠後面那個名稱 tiebreaker 撐著。
+        `sort_order` 的意義**只在同一組之內**。項目跨類別比 `sort_order` 沒有意義
+        （每一組都是 10、20、30，會互相穿插），所以呼叫端一定要指名是哪一組 ——
+        這也是為什麼「項目」的排序視窗要先選類別。
         """
-        if place not in {"before", "after"}:
-            raise ValueError("CATEGORY_REORDER_PLACE_INVALID")
         with database_transaction(self.paths.database_path) as connection:
-            moving = self._category_position(connection, category_id)
-            anchor = self._category_position(connection, anchor_id)
-            if category_id == anchor_id:
-                return
-            if moving != anchor:
-                raise ValueError("CATEGORY_REORDER_DIFFERENT_PARENT")
-            parent_id, level = moving
-            siblings = [
+            current = [
                 str(row["category_id"])
                 for row in connection.execute(
                     """
                     SELECT category_id FROM categories
                     WHERE parent_id IS ? AND level = ?
-                    ORDER BY sort_order, name COLLATE NOCASE
                     """,
                     (parent_id, level),
                 ).fetchall()
             ]
-            siblings.remove(category_id)
-            index = siblings.index(anchor_id) + (1 if place == "after" else 0)
-            siblings.insert(index, category_id)
-            stamp = now_iso()
-            for position, sibling_id in enumerate(siblings, 1):
-                connection.execute(
-                    """
-                    UPDATE categories SET sort_order = ?, updated_at = ?
-                    WHERE category_id = ?
-                    """,
-                    (position * 10, stamp, sibling_id),
-                )
+            self._apply_sort_order(
+                connection,
+                table="categories",
+                id_column="category_id",
+                current_ids=current,
+                ordered_ids=ordered_ids,
+            )
             self._audit(
                 connection,
                 correlation_id=f"corr_{uuid4().hex}",
                 action="category.reorder",
                 entity_type="category",
-                entity_id=category_id,
-                details={"anchor_id": anchor_id, "place": place},
+                entity_id=parent_id or "root",
+                details={"level": level, "count": len(ordered_ids)},
             )
-
-    @staticmethod
-    def _category_position(
-        connection: sqlite3.Connection,
-        category_id: str,
-    ) -> tuple[str | None, int]:
-        """這一列住在哪一層的哪一組底下。找不到就是 `CATEGORY_NOT_FOUND`。"""
-        row = connection.execute(
-            "SELECT parent_id, level FROM categories WHERE category_id = ?",
-            (category_id,),
-        ).fetchone()
-        if row is None:
-            raise NotFoundError("CATEGORY_NOT_FOUND")
-        parent = row["parent_id"]
-        return (str(parent) if parent is not None else None, int(row["level"]))
 
     def delete_category(self, category_id: str) -> None:
         with database_transaction(self.paths.database_path) as connection:

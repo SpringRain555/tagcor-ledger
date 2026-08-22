@@ -332,9 +332,21 @@ class LedgerController:
     def delete_category(self, category_id: str) -> Result:
         return self.categories.delete(category_id)
 
-    def reorder_category(self, category_id: str, *, anchor_id: str, place: str) -> Result:
-        """自訂順序：把它移到 `anchor_id` 的前面（`place="before"`）或後面。"""
-        return self.categories.reorder(category_id, anchor_id=anchor_id, place=place)
+    def set_category_order(
+        self,
+        ordered_ids: list[str],
+        *,
+        parent_id: str | None,
+        level: int,
+    ) -> Result:
+        """一整組類別／項目的自訂順序。`parent_id=None, level=1` 就是第一層。"""
+        return self.categories.set_order(ordered_ids, parent_id=parent_id, level=level)
+
+    def set_account_order(self, ordered_ids: list[str]) -> Result:
+        return self.accounts.set_order(ordered_ids)
+
+    def set_template_order(self, ordered_ids: list[str]) -> Result:
+        return self.automation.set_template_order(ordered_ids)
 
     def get_settings(self) -> ApplicationSettings:
         return self.settings.get()
@@ -507,8 +519,8 @@ class LedgerController:
         """各表筆數。給重製確認框用 —— 不可逆的操作要講得出「會失去什麼」。"""
         return self.diagnostics.counts()
 
-    def list_templates(self) -> list[dict[str, Any]]:
-        result = self.automation.list_templates()
+    def list_templates(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
+        result = self.automation.list_templates(include_archived=include_archived)
         return list(result.details.get("templates", []))
 
     def save_template(self, template: TransactionTemplate) -> Result:

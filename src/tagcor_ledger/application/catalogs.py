@@ -1,7 +1,13 @@
-"""帳戶與類別／項目的管理 use case。"""
+"""帳戶與類別／項目的管理 use case。
+
+**這兩個 service 各有一個叫 `list` 的方法**，所以類別內的型別註記不能寫 `list[str]`
+—— 它會解析成那個方法，mypy 會說「Function is not valid as a type」。收序列一律用
+`Sequence[str]`（順序有意義，所以不是 `Iterable`），要傳給 store 時再 `list(...)`。
+"""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import sqlite3
 
 from tagcor_ledger.app.paths import AppPaths
@@ -161,6 +167,18 @@ class AccountService:
                 fallback_message="帳戶無法刪除。請匯出診斷資訊回報。",
             )
 
+    def set_order(self, ordered_ids: Sequence[str]) -> Result:
+        """帳戶的自訂順序。這份順序也決定記帳頁下拉與資產總覽的列法。"""
+        try:
+            self.store.set_account_order(list(ordered_ids))
+            return Result.ok("順序已更新。")
+        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+            return failure(
+                exc,
+                fallback_code="ACCOUNT_REORDER_FAILED",
+                fallback_message="順序無法更新。請匯出診斷資訊回報。",
+            )
+
 
 class CategoryService:
     def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
@@ -307,10 +325,18 @@ class CategoryService:
                 fallback_message="類別／項目名稱無法更新。請匯出診斷資訊回報。",
             )
 
-    def reorder(self, category_id: str, *, anchor_id: str, place: str) -> Result:
-        """調整自訂順序：把一個類別／項目移到同一層裡另一個的前面或後面。"""
+    def set_order(
+        self,
+        ordered_ids: Sequence[str],
+        *,
+        parent_id: str | None,
+        level: int,
+    ) -> Result:
+        """把一整組的自訂順序寫下來。"""
         try:
-            self.store.reorder_category(category_id, anchor_id=anchor_id, place=place)
+            self.store.set_category_order(
+                list(ordered_ids), parent_id=parent_id, level=level
+            )
             return Result.ok("順序已更新。")
         except (ValueError, NotFoundError, sqlite3.Error) as exc:
             return failure(
