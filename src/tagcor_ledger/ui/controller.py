@@ -332,6 +332,10 @@ class LedgerController:
     def delete_category(self, category_id: str) -> Result:
         return self.categories.delete(category_id)
 
+    def reorder_category(self, category_id: str, *, anchor_id: str, place: str) -> Result:
+        """自訂順序：把它移到 `anchor_id` 的前面（`place="before"`）或後面。"""
+        return self.categories.reorder(category_id, anchor_id=anchor_id, place=place)
+
     def get_settings(self) -> ApplicationSettings:
         return self.settings.get()
 

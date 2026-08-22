@@ -72,6 +72,9 @@ class CatalogPage(QWidget):
     值必須是 `CATEGORY_SORT_KEYS` 裡有的 key —— 那份白名單才是唯一能拼進
     `ORDER BY` 的東西。"""
 
+    REORDERABLE = False
+    """這一頁要不要「上移／下移」。開了就要實作 `_reorder()`。"""
+
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
         self.controller = controller
@@ -116,6 +119,9 @@ class CatalogPage(QWidget):
     def _delete(self, identifier: str) -> Result:
         raise NotImplementedError
 
+    def _reorder(self, identifier: str, anchor_id: str, place: str) -> Result:
+        raise NotImplementedError
+
     def _make_filter_bar(self) -> CatalogFilterBar | None:
         """這一頁要不要篩選列。回傳 `None` 就沒有。
 
@@ -137,11 +143,31 @@ class CatalogPage(QWidget):
         row = QHBoxLayout()
         for button in (add_button, rename, toggle, delete_button):
             row.addWidget(button)
+        if self.REORDERABLE:
+            self.move_up = QPushButton("上移")
+            self.move_down = QPushButton("下移")
+            for button in (self.move_up, self.move_down):
+                button.setToolTip(
+                    "調整自訂順序。這個順序也會用在記帳頁的下拉選單 —— "
+                    "常用的排前面，每天都省一點時間。\n"
+                    "點表頭改成依某一欄排序時會停用（那時候看到的不是自訂順序）；"
+                    "再點一次表頭就回到自訂順序。"
+                )
+                row.addWidget(button)
+            self.move_up.clicked.connect(lambda: self.move_selected("before"))
+            self.move_down.clicked.connect(lambda: self.move_selected("after"))
         row.addStretch()
 
         setup_table(self.table, self.model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
         # 「新增」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
         bind_selection(self.table, rename, toggle, delete_button)
+        if self.REORDERABLE:
+            # **上移／下移不走 `bind_selection`。** 它們的條件比「有沒有選取」多兩個：
+            # 現在顯示的是不是自訂順序、以及同一組裡上／下還有沒有鄰居。
+            # 交給 `bind_selection` 再自己覆蓋一次，只會變成兩段程式輪流改同一個狀態。
+            self.table.selectionModel().selectionChanged.connect(
+                lambda *_: self._sync_move_buttons()
+            )
         layout = QVBoxLayout(self)
         layout.addLayout(row)
         # **篩選列自己一行**，不擠在按鈕列右邊 —— 四顆按鈕加一條搜尋框會把分頁的
@@ -173,11 +199,21 @@ class CatalogPage(QWidget):
         header = self.table.horizontalHeader()
         header.setSectionsClickable(True)
         header.setSortIndicatorShown(True)
+        # **三段循環：升冪 → 降冪 → 收回箭頭。** 收回時 `column` 是 -1，那就是
+        # 「回到自訂順序」—— 沒有這一段的話，使用者一旦點過表頭就再也回不去，
+        # 而自訂順序才是這兩頁的預設。
+        header.setSortIndicatorClearable(True)
         header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         header.sortIndicatorChanged.connect(self._sort_changed)
 
     def _sort_changed(self, column: int, order: Qt.SortOrder) -> None:
-        key = self.SORT_KEYS[column] if 0 <= column < len(self.SORT_KEYS) else None
+        if column < 0:
+            # 箭頭被收回去了 —— 回到自訂順序。
+            self.sort_key = "default"
+            self.descending = False
+            self.refresh()
+            return
+        key = self.SORT_KEYS[column] if column < len(self.SORT_KEYS) else None
         if key is None:
             # 那一欄不能排。把指示箭頭收回去，不要留一個會動但沒有作用的箭頭。
             self.table.horizontalHeader().setSortIndicator(
@@ -190,6 +226,76 @@ class CatalogPage(QWidget):
 
     def refresh(self) -> None:
         self.model.replace_rows(self._rows())
+        self._sync_move_buttons()
+
+    # --- 自訂順序 ---------------------------------------------------------------
+
+    def _sync_move_buttons(self) -> None:
+        """上移／下移能不能按。
+
+        三個條件都要成立：有選取、現在顯示的**是自訂順序**、同一組裡那個方向還有鄰居。
+
+        第二個條件是關鍵：依「項目數」排序時，「上移」要移到哪裡沒有答案 ——
+        畫面上那一列的上面那一列不是儲存順序裡的鄰居。讓它可以按，就是讓使用者按下去
+        看到一個無法解釋的結果。
+        """
+        if not self.REORDERABLE:
+            return
+        self.move_up.setEnabled(self._anchor_for("before") is not None)
+        self.move_down.setEnabled(self._anchor_for("after") is not None)
+
+    def _anchor_for(self, place: str) -> str | None:
+        """往上／往下找同一組裡的第一個鄰居，回傳它的 id。找不到就 `None`。
+
+        **找的是畫面上看得到的鄰居**，不是資料庫裡的。這一頁可以搜尋與篩選，
+        兩者不一定是同一個 —— 送畫面上那個，移動的結果才會跟眼睛看到的一致。
+        """
+        if self.sort_key != "default":
+            return None
+        item = self.model.selected_item(self.table)
+        if item is None:
+            return None
+        rows = self.model.items
+        identifier = str(item[self.ID_FIELD])
+        index = next(
+            (i for i, row in enumerate(rows) if str(row[self.ID_FIELD]) == identifier),
+            None,
+        )
+        if index is None:
+            return None
+        step = -1 if place == "before" else 1
+        position = index + step
+        while 0 <= position < len(rows):
+            if rows[position].get("parent_id") == item.get("parent_id"):
+                return str(rows[position][self.ID_FIELD])
+            position += step
+        return None
+
+    def move_selected(self, place: str) -> None:
+        """把所選那一列往上（`before`）或往下（`after`）移一格。
+
+        移完之後**要把它重新選起來** —— 否則按一次「上移」就掉了選取，想連按三次
+        得中間重新點三次。使用者要的是「一直往上」，不是「往上一格」。
+
+        **重新選取一定要排在 `_finish()` 之後。** `_finish()` 會發 `changed`，
+        而 `main_window._catalog_changed()` 接到之後又會把這一頁重整一次 ——
+        先選再發訊號的話，選取會被那一次重整洗掉（實測過，測試當場紅）。
+        """
+        item = self.model.selected_item(self.table)
+        anchor_id = self._anchor_for(place)
+        if item is None or anchor_id is None:
+            return
+        identifier = str(item[self.ID_FIELD])
+        result = self._reorder(identifier, anchor_id, place)
+        self._finish(result)
+        if result.success:
+            self._select_by_id(identifier)
+
+    def _select_by_id(self, identifier: str) -> None:
+        for row, item in enumerate(self.model.items):
+            if str(item[self.ID_FIELD]) == identifier:
+                self.table.selectRow(row)
+                return
 
     def selected_id(self) -> str | None:
         item = self.model.selected_item(self.table)
@@ -289,6 +395,7 @@ class CategoryPageBase(CatalogPage):
     ID_FIELD = "category_id"
     LEVEL = 1
     WITH_PARENT_FILTER = False
+    REORDERABLE = True
 
     def _make_filter_bar(self) -> CatalogFilterBar | None:
         return CatalogFilterBar(with_parent=self.WITH_PARENT_FILTER)
@@ -322,6 +429,11 @@ class CategoryPageBase(CatalogPage):
 
     def _delete(self, identifier: str) -> Result:
         return self.controller.delete_category(identifier)
+
+    def _reorder(self, identifier: str, anchor_id: str, place: str) -> Result:
+        return self.controller.reorder_category(
+            identifier, anchor_id=anchor_id, place=place
+        )
 
 
 class CategoriesPage(CategoryPageBase):

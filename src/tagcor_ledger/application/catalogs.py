@@ -307,6 +307,18 @@ class CategoryService:
                 fallback_message="類別／項目名稱無法更新。請匯出診斷資訊回報。",
             )
 
+    def reorder(self, category_id: str, *, anchor_id: str, place: str) -> Result:
+        """調整自訂順序：把一個類別／項目移到同一層裡另一個的前面或後面。"""
+        try:
+            self.store.reorder_category(category_id, anchor_id=anchor_id, place=place)
+            return Result.ok("順序已更新。")
+        except (ValueError, NotFoundError, sqlite3.Error) as exc:
+            return failure(
+                exc,
+                fallback_code="CATEGORY_REORDER_FAILED",
+                fallback_message="順序無法更新。請匯出診斷資訊回報。",
+            )
+
     def restore(self, category_id: str) -> Result:
         try:
             self.store.restore_category(category_id)

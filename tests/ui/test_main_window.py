@@ -2155,3 +2155,178 @@ def test_backup_buttons_are_disabled_until_a_backup_is_selected(
 
     page.list.setCurrentRow(0)
     assert all(button.isEnabled() for button in buttons)
+
+
+# --- 自訂順序（類別／項目）---------------------------------------------------
+#
+# 預設帳本只有**一個**類別（「伙食」），所以每一條都自己造資料。
+# 第一版沒造，六條全紅 —— 是那幾條 `assert len(...) >= 2` 擋下來的。
+
+
+def _catalog_names(page, column: int = 0) -> list[str]:
+    return [
+        page.model.index(row, column).data() for row in range(page.model.rowCount())
+    ]
+
+
+def _select_named(page, name: str, column: int = 0) -> int:
+    for row in range(page.model.rowCount()):
+        if page.model.index(row, column).data() == name:
+            page.table.selectRow(row)
+            return row
+    raise AssertionError(f"清單裡沒有「{name}」：{_catalog_names(page, column)}")
+
+
+def _categories_page(window: MainWindow, names: list[str]):
+    for name in names:
+        assert window.controller.create_category(name).success, name
+    page = window.operation_settings.categories
+    page.refresh()
+    return page
+
+
+def test_moving_a_category_up_changes_the_order_on_screen(qtbot, tmp_path: Path) -> None:
+    """使用者要的就是這個：選一列、按上移、清單真的變了。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    page = _categories_page(window, ["交通", "居住", "娛樂"])
+
+    names = _catalog_names(page)
+    assert len(names) >= 4, f"造資料失敗，這條檢查不到東西：{names}"
+    target = names[-1]
+    _select_named(page, target)
+
+    page.move_up.click()
+
+    moved = _catalog_names(page)
+    assert moved.index(target) < names.index(target), f"{names} -> {moved}"
+    assert sorted(moved) == sorted(names), "移動不該讓任何一列消失或多出來"
+
+
+def test_moving_keeps_the_row_selected_so_you_can_press_it_again(
+    qtbot, tmp_path: Path
+) -> None:
+    """按一次「上移」不能掉選取 —— 使用者要的是「一直往上」，不是「往上一格」。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    page = _categories_page(window, ["交通", "居住", "娛樂"])
+
+    names = _catalog_names(page)
+    target = names[-1]
+    _select_named(page, target)
+
+    page.move_up.click()
+    assert page.selected_id() is not None, "移動之後選取掉了，第二次就按不下去"
+    page.move_up.click()
+
+    moved = _catalog_names(page)
+    assert moved.index(target) == len(names) - 3, f"連按兩次只往上一格：{moved}"
+
+
+def test_the_first_row_cannot_move_up_and_the_last_cannot_move_down(
+    qtbot, tmp_path: Path
+) -> None:
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    page = _categories_page(window, ["交通", "居住"])
+    names = _catalog_names(page)
+    assert len(names) >= 3
+
+    _select_named(page, names[0])
+    assert not page.move_up.isEnabled(), "第一列還能往上移"
+    assert page.move_down.isEnabled()
+
+    _select_named(page, names[-1])
+    assert page.move_up.isEnabled()
+    assert not page.move_down.isEnabled(), "最後一列還能往下移"
+
+
+def test_moving_is_disabled_while_a_column_sort_is_active(qtbot, tmp_path: Path) -> None:
+    """依某一欄排序時「上移」沒有意義 —— 畫面上的鄰居不是儲存順序裡的鄰居。
+
+    而且要**回得去**：表頭第三次點擊會收回箭頭，回到自訂順序。沒有這一段的話，
+    使用者點過一次表頭就再也調不了順序了。
+    """
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    page = _categories_page(window, ["交通", "居住"])
+    _select_named(page, _catalog_names(page)[-1])
+    assert page.move_up.isEnabled()
+
+    header = page.table.horizontalHeader()
+    header.setSortIndicator(1, Qt.SortOrder.AscendingOrder)  # 「項目數」
+    assert page.sort_key == "item_count"
+    _select_named(page, _catalog_names(page)[-1])
+    assert not page.move_up.isEnabled(), "依欄位排序時還能按上移"
+    assert not page.move_down.isEnabled()
+
+    header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)  # 收回箭頭
+    assert page.sort_key == "default", "收回箭頭之後沒有回到自訂順序"
+    _select_named(page, _catalog_names(page)[-1])
+    assert page.move_up.isEnabled(), "回到自訂順序之後上移還是不能按"
+
+
+def test_items_only_move_within_their_own_category(qtbot, tmp_path: Path) -> None:
+    """項目分頁照類別分組。一組裡的第一個不能再往上 —— 上面那一列是別組的。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    controller = window.controller
+    assert controller.create_category("交通").success
+    transport = next(
+        item["category_id"]
+        for item in controller.category_options()
+        if item["name"] == "交通"
+    )
+    assert controller.create_category("捷運", transport).success
+    assert controller.create_category("公車", transport).success
+    assert controller.create_category("早餐", "cat_food").success
+
+    page = window.operation_settings.items
+    page.refresh()
+    rows = [
+        (page.model.index(row, 0).data(), page.model.index(row, 1).data())
+        for row in range(page.model.rowCount())
+    ]
+    groups = [parent for parent, _ in rows]
+    assert len(set(groups)) >= 2, f"至少要兩個類別才測得到分組邊界：{rows}"
+
+    first_of_last_group = next(
+        index for index, (parent, _) in enumerate(rows) if parent == groups[-1]
+    )
+    page.table.selectRow(first_of_last_group)
+    assert not page.move_up.isEnabled(), (
+        f"一組裡的第一個往上移了 —— 上面那一列屬於別的類別：{rows}"
+    )
+
+    # 同一組裡的第二個就移得動，否則上面那條可能只是「整頁都不能移」
+    page.table.selectRow(first_of_last_group + 1)
+    assert page.move_up.isEnabled(), f"同一組裡的第二個也不能移：{rows}"
+
+
+def test_the_custom_order_shows_up_in_the_entry_page_dropdown(
+    qtbot, tmp_path: Path
+) -> None:
+    """名冊排好了但記帳頁下拉沒跟著，等於沒排。"""
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.show()
+    page = _categories_page(window, ["交通", "居住", "娛樂"])
+    names = _catalog_names(page)
+    target = names[-1]
+    _select_named(page, target)
+    page.move_up.click()
+
+    window.entry.reload_options()
+    dropdown = [
+        window.entry.category.itemText(index)
+        for index in range(window.entry.category.count())
+    ]
+    assert target in dropdown, f"下拉裡沒有這個類別：{dropdown}"
+    assert dropdown.index(target) < names.index(target), (
+        f"下拉沒有跟著自訂順序走：{dropdown}"
+    )

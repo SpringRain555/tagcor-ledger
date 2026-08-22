@@ -69,7 +69,9 @@
 | `CATEGORY_IN_USE` | 想刪掉已被歷史交易引用的 | **改用封存** |
 | `CATEGORY_REQUIRED` | 收入／支出沒選類別 | 選一個。轉帳不需要類別 |
 | `CATEGORY_CREATE_FAILED` | **預期外**的寫入失敗。名稱空白、上層無效、同層同名這三種都已經有自己的碼，走到這裡表示三道檢查都沒攔到 | 匯出診斷資訊回報。原文在 `details.detail`，**不會印在畫面上** |
-| `CATEGORY_RENAME_FAILED` / `CATEGORY_ARCHIVE_FAILED` / `CATEGORY_RESTORE_FAILED` / `CATEGORY_DELETE_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
+| `CATEGORY_REORDER_DIFFERENT_PARENT` | 想把項目移到**別的類別**底下的位置 | 調整順序只在同一組之內。換類別是另一件事，這裡不做 |
+| `CATEGORY_REORDER_PLACE_INVALID` | `place` 不是 `before` 或 `after` | 正常操作不會發生（UI 只送這兩個值）；回報 |
+| `CATEGORY_RENAME_FAILED` / `CATEGORY_ARCHIVE_FAILED` / `CATEGORY_RESTORE_FAILED` / `CATEGORY_DELETE_FAILED` / `CATEGORY_REORDER_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
 
 ## 交易
 

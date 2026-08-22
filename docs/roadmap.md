@@ -136,9 +136,9 @@ ruff 與 mypy --strict 乾淨。
 （用 `isVisible()` 過濾，`QStackedWidget` 底下的頁在 offscreen 永遠回報 `False`）。
 三筆都記在 [失敗紀錄](lessons.md)。
 
-### v0.15.0–v0.16.3（2026-08-21 ～ 08-22）
+### v0.15.0–v0.17.0（2026-08-21 ～ 08-22）
 
-實機使用之後的五批修補。每一版**做了什麼**在 [changelog](changelog.md)，
+實機使用之後的七批修補與一個新功能。每一版**做了什麼**在 [changelog](changelog.md)，
 **踩到什麼**在 [失敗紀錄](lessons.md)；這裡只留一行「那一版在解什麼問題」。
 
 | 版本 | 在解什麼問題 |
@@ -148,6 +148,8 @@ ruff 與 mypy --strict 乾淨。
 | v0.16.1 | 備份刪不掉（`with sqlite3.connect(...)` 不關連線），以及新的「刪除所選備份」 |
 | v0.16.2 | 備份清單只到資料夾名；`SIMPLIFIED_ONLY` 移除誤收的「返」 |
 | v0.16.3 | 化石註解與死碼；roadmap 不再是第二份 changelog；**整包測試 32 分鐘 → 46 秒** |
+| v0.16.4 | 關掉程式跳出未處理例外（`bind_selection` 在 `QListWidget` 上的生命週期） |
+| v0.17.0 | 類別與項目的**自訂順序**（上移／下移）。`sort_order` 從 v1 就在，這是第一次有人寫它 |
 
 ## 後續候選 Phase
 
