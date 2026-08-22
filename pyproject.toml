@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tagcor-ledger"
-version = "0.19.0"
+version = "0.20.0"
 description = "Windows-first local personal ledger with SQLite and PySide6."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -50,7 +50,9 @@ strict = true
 
 # PySide6 沒有 py.typed，所以匯入它的模組會噴 import-untyped，繼承 Qt 類別會噴
 # 「Class cannot subclass X (has type Any)」。只放寬到真的碰 Qt 的模組：
-# ui/controller.py 與 ui/formatting.py 不在清單裡，維持完整 strict。
+# `tagcor_ledger.ui.controller.*` 與 `tagcor_ledger.ui.formatting.*` **刻意不在清單裡**，
+# 維持完整 strict —— 它們不 import Qt，放寬只會讓型別檢查白白鬆掉一大塊。
+# 2026-08-22 它們從單一模組變成套件，這條仍然成立（子模組同樣不在清單上）。
 [[tool.mypy.overrides]]
 module = [
     "tagcor_ledger.ui.app",

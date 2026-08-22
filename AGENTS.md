@@ -56,12 +56,14 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 
 - `domain/`：Money、帳戶、類別、交易、模板、定期收支、餘額盤點、定存模型；**不得依賴 Qt 或 SQLite**，也不得 import 其他任何一層。
 - `application/`：use case、Result、設定、備份/還原/重製協調；**不得直接寫 UI**。
-- `infrastructure/`：SQLite migration、store、backup、CSV export。**store 一律放在 `infrastructure/stores/`**，`LedgerStore` 在 `sqlite_store.py` 把六個聚合組起來（唯一的例外是 `LedgerStore` 自己，它只負責組裝）。有測試守著。
+- `infrastructure/`：SQLite migration、store、backup、CSV export。**store 一律放在 `infrastructure/stores/`，一個聚合一個檔**，`LedgerStore` 在 `sqlite_store.py` 用繼承把它們組起來（唯一的例外是 `LedgerStore` 自己，它只負責組裝）。`stores/__init__.py` 的 `__all__` 必須與 `LedgerStore` 的基底一致。兩條都有測試守著。
 - **「一筆交易長什麼樣」只有一個地方說了算**：`StoreBase._write_transaction()` / `_write_transfer()`。它們收 `connection` 而不是自己開，所以「就寫這一筆」與「建交易＋改別的表的狀態」兩種情境都能用同一份實作。`transactions`、`transaction_fts`、`audit_events` 三張表**只能有一個寫入點**（`stores/base.py`），`tests/unit/test_architecture.py` 會擋。要寫交易就呼叫那兩個，不要再開一條路 —— 分岔過一次，代價寫在 `docs/lessons.md`。
 - `ui/`：PySide6 視圖與 controller；**不得直接撰寫 SQL**。一個檔案一個畫面放在 `ui/pages/`，頁面之間不互相 import，跨頁連動一律集中在 `ui/main_window.py`。
+- **`LedgerController` 由 `ui/controller/` 底下的 section 用繼承組起來**，比照 `LedgerStore`。`__init__.py` 只放組裝、不得定義任何方法；section 之間**彼此不呼叫對方**（唯一的例外是 `OverviewSection`，它明說自己是聚合層）。有測試守著。
+- **「一列長什麼樣」只由 `ui/formatting/` 決定**，`ui/pages/` 不得自己定義會 `return [...]` 的 `*_values`。同一個狀態有兩個拼法，兩張表就會對同一筆資料講不同的話。
 - 系統路徑設定不存放在 ledger SQLite，使用外部 JSON 設定檔（資料庫路徑本身不能可靠地存在資料庫裡）。
 
-**這幾條由 `tests/unit/test_architecture.py` 用 AST 守著**，不是只寫在文件上。同一份測試還會擋單一模組超過 700 行。完整的檔案地圖見 `docs/architecture/overview.md`。
+**這幾條由 `tests/unit/test_architecture.py` 用 AST 守著**，不是只寫在文件上。同一份測試還會擋檔案過大：`src/` **700 行**、`tests/` **1200 行**（測試本來就比實作長，但 2026-08-22 拆掉的那個 UI 測試檔已經 2,153 行 66 條、橫跨八個頁面，因為當時只掃 `src/`）。完整的檔案地圖見 `docs/architecture/overview.md`。
 
 ## 重要規則
 

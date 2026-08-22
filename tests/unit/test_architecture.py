@@ -33,9 +33,20 @@ SQL_PATTERNS = [
 # 但一個檔案長到這個地步時，值得停下來問「它是不是裝了兩件事」。
 #
 # 門檻怎麼來的：2026-08 拆檔前 `main_window_phase12.py` 是 2,114 行、
-# `sqlite_store.py` 是 1,381 行，兩個都是無聲長大的。拆完之後最大的檔案是 589 行，
-# 所以 700 留了一點餘裕又遠低於出事的量級。目前最大的是 `application/deposits.py`。
+# `sqlite_store.py` 是 1,381 行，兩個都是無聲長大的。700 留了一點餘裕又遠低於
+# 出事的量級。
+#
+# **這裡不寫「目前最大的是哪一個檔案」。** 那句話寫過一次，然後在
+# `ui/controller.py` 長到 700 行的時候就過期了 —— 而註解過期不會有任何東西提醒你。
+# 要知道當下的排名，看失敗訊息，它會現算。
 MAX_MODULE_LINES = 700
+
+# 測試檔的上限放寬到 1200：測試本來就比實作長（每一條都要自己準備資料與斷言），
+# 用同一個 700 只會逼出「為了過門檻而切一半」這種沒有意義的切法。
+#
+# 2026-08-22 加這條之前，`tests/ui/test_main_window.py` 已經長到 **2,153 行 66 條**，
+# 涵蓋八個頁面 —— 因為行數守門只掃 `src/`，沒有任何東西擋它。
+MAX_TEST_LINES = 1200
 
 
 def _modules(*relative: str) -> list[Path]:
@@ -335,16 +346,37 @@ def test_ui_layer_contains_no_sql() -> None:
         pytest.fail("ui/ 不得直接撰寫 SQL：\n" + "\n".join(offenders))
 
 
-def test_no_module_grows_back_into_a_monolith() -> None:
-    oversized: list[str] = []
-    for path in _modules(""):
+def _line_counts(root: Path) -> list[tuple[int, str]]:
+    counts: list[tuple[int, str]] = []
+    for path in sorted(root.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
         lines = len(path.read_text(encoding="utf-8").splitlines())
-        if lines > MAX_MODULE_LINES:
-            oversized.append(f"  {path.relative_to(PROJECT_ROOT)}：{lines} 行")
+        counts.append((lines, str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")))
+    return sorted(counts, reverse=True)
+
+
+@pytest.mark.parametrize(
+    ("label", "root", "limit"),
+    [
+        ("src", SOURCE_ROOT, MAX_MODULE_LINES),
+        ("tests", PROJECT_ROOT / "tests", MAX_TEST_LINES),
+    ],
+)
+def test_no_module_grows_back_into_a_monolith(label: str, root: Path, limit: int) -> None:
+    """**`tests/` 也要掃。** 以前只掃 `src/`，於是 `test_main_query.py` 那一類的
+    測試檔可以無聲長到兩千行 —— 2026-08-22 拆掉的那一個就是 2,153 行 66 條、
+    橫跨八個頁面。實作有守門而測試沒有，是「規則只寫在文件上」的另一種形狀。
+    """
+    counts = _line_counts(root)
+    assert len(counts) >= 10, f"只掃到 {len(counts)} 個 {label} 檔案，路徑可能寫錯了"
+    oversized = [f"  {name}：{lines} 行" for lines, name in counts if lines > limit]
     if oversized:
+        top = "、".join(f"{name}（{lines}）" for lines, name in counts[:3])
         pytest.fail(
-            f"以下模組超過 {MAX_MODULE_LINES} 行，先確認它是不是裝了不只一件事：\n"
+            f"以下 {label} 模組超過 {limit} 行，先確認它是不是裝了不只一件事：\n"
             + "\n".join(oversized)
+            + f"\n（目前最大的三個：{top}）"
         )
 
 

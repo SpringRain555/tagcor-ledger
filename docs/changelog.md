@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.20.0 - 補邊界測試、依功能拆檔、收技術債
+
+**這一版沒有新功能。** 除了一個潛在缺陷變成明確失敗以外，**行為零改變** ——
+556 條測試在整個過程中一次都沒有變過數字，八個頁面的實機截圖逐一比對過。
+
+### 順序上的一個修正：先補測試，再拆檔
+
+原本的計畫是先拆檔再補測試。那是反的 —— 動 `stores/deposits.py` 的時候它的邊界
+測試還沒寫，等於在沒有網子的情況下拆三個聚合。改成先補（對當時的程式、當時的位置
+寫），拆完之後同一批測試照樣綠，**那本身就是「搬移沒有改行為」的證據**。
+
+### 兩個修掉的缺陷
+
+**`save_template("")` / `save_schedule("")` 會 UPSERT 出一列主鍵是空字串的資料。**
+兩個 `save_*` 都是 `ON CONFLICT(<id>) DO UPDATE`，而空字串是合法主鍵 —— 寫進去不會
+失敗，第二次再傳空字串就 UPDATE 到同一列上。2026-08 寫測試 helper 時三個模板就是
+這樣塌成一列的，而症狀看起來像「模板沒建成功」，完全指不到原因。
+新增 `AUTOMATION_ID_REQUIRED`。
+
+**`group_digits("")` 會 `IndexError`。** `text[:1] in "+-"` 是**子字串**判斷，而空字串
+是任何字串的子字串，所以空輸入會進到「有正負號」那個分支再對空字串取 `[0]`。
+目前呼叫端都餵整數（`amount` 一律來自 `Money.to_decimal_string()`）所以走不到，
+但它是公開函式 ——「走不到」不等於「擋住了」。
+
+### 補了 209 條測試（346 → 555）
+
+`domain/deposits.py` 的 `renewed_principal_minor`、`maturity_returns_principal`、
+`interest_goes_to_deposit_account` 在此之前**在 `tests/` 底下一次都沒有被引用過**，
+而它們是「到期那天發生什麼」的全部判準。`ui/formatting.py` 438 行純函式零單元測試，
+其中 `schedule_values` / `occurrence_values` / `deposit_event_values` 三個
+**從頭到尾一行都沒有被執行過**。`get_sort_spec()` 的整段壞資料防禦也是。
+
+新檔：`test_deposit_math.py`、`test_dates.py`、`test_formatting.py`、
+`test_fts_query.py`、`test_sort_spec_settings.py`、`test_search_input.py`、
+`test_table_columns.py`。整包仍然是 52 秒。
+
+### 依功能拆檔
+
+| 之前 | 之後 |
+|---|---|
+| `ui/controller.py` 700 行（**貼著上限**） | `ui/controller/` 八段，最大 211 行 |
+| `stores/deposits.py` 638 行 | `deposit_contracts` / `deposit_terms` / `deposit_events` |
+| `stores/automation.py` 576 行 | `templates` / `schedules` / `occurrences` ＋ `drafts` |
+| `ui/formatting.py` 438 行 | `primitives` / `rows` / `messages` |
+| `tests/ui/test_main_window.py` 2,153 行 66 條 | 九個檔，最大 407 行 |
+
+**全部用繼承組裝，呼叫端一個字都不用改** —— 這是 `LedgerStore` 的既有做法，
+理由（「拆檔只是這個 `def` 放在哪個檔案，換成委派要手寫幾十個轉發方法」）
+一字不改地適用。`ui/controller` 與 `ui/formatting` 從模組變成套件，
+`import` 路徑因此完全不變。
+
+`domain/dates.py` 收了四個日期函式，**實作一字不改**。兩份「月底夾取」的重複
+（`add_months` 夾來源日期自己的日，`next_due_date` 夾 `anchor_day`）語意不同，
+合併會動到正常運作的邏輯，所以這一版只搬不合，重複在 docstring 裡標記為已知。
+
+### 六條新守門
+
+controller 組裝檔不放方法、controller 的方法都住在套件裡、`stores/__init__.py` 的
+`__all__` 與 `LedgerStore` 的基底一致、頁面不得自己拼列內容、表格欄位數與 formatter
+對得起來、**`tests/` 也納入行數上限**（1200）。
+
+`stores/__init__.py` 那一條是補一個**已經發生過**的漏更新 —— 它自己的 docstring
+記著 `AutomationStore` 收進來時忘了加進清單，而「沒有人使用的 re-export 清單不會有
+任何測試提醒你它過期了」。現在有了。
+
+### 覆蓋率量測用 stdlib，不進依賴
+
+`trace` 掃一次找缺口，掃完就丟。**它的 `ignoredirs` 有一個會產出「看起來完全正常
+但是錯的」報告的坑**，細節見失敗紀錄 —— 那一次差點讓我照著假資料去補測試。
+
 ## 0.19.0 - 多層排序，而且記得住（自訂排序 Stage 2）
 
 排序視窗左半多了「排序方式」：**最多三層，每層一個欄位與升冪／降冪**。

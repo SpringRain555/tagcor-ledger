@@ -37,7 +37,11 @@
 | 金額顏色不對、紅綠被壓成白 | `ui/widgets/table.py::amount_color` ＋ QSS**不得**設 `color` | `test_amount_colours_survive_the_stylesheet` |
 | 錯誤訊息看不懂、太籠統、印出英文碼或 SQLite 原文 | [`application/failures.py`](../src/tagcor_ledger/application/failures.py) 的 `ERROR_MESSAGES`（碼 → 中文，一個碼一個地方） | `tests/unit/test_failure_messages.py`、`tests/unit/test_error_codes.py` |
 | 想加一個新的 `raise ValueError("SOME_CODE")` | 加完要在 `ERROR_MESSAGES` 補一列，並在 [error-codes](architecture/error-codes.md) 補一列 | 兩條都會紅，訊息會告訴你缺哪一個 |
-| 備份刪不掉、清單看不懂哪一份是哪一份 | `infrastructure/maintenance.py`（每個 `sqlite3.connect()` 都要包 `closing`）＋ `ui/formatting.py::backup_row_text` | `tests/integration/test_backup_deletion.py` |
+| 備份刪不掉、清單看不懂哪一份是哪一份 | `infrastructure/maintenance.py`（每個 `sqlite3.connect()` 都要包 `closing`）＋ `ui/formatting/messages.py::backup_row_text` | `tests/integration/test_backup_deletion.py`、`tests/unit/test_formatting.py` |
+| 到期日跳月、續存日期不對、每月領息少一期 | `domain/dates.py`（`add_months` 夾月底、`next_due_date` 夾 `anchor_day`，**兩者語意不同**） | `tests/unit/test_dates.py` |
+| 模板或定期收支存下去卻不見了 | `infrastructure/stores/drafts.py::validate_draft` —— 空主鍵會 UPSERT 成一列空 id | `tests/integration/test_phase2_automation.py` |
+| 表格少一欄、最後一欄空白或炸 IndexError | 欄位標題在頁面的 `RowsModel(...)`，值在 `ui/formatting/rows.py` —— **兩邊各自定義** | `tests/ui/test_table_columns.py` |
+| 搜尋框打特殊字元就查不出東西或跳錯 | `infrastructure/stores/base.py::build_fts_query`（雙引號要跳脫成 `""`）＋ 呼叫端的「空白就不要走 FTS」 | `tests/unit/test_fts_query.py`、`tests/integration/test_search_input.py` |
 | 查詢變慢 | `infrastructure/stores/` 的 SQL | `tests/integration/test_query_plans.py` |
 | **測試**變慢（尤其是越後面越慢） | `ui/theme.py::apply_dark_theme` —— application 層級的操作要傳播給每一個活著的 widget，一個 process 只能套一次 | `test_the_theme_is_only_applied_once_per_process` |
 | 名冊的順序不對、排序設定沒記住 | `ui/widgets/reorder_dialog.py` ＋ `sort_editor.py`；`ORDER BY` 由 `stores/base.py::order_by()` 從各 store 的白名單組 | `tests/unit/test_order_by.py`、`tests/ui/test_reorder.py`、`tests/integration/test_category_order.py` |
