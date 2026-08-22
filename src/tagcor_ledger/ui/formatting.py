@@ -58,7 +58,11 @@ def group_digits(value: int | str) -> str:
     """
     text = str(value).strip()
     sign = ""
-    if text[:1] in "+-":
+    # **`in ("+", "-")` 不是 `in "+-"`。** 後者是子字串判斷，而空字串是任何字串的
+    # 子字串 —— `group_digits("")` 因此會進到這個分支，然後在 `text[0]` 上炸出
+    # `IndexError`。目前的呼叫端都餵整數（`amount` 一律來自 `Money.to_decimal_string()`），
+    # 所以那條路走不到，但這是個公開函式，「走不到」不等於「擋住了」。
+    if text[:1] in ("+", "-"):
         sign, text = text[0], text[1:]
     whole, _, fraction = text.partition(".")
     if not whole.isdigit():

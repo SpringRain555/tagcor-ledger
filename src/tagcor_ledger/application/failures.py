@@ -119,6 +119,9 @@ ERROR_MESSAGES: dict[str, str] = {
     "BALANCE_SNAPSHOT_NOT_FOUND": "找不到這筆餘額盤點。請重新整理。",
     "BALANCE_SNAPSHOT_STATUS_FILTER_INVALID": "狀態篩選值不合法。正常操作不會發生，請回報。",
     # ---- 模板、排程與待確認 ----
+    "AUTOMATION_ID_REQUIRED": (
+        "這筆模板或定期收支沒有識別碼，無法儲存。正常操作不會發生，請匯出診斷資訊回報。"
+    ),
     "AUTOMATION_NAME_REQUIRED": "請輸入名稱。",
     "AUTOMATION_AMOUNT_INVALID": "金額格式不正確。可以留空（套用時再填），但填了就要是整數元。",
     "TRANSACTION_DRAFT_INVALID": "收入與支出都要選類別。",

@@ -125,6 +125,7 @@
 
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
 |---|---|---|
+| `AUTOMATION_ID_REQUIRED` | 草稿的主鍵是空的。**這是程式錯誤，不是操作錯誤** —— id 由 `new_template()` / `new_schedule()` 產，使用者沒有辦法把它清空。擋在這裡是因為兩個 `save_*` 都是 UPSERT，而空字串是合法主鍵，寫進去不會失敗 | 匯出診斷資訊回報 |
 | `AUTOMATION_NAME_REQUIRED` | 模板／排程沒有名稱 | 填名稱 |
 | `AUTOMATION_AMOUNT_INVALID` | 金額格式不對 | 金額可留空（套用時再填），但填了就要合法 |
 | `TRANSACTION_DRAFT_INVALID` | 收入／支出的草稿缺類別 | 選類別 |

@@ -48,6 +48,17 @@ TEMPLATE_DEFAULT_ORDER: tuple[str, ...] = ("sort_order",)
 TEMPLATE_TIEBREAKERS: tuple[str, ...] = ("name COLLATE NOCASE", "template_id")
 
 
+def _draft_identifier(draft: TransactionTemplate | RecurringSchedule) -> str:
+    """草稿的主鍵。**兩種草稿的欄位名不同，但那是同一個角色。**
+
+    有了它，`_validate_draft()` 才能用一行同時守住模板與定期收支 —— 兩邊各寫一次
+    檢查的話，下一個加進來的草稿型別又會漏掉。
+    """
+    if isinstance(draft, TransactionTemplate):
+        return draft.template_id
+    return draft.schedule_id
+
+
 def _new_correlation_id() -> str:
     """一次操作一個。**不要在寫稽核列的時候才生** —— 那樣同一次操作的每一列都會拿到
     不同的值，而 `correlation_id` 存在的唯一目的就是把它們串起來。"""
@@ -494,6 +505,14 @@ class AutomationStore(StoreBase):
 
     @staticmethod
     def _validate_draft(draft: TransactionTemplate | RecurringSchedule) -> None:
+        # **主鍵要先擋。** 底下兩個 `save_*` 都是 `ON CONFLICT(<id>) DO UPDATE` 的 UPSERT，
+        # 而空字串是一個合法的主鍵值 —— 傳 `template_id=""` 進來不會失敗，會安靜地
+        # 寫出一列主鍵是空字串的模板，而且第二次再傳空字串就 UPDATE 到同一列上。
+        # id 由 `new_template()` / `new_schedule()` 產，所以正常路徑走不到這裡，
+        # 但「走不到」不是「擋住了」：2026-08 寫測試 helper 時就撞過一次，
+        # 三個模板全部塌成同一列。
+        if not _draft_identifier(draft).strip():
+            raise ValueError("AUTOMATION_ID_REQUIRED")
         if not draft.name.strip():
             raise ValueError("AUTOMATION_NAME_REQUIRED")
         if draft.entry_type == "transfer":

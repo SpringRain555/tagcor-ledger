@@ -16,6 +16,65 @@
 
 ---
 
+## 2026-08-22 覆蓋率報告說某些檔案「一行都沒執行到」，而那份報告是錯的
+
+**情境**：v0.20.0 要補邊界測試，先用 stdlib 的 `trace` 掃一次現況找缺口
+（零新依賴，掃完就丟）。
+
+**做了什麼**：`trace.Trace(count=1, ignoredirs=[sys.prefix, sys.exec_prefix])` 包住
+`pytest.main()`，然後 `CoverageResults.write_results()`。
+
+**為什麼失敗**：兩個獨立的坑，第二個特別危險。
+
+1. `write_results()` 會對 `counts` 裡**每一個檔名**做 `open()`。pluggy 用 `compile()`
+   生出一個叫 `signature_bootstrap.py` 的合成模組，那個檔案不存在 ——
+   `FileNotFoundError` 讓整個寫出流程掛掉，一份 `.cover` 都沒產出。這個至少會噴錯。
+
+2. **`ignoredirs` 的忽略清單是用 basename 當快取 key 的。** `_Ignore.names()` 收的
+   `modulename` 來自 `_modname(filename)`，而那個函式只做
+   `splitext(basename(path))[0]`。site-packages 底下只要有任何一個 `result.py`／
+   `main.py`／`app.py` 先被判定為忽略，**我們自己的同名檔案就一起被忽略**。
+   症狀是那幾個檔案回報「100% 沒執行到」，連 `from __future__ import annotations`
+   那一行都算沒執行到。
+
+第二個坑之所以危險，是因為**它產出一份看起來完全正常的報告**。`main.py` 132/132、
+`result.py` 38/38 —— 如果沒有停下來問「`Result.ok()` 到處都在呼叫，怎麼可能沒執行到」，
+就會照著這份報告去補一堆根本已經覆蓋的地方，同時漏掉真正的缺口。
+
+**結論**：不要用 `trace.Trace` 的 `ignoredirs`。自己掛 `sys.settrace`／
+`threading.settrace`，在 `call` 事件上**只比路徑前綴**決定要不要追這個 frame，
+結束後拿 `_find_executable_linenos()`（記得濾掉它回傳的那個假的第 0 行）自己算差集。
+
+**不要再做**：不要相信任何一份沒有做過**合理性檢查**的覆蓋率報告。至少挑一個
+「明知一定被執行到」的檔案對一次 —— 這一次就是 `application/result.py`，
+它有自己的 `tests/unit/test_result.py`，報告卻說它一行都沒跑。
+
+---
+
+## 2026-08-22 陽性對照腳本用文字模式讀寫，把三個檔案的換行全換掉了
+
+**情境**：跑陽性對照 —— 暫時改壞一段程式、確認測試會紅、再還原。
+
+**做了什麼**：`path.read_text(encoding="utf-8")` 讀進來，改完用
+`path.write_text(..., newline="")` 寫回去。
+
+**為什麼失敗**：文字模式讀取會把 CRLF **正規化成 LF**（universal newlines），
+而 `newline=""` 寫出時「不做任何轉換」—— 於是寫回去的是 LF。這個 repo 的工作樹是
+CRLF，三個已追蹤檔案就這樣被整份換掉了。
+
+`core.autocrlf=true` 讓它幾乎看不出來：git 存的本來就是 LF，所以
+`git diff` 是乾淨的、`git hash-object` 也對得上，只有工作樹的實際位元組不一致。
+真正冒出頭的症狀是**下一輪對照的多行片段比對不到**（片段裡寫 `\n`，檔案裡是 `\r\n`），
+被當成「找不到片段」而 SKIP —— 一條該有的對照就這樣安靜地沒跑。
+
+**結論**：任何「改一下再還原」的腳本一律走 `read_bytes()` / `write_bytes()`。
+片段裡的 `\n` 在比對前明確換成該檔案的實際換行。
+
+**不要再做**：不要用文字模式讀寫「原封不動還原」的檔案。`newline=""` 只管寫入端，
+擋不住讀取端的正規化。
+
+---
+
 ## 2026-08-22 三條測試同時沒有鑑別力，因為那份資料讓「有做」與「沒做」長得一樣
 
 **情境**：多層排序的 `order_by()` 有三條規則 —— 重複欄位跳過、全部認不出來時退回

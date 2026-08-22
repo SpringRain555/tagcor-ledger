@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -137,6 +138,68 @@ def test_templates_support_all_transaction_types_and_optional_amount(
         "transfer",
     }
     assert next(item for item in loaded if item["name"] == "早餐")["amount_minor"] is None
+
+
+def _row_count(paths, table: str) -> int:
+    with connect_database(paths.database_path) as connection:
+        row = connection.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
+    return int(row["n"])
+
+
+def test_a_draft_without_an_identifier_is_refused_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    """空主鍵不是「存不進去」，是**會安靜地存進去**，所以要明確擋。
+
+    兩個 `save_*` 都是 `ON CONFLICT(<id>) DO UPDATE` 的 UPSERT，而空字串是一個合法的
+    主鍵值 —— `template_id=""` 不會撞任何約束，會寫出一列主鍵是空字串的模板；
+    再存一次空字串就 UPDATE 到同一列上。2026-08 寫測試 helper 時就是這樣讓三個模板
+    塌成一列的，而且當下看起來像「模板沒建成功」，完全指不到真正的原因。
+
+    **這條測試同時斷言「回失敗」與「資料表沒有多出任何一列」。** 只斷言前者不夠 ——
+    UPSERT 先寫進去、之後才回失敗的實作照樣會綠。
+    """
+    paths = resolve_app_paths(tmp_path / "ledger")
+    service = AutomationService(paths)
+
+    template = replace(
+        service.new_template(
+            name="早餐",
+            entry_type="expense",
+            account_id="acct_cash",
+            destination_account_id=None,
+            category_id="cat_food_711",
+            amount_minor=None,
+            description="",
+        ),
+        template_id="",
+    )
+    schedule = replace(
+        service.new_schedule(
+            name="房租",
+            entry_type="expense",
+            account_id="acct_cash",
+            destination_account_id=None,
+            category_id="cat_food_711",
+            amount_minor=12_000,
+            description="",
+            frequency="monthly",
+            interval_count=1,
+            start_date="2026-01-01",
+            end_date=None,
+        ),
+        schedule_id="   ",
+    )
+
+    template_result = service.save_template(template)
+    schedule_result = service.save_schedule(schedule)
+
+    assert not template_result.success
+    assert not schedule_result.success
+    assert template_result.error_code == "AUTOMATION_ID_REQUIRED", template_result.message
+    assert schedule_result.error_code == "AUTOMATION_ID_REQUIRED", schedule_result.message
+    assert _row_count(paths, "transaction_templates") == 0
+    assert _row_count(paths, "recurring_schedules") == 0
 
 
 def test_recurrence_math_handles_month_end_leap_year_and_intervals() -> None:
