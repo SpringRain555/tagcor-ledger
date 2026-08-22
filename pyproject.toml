@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tagcor-ledger"
-version = "0.21.0"
+version = "0.21.1"
 description = "Windows-first local personal ledger with SQLite and PySide6."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -53,6 +53,10 @@ strict = true
 # `tagcor_ledger.ui.controller.*` 與 `tagcor_ledger.ui.formatting.*` **刻意不在清單裡**，
 # 維持完整 strict —— 它們不 import Qt，放寬只會讓型別檢查白白鬆掉一大塊。
 # 2026-08-22 它們從單一模組變成套件，這條仍然成立（子模組同樣不在清單上）。
+#
+# **2026-08-22 實測過這八筆有沒有多餘的：逐一拿掉再跑 mypy --strict，八筆全都會噴。**
+# 沒有殘留。清單增減之後值得再測一次 —— 做法是把某一筆註解掉然後跑
+# `python -m mypy --no-incremental src`，不噴就表示那一筆可以刪。
 [[tool.mypy.overrides]]
 module = [
     "tagcor_ledger.ui.app",

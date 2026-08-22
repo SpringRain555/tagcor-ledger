@@ -1,5 +1,9 @@
 # CODEX.md
 
+> **歷史文件，不是規格。** 這是 SQLite 穩固核心版之前的 CSV／PyQt6 時代規劃，
+> 已被 [`docs/index.md`](../../index.md) 指向的現行文件取代。
+> grep 撈到這裡的話，你要的答案在別的地方。
+
 ## 專案定位
 
 TagCor Ledger 是一個以四層標籤為核心的本機桌面記帳工具。第一階段目標是用 Python + PyQt6 建立鍵盤優先的快速記帳流程，資料先以 CSV + JSON 保存，並透過清楚的 repository 介面保留未來切換 SQLite 的可能。

@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import InvalidOperation
 from typing import Any
 
 from PySide6.QtCore import QDate, Signal
@@ -36,12 +36,14 @@ from tagcor_ledger.domain.deposits import (
     InterestMethod,
     MaturityAction,
     RateType,
+    rate_to_ppm,
 )
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import (
     deposit_contract_values,
     deposit_term_values,
     minor_text,
+    rate_input_text,
     result_message,
 )
 from tagcor_ledger.ui.widgets.forms import date_field, fill_combo, select_data
@@ -53,24 +55,6 @@ from tagcor_ledger.ui.widgets.table import (
     set_button_role,
     setup_table,
 )
-
-
-def rate_to_ppm(text: str) -> int | None:
-    """「1.6」→ 16000 ppm。空字串回 `None`；格式不對丟 `InvalidOperation`。
-
-    走 `Decimal` 不走 float —— 這個專案的金額與利率都不碰二進位浮點數。
-    """
-    clean = text.strip().rstrip("%").strip()
-    if not clean:
-        return None
-    return int((Decimal(clean) / Decimal(100) * Decimal(1_000_000)).to_integral_value())
-
-
-def ppm_to_rate_text(ppm: object) -> str:
-    if ppm is None:
-        return ""
-    whole, fraction = divmod(int(ppm), 10_000)  # type: ignore[call-overload]
-    return f"{whole}.{fraction:04d}".rstrip("0").rstrip(".")
 
 
 class DepositsPage(QWidget):
@@ -473,7 +457,7 @@ class DepositTermDialog(QDialog):
             if term.get("monthly_deposit_minor") is not None
             else ""
         )
-        self.annual_rate = QLineEdit(ppm_to_rate_text(term.get("annual_rate_ppm")))
+        self.annual_rate = QLineEdit(rate_input_text(term.get("annual_rate_ppm")))
         self.error = QLabel()
         self._build()
 

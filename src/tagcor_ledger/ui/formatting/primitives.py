@@ -106,13 +106,32 @@ DEPOSIT_TERM_STATUS_NAMES = {
 }
 
 
-def rate_text(annual_rate_ppm: Any) -> str:
-    """百萬分之一為單位的整數 → 百分比字串。**不用浮點數。**
+def ppm_digits(annual_rate_ppm: Any) -> str:
+    """百萬分之一為單位的整數 → **沒有百分號**的數字字串。**不用浮點數。**
 
     1.6% 存成 16000 ppm，除以 10000 得到整數位與小數位，用字串組起來。
+
+    這是「利率長什麼樣」的唯一實作。`rate_text()` 給表格看（加百分號、空值寫「未填」），
+    `rate_input_text()` 給輸入框看（不加百分號、空值就是空的）—— 兩者只差在**外框**，
+    數字本身不該有兩份算法。2026-08-22 之前 `ui/pages/deposits.py` 自己有一份
+    `ppm_to_rate_text()`，內容跟這裡一模一樣。
     """
+    whole, fraction = divmod(int(annual_rate_ppm), 10_000)
+    return f"{whole}.{fraction:04d}".rstrip("0").rstrip(".")
+
+
+def rate_text(annual_rate_ppm: Any) -> str:
+    """表格裡的利率：帶百分號，沒填就寫「未填」。"""
     if annual_rate_ppm is None:
         return "未填"
-    ppm = int(annual_rate_ppm)
-    whole, fraction = divmod(ppm, 10_000)
-    return f"{whole}.{fraction:04d}".rstrip("0").rstrip(".") + "%"
+    return ppm_digits(annual_rate_ppm) + "%"
+
+
+def rate_input_text(annual_rate_ppm: Any) -> str:
+    """輸入框裡的利率：**不帶百分號**，沒填就是空字串。
+
+    輸入框要能直接被 `rate_to_ppm()` 讀回去，所以不能寫「未填」那種給人看的字。
+    """
+    if annual_rate_ppm is None:
+        return ""
+    return ppm_digits(annual_rate_ppm)

@@ -39,6 +39,10 @@
 | 例外沒被接住、跳出全域錯誤對話框而不是中文 | [`application/failures.py`](../src/tagcor_ledger/application/failures.py) 的 `STORE_FAILURES` / `DOMAIN_FAILURES`。`NotFoundError` 繼承 `RuntimeError`，自己拼的 tuple 接不到它 | `tests/integration/test_store_failures.py`、`test_the_application_layer_catches_store_failures_by_name` |
 | 到期日跳月、月底的日期算錯 | [`domain/dates.py`](../src/tagcor_ledger/domain/dates.py) | `tests/unit/test_dates.py` |
 | 模板或定期收支存成空 id | [`stores/drafts.py`](../src/tagcor_ledger/infrastructure/stores/drafts.py)`::validate_draft` | `test_phase2_automation.py` 的空主鍵那兩條 |
+| 按了按鈕，視窗直接消失 | [`ui/error_handler.py`](../src/tagcor_ledger/ui/error_handler.py) —— 它接管 `sys.excepthook`，讓 Qt slot 的例外變成一句中文而不是關掉程式 | `tests/ui/test_error_handler.py` |
+| 編輯模板／定期收支之後多出一筆，舊的還在 | [`ui/widgets/draft_dialog.py`](../src/tagcor_ledger/ui/widgets/draft_dialog.py)`::save()` 沒保住 `schedule_id` / `template_id` | `tests/ui/test_draft_dialog.py` |
+| 利率顯示對不上、輸入框讀不回去 | `domain/deposits.py::rate_to_ppm()` 解析、`ui/formatting/primitives.py::ppm_digits()` 顯示 —— **只有這一份** | `tests/unit/test_rate_conversion.py` |
+| 交易翻頁翻到重複或空白 | [`ui/pages/transactions.py`](../src/tagcor_ledger/ui/pages/transactions.py) 的游標堆疊（keyset，不是 OFFSET） | `tests/ui/test_transactions_paging.py` |
 | 想加一個新的 `raise ValueError("SOME_CODE")` | 加完要在 `ERROR_MESSAGES` 補一列，並在 [error-codes](architecture/error-codes.md) 補一列 | 兩條都會紅，訊息會告訴你缺哪一個 |
 | 備份刪不掉、清單看不懂哪一份是哪一份 | `infrastructure/maintenance.py`（每個 `sqlite3.connect()` 都要包 `closing`）＋ `ui/formatting/messages.py::backup_row_text` | `tests/integration/test_backup_deletion.py`、`tests/unit/test_formatting.py` |
 | 到期日跳月、續存日期不對、每月領息少一期 | `domain/dates.py`（`add_months` 夾月底、`next_due_date` 夾 `anchor_day`，**兩者語意不同**） | `tests/unit/test_dates.py` |

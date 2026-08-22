@@ -173,6 +173,25 @@ def monthly_rate(annual_rate_ppm: int) -> Decimal:
     return Decimal(annual_rate_ppm) / PPM / Decimal(12)
 
 
+def rate_to_ppm(text: str) -> int | None:
+    """使用者打的「1.6」或「1.6%」→ 16000 ppm。空字串回 `None`。
+
+    **解析放在 domain，跟 `Money.from_decimal_string()` 同一個位置。** `annual_rate_ppm`
+    是領域概念（整數 ppm，不碰二進位浮點數），「什麼字串算合法的利率」就該由定義那個
+    概念的地方回答 —— 2026-08-22 之前這個函式住在 `ui/pages/deposits.py`，
+    於是「利率長什麼樣」的知識有一半在畫面層。
+
+    格式不對丟 `decimal.InvalidOperation`。**它繼承的是 `ArithmeticError`，不是
+    `ValueError`** —— 所以呼叫端要自己列出來，`except ValueError` 接不到它。
+    （`ui/pages/deposits.py` 兩處 `save()` 都寫 `except (InvalidOperation, ValueError)`，
+    那不是多餘的。同一個坑 `NotFoundError` 也踩過，見 `application/failures.py`。）
+    """
+    clean = text.strip().rstrip("%").strip()
+    if not clean:
+        return None
+    return int((Decimal(clean) / Decimal(100) * PPM).to_integral_value())
+
+
 def suggest_interest_minor(
     *,
     interest_method: str,

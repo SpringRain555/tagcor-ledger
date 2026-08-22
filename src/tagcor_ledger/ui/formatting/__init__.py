@@ -31,6 +31,8 @@ from tagcor_ledger.ui.formatting.primitives import (
     display_datetime,
     group_digits,
     minor_text,
+    ppm_digits,
+    rate_input_text,
     rate_text,
     signed_amount_text,
 )
@@ -75,6 +77,8 @@ __all__ = [
     "minor_text",
     "occurrence_values",
     "overview_account_values",
+    "ppm_digits",
+    "rate_input_text",
     "rate_text",
     "reference_entry_values",
     "result_message",

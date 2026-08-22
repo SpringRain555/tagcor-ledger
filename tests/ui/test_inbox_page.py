@@ -228,3 +228,70 @@ def test_confirming_an_inbox_item_refreshes_the_transaction_list(window) -> None
         "確認入帳會建立交易，交易紀錄必須重載 —— 沒有就代表 inbox 只通知了徽章"
     )
     assert not window.sidebar.item_for(PageId.INBOX).data(BADGE_ROLE)
+
+
+def _select_deposit_row(window: MainWindow) -> None:
+    """選中待確認表裡的定存那一列。"""
+    model = window.inbox.model
+    for row in range(model.rowCount()):
+        if str(model.items[row]["source"]) == "deposit":
+            window.inbox.table.selectRow(row)
+            return
+    raise AssertionError("表裡沒有定存項目")
+
+
+def test_a_bad_amount_when_confirming_a_deposit_says_so_in_chinese(
+    window, monkeypatch
+) -> None:
+    """確認定存時打錯金額：跳中文警告，**而且不入帳**。
+
+    2026-08-22 之前這條路（`_confirm_deposit()` 的 `except MoneyError`）沒有任何
+    測試走過。它是「使用者照存摺輸入實際利息」的入口 —— 打錯字被安靜吞掉的話，
+    帳上會多一筆金額不對的利息收入。
+    """
+    controller = window.controller
+    _make_deposit(controller)
+    assert controller.generate_due().success
+    window.inbox.refresh()
+    _select_deposit_row(window)
+    before = window.inbox.model.rowCount()
+
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.inbox.QInputDialog.getText",
+        lambda *args, **kwargs: ("一千元", True),
+    )
+    warnings: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.inbox.QMessageBox.warning",
+        lambda parent, title, text: warnings.append((title, text)),
+    )
+
+    window.inbox.confirm_selected()
+
+    assert warnings, "金額打錯卻什麼都沒說"
+    title, text = warnings[0]
+    assert title == "金額無效"
+    assert "數字" in text, f"訊息要講人話：{text!r}"
+    assert "MoneyError" not in text and "AMOUNT_" not in text, "不准印英文碼"
+
+    window.inbox.refresh()
+    assert window.inbox.model.rowCount() == before, "打錯金額不該把項目入帳掉"
+
+
+def test_cancelling_the_amount_prompt_leaves_the_item_alone(window, monkeypatch) -> None:
+    """在金額對話框按取消 = 什麼都不做。"""
+    controller = window.controller
+    _make_deposit(controller)
+    assert controller.generate_due().success
+    window.inbox.refresh()
+    _select_deposit_row(window)
+    before = window.inbox.model.rowCount()
+
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.inbox.QInputDialog.getText",
+        lambda *args, **kwargs: ("", False),
+    )
+    window.inbox.confirm_selected()
+
+    window.inbox.refresh()
+    assert window.inbox.model.rowCount() == before

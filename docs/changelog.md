@@ -1,5 +1,73 @@
 # Changelog
 
+> **先掃版本標題，不要從頭讀。** `grep "^## " docs/changelog.md` 一次看完所有版本，
+> 再挑要看的那一節。整份約 30k token。
+>
+> **2026-08-22 決定不分卷** —— 理由同 [`lessons.md`](lessons.md) 開頭那段：
+> 標題清單已經是索引，分卷只會多一層查找。
+
+## 0.21.1 - 補上零覆蓋的兩個檔案，其餘待辦逐條判定
+
+**這一版是 v0.21.0 那份清單的收尾。** 九個項目逐一看過內容再判斷 ——
+**其中四個判定不需要改，理由寫進被判定的那個東西旁邊**，不另外列清單。
+
+### 兩個零覆蓋的檔案，補完
+
+| 檔案 | 之前 | 之後 |
+|---|---|---|
+| `ui/error_handler.py` | **47/47 行沒執行到** | 全覆蓋 |
+| `ui/widgets/draft_dialog.py` | **149/171 行沒執行到** | 全覆蓋 |
+
+`error_handler.py` 是「Qt slot 丟例外時使用者看到一句中文而不是視窗消失」的那一層。
+它**只在別的東西壞掉的時候才跑**，而零覆蓋的錯誤處理器有一個特別討厭的失敗模式：
+它自己出錯的話，原本的例外連同新的例外一起消失。所以除了正常路徑，特別測兩條退路
+（記不了日誌、連對話框都開不起來）。
+
+`draft_dialog.py` 是模板與定期收支**唯一的 UI 入口**。既有測試都繞過它直接呼叫
+controller，於是「使用者填的那張表變成什麼資料」沒有東西驗過 —— 包括
+「編輯時要保住 `schedule_id` 與 `next_due_date`」（沒保住的話編輯會變成新增一筆）。
+
+### 利率的解析與顯示：兩份實作合成一份
+
+`ui/pages/deposits.py::ppm_to_rate_text()` 與 `ui/formatting/primitives.py::rate_text()`
+的核心兩行**一模一樣**，只差在要不要加百分號、空值寫「未填」還是空字串。而頁面那一份
+完全沒有測試。
+
+- `ppm_digits()` 成為唯一實作，`rate_text()`（表格）與 `rate_input_text()`（輸入框）
+  只包外框。
+- `rate_to_ppm()` 搬到 `domain/deposits.py` —— 它是 `Money.from_decimal_string()` 的
+  對應物，「什麼字串算合法的利率」該由定義 `annual_rate_ppm` 的地方回答。
+- 新測試驗**互為反函數**：輸入框顯示的字讀回去必須是同一個 ppm。
+
+順帶記下一件事實：`decimal.InvalidOperation` **繼承 `ArithmeticError` 不是
+`ValueError`**，所以 `except (InvalidOperation, ValueError)` 那兩處不是多餘的。
+形狀跟 `NotFoundError` 繼承 `RuntimeError` 完全一樣（v0.21.0 修的那個）。
+
+### 交易分頁：整套翻頁沒有任何測試走過
+
+`next_page()` / `previous_page()` / `clear_filters()` 都是零覆蓋。分頁用的是
+**keyset cursor** 不是 `OFFSET`，游標堆疊管理錯了會出現「兩頁看到同一批資料」。
+
+**陽性對照在這裡抓到兩條假綠**：只有兩頁的時候，「退一頁」與「跳回第一頁」結果完全
+相同 —— 把 `page_index -= 1` 改成 `page_index = 0` 測試照樣全綠。改成把每頁筆數設成
+20、造三頁資料才分得出來。另一條是「先設篩選再清除」，篩完只剩一頁，`page_index`
+本來就是 0。
+
+### 判定不需要改的四項
+
+| 項目 | 判定 | 依據寫在哪 |
+|---|---|---|
+| mypy override 8 個模組 | **實測逐一拿掉再跑 mypy，八筆全都會噴。沒有殘留** | `pyproject.toml` 註解，含複測方法 |
+| `ui/pages/catalog.py`、`stores/base.py`、`migrations.py`、`stores/categories.py`、`test_architecture.py` | 各有不該拆的理由（繼承階層／唯一寫入點／有順序的歷史／一個聚合／共用抽取器） | `docs/architecture/overview.md` 新增一節 |
+| `changelog.md`、`lessons.md` 偏大 | **不分卷** —— `##` 標題本身就是索引，分卷只會多一層查找 | 兩份文件開頭各一段，含「真正該分卷的訊號」 |
+| `docs/archive/phase-0-2/` | 保留（ADR-0001），但五份舊文件各加一行橫幅 | 檔案自己的第一行 |
+
+### 其他
+
+- `open-questions.md` **Q5 結案** —— 它說「Stage 6 會抓郵政定期儲金的計息規則」，
+  而 Stage 6（v0.10.0）早就完成。稅務那一半查到了；計息基準那一半**不必查了**，
+  因為 ADR-0007 決定利息只給建議值、實際金額以存摺為準，精確規則不影響任何一筆帳的正確性。
+
 ## 0.21.0 - 例外收斂、保留欄位上鎖、把待辦清單清空
 
 延續 v0.20.0 的收尾清單。**這一版的重點不是「每一條都改了程式」** —— 有幾條複查之後

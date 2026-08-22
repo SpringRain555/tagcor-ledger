@@ -189,6 +189,19 @@ sequenceDiagram
 700 行那條是**煙霧偵測器不是規矩**：2026-08 拆檔前 `main_window_phase12.py` 長到
 2,114 行、`sqlite_store.py` 長到 1,381 行，都是沒人注意就長大的。
 
+### 這幾個檔案偏大，而且刻意不拆
+
+2026-08-22 逐一看過內容之後的判斷。**寫在這裡是為了不要每隔幾個月重新爭論一次** ——
+它們都在上限以下，行數守門會在真的過線時說話。
+
+| 檔案 | 為什麼不拆 |
+|---|---|
+| `ui/pages/catalog.py` | 是一個繼承階層（`CatalogPage` 基底 ＋ 帳戶／類別／項目三頁），不是三件事湊在一起。拆開會讓基底與子類分家，讀任何一頁都要開兩個檔案 |
+| `infrastructure/stores/base.py` | 裡面是 `_write_transaction()` / `_write_transfer()` —— **「一筆交易長什麼樣」刻意只有一個地方說了算**。拆它等於違反這個檔案存在的理由 |
+| `infrastructure/migrations.py` | migration 是一條有順序的歷史，`migrate_v1` 到 `migrate_v7` 要能一路讀下來。拆成多檔會讓「這個欄位什麼時候加的」變成跨檔案考古 |
+| `infrastructure/stores/categories.py` | 一個聚合一個 class，就是 `stores/` 的規則本身 |
+| `tests/unit/test_architecture.py` | 全部是 AST 守門，共用七個抽取器。拆開要先生出一個共用 helper 模組，而那個模組會變成第八個要維護的東西。**真正該拆的訊號不是行數，是「開始需要第二個 helper 模組」** |
+
 另外兩條在別的檔案裡，但守的是同一類東西：
 `tests/unit/test_docs_drift.py`（頁面名稱與文件逐字一致）、
 `tests/integration/test_query_plans.py`（熱查詢不得退化成全表掃描）。
