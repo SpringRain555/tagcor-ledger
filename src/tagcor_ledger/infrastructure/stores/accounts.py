@@ -2,23 +2,51 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict
 import sqlite3
 from uuid import uuid4
 
-from tagcor_ledger.domain.models import Account
+from tagcor_ledger.domain.models import Account, SortLevel
 from tagcor_ledger.infrastructure.clock import now_iso
 from tagcor_ledger.infrastructure.database import connect_database, database_transaction
 from tagcor_ledger.infrastructure.stores.base import (
     NotFoundError,
     StoreBase,
     has_any_reference,
+    order_by,
 )
+
+ACCOUNT_SORT_FIELDS: dict[str, str] = {
+    "custom": "sort_order",
+    "name": "name COLLATE NOCASE",
+    "status": "status",
+}
+"""帳戶的 `ORDER BY` 白名單。組裝規則見 `base.order_by()`。
+
+**沒有「目前餘額」。** 餘額不在 `accounts` 這張表上，是靠 posting 加總出來的
+（`list_account_balances()`），在這裡沒有可以拿來排的欄位。要依餘額排就得改成
+對那個查詢排序 —— 那是另一件事，現在不做。
+"""
+
+ACCOUNT_DEFAULT_ORDER: tuple[str, ...] = ("sort_order",)
+ACCOUNT_TIEBREAKERS: tuple[str, ...] = ("name COLLATE NOCASE", "account_id")
 
 
 class AccountStore(StoreBase):
-    def list_accounts(self, *, include_archived: bool = False) -> list[Account]:
+    def list_accounts(
+        self,
+        *,
+        include_archived: bool = False,
+        sort: Sequence[SortLevel] = (),
+    ) -> list[Account]:
         where = "" if include_archived else "WHERE status = 'active'"
+        order = order_by(
+            sort,
+            fields=ACCOUNT_SORT_FIELDS,
+            default=ACCOUNT_DEFAULT_ORDER,
+            tiebreakers=ACCOUNT_TIEBREAKERS,
+        )
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
                 f"""
@@ -26,7 +54,7 @@ class AccountStore(StoreBase):
                        status, sort_order
                 FROM accounts
                 {where}
-                ORDER BY sort_order, name COLLATE NOCASE
+                ORDER BY {order}
                 """
             ).fetchall()
         return [Account(**dict(row)) for row in rows]

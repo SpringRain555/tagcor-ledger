@@ -13,7 +13,7 @@ import sqlite3
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.application.failures import failure
 from tagcor_ledger.application.result import Result
-from tagcor_ledger.domain.models import CategoryTreeFilter
+from tagcor_ledger.domain.models import CategoryTreeFilter, SortLevel
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
 
@@ -22,13 +22,23 @@ class AccountService:
     def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
         self.store = store or LedgerStore(paths)
 
-    def list(self, *, include_archived: bool = False) -> Result:
+    def list(
+        self,
+        *,
+        include_archived: bool = False,
+        sort: Sequence[SortLevel] = (),
+    ) -> Result:
         """列出帳戶與餘額。
 
         餘額**一次查完**（`account_balances`），不是每個帳戶各查一次 —— 後者會開
         1+N 條連線，而這個方法在記帳頁、交易紀錄篩選、餘額盤點與資產總覽上都會被呼叫。
+
+        `sort` 空的時候用自訂順序。**只有「帳戶」那一頁會送規格進來** —— 下拉選單與
+        資產總覽一律照自訂順序，那些地方沒有排序 UI，也不該跟著某一頁的偏好變。
         """
-        accounts = self.store.list_accounts(include_archived=include_archived)
+        accounts = self.store.list_accounts(
+            include_archived=include_archived, sort=tuple(sort)
+        )
         balances = self.store.account_balances()
         return Result.ok(
             "帳戶已載入。",

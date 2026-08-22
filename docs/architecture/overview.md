@@ -71,7 +71,8 @@ src/tagcor_ledger/
 │   ├── theme.py        apply_dark_theme：Fusion style、字體、palette、QSS
 │   ├── colors.py       色票的正本
 │   ├── pages/          一個檔案一個畫面
-│   └── widgets/        sidebar、layout、table、forms、draft_dialog
+│   └── widgets/        sidebar、layout、table、forms、filters、
+│                       simple_form、draft_dialog、reorder_dialog、sort_editor
 └── app/                bootstrap、paths、path_settings、window_state、
                         logging_setup、single_instance、startup、resources
 ```

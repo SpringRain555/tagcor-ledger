@@ -1887,37 +1887,33 @@ def test_catalog_pages_filter_by_search_status_and_parent(
     assert "7-11" in _column(page, 1)
 
 
-def test_clicking_a_header_sorts_and_reverses(qtbot, tmp_path: Path) -> None:
-    """點表頭排序，再點一次反向。**排序是 SQL 做的，不是 QTableView 自己排的。**"""
+def test_the_header_is_no_longer_a_sorting_entry_point(qtbot, tmp_path: Path) -> None:
+    """點表頭排序在 v0.19.0 拿掉了，排序只有「排序…」視窗一個入口。
+
+    以前兩種入口並存：點表頭會把使用者在視窗裡設好的多層規格整個換成單層，
+    而畫面上沒有任何東西說明剛才設的為什麼不見了。
+
+    `setSortingEnabled` 仍然要是 False —— 那會讓 `QTableView` 在 Python 裡排序，
+    是 `AGENTS.md` 明文禁止的事。拿掉表頭排序不代表可以改用那條路。
+    """
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
     qtbot.addWidget(window)
     window.show()
-    controller = window.controller
-    for name in ("交通", "娛樂", "醫療"):
-        assert controller.create_category(name).success
-    assert controller.create_category("捷運", 
-        str(next(item["category_id"] for item in controller.category_options()
-                 if item["name"] == "交通"))).success
-
-    page = window.operation_settings.categories
-    page.refresh()
-    header = page.table.horizontalHeader()
-    assert header.sectionsClickable(), "表頭不能點就沒有排序可言"
-    assert page.table.isSortingEnabled() is False, (
-        "setSortingEnabled(True) 會讓 QTableView 在 Python 裡排序 —— 規則禁止"
-    )
-
-    header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
-    ascending = _column(page, 0)
-    header.setSortIndicator(0, Qt.SortOrder.DescendingOrder)
-    descending = _column(page, 0)
-    assert ascending == sorted(ascending)
-    assert descending == list(reversed(ascending)), (ascending, descending)
-
-    # 依「項目數」排：交通有 1 項、其餘 0 項（伙食有 1 項）
-    header.setSortIndicator(1, Qt.SortOrder.DescendingOrder)
-    counts = _column(page, 1)
-    assert counts == sorted(counts, reverse=True), counts
+    for page in (
+        window.operation_settings.categories,
+        window.operation_settings.items,
+        window.operation_settings.accounts,
+    ):
+        header = page.table.horizontalHeader()
+        assert not header.sectionsClickable(), (
+            f"{type(page).__name__} 的表頭還可以點 —— 那是第二個排序入口"
+        )
+        assert not header.isSortIndicatorShown(), (
+            f"{type(page).__name__} 還畫著排序箭頭，但點了不會有反應"
+        )
+        assert page.table.isSortingEnabled() is False, (
+            "setSortingEnabled(True) 會讓 QTableView 在 Python 裡排序 —— 規則禁止"
+        )
 
 
 def test_the_parent_dropdown_keeps_every_category_while_searching(

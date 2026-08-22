@@ -256,38 +256,56 @@ def test_category_tree_filter_and_sort_run_in_sql(store: LedgerStore) -> None:
     `categories` 本身被掃是接受的（見 `SMALL_FIXED_TABLES` 的說明）—— 這一條真正
     要守的是「有人日後為了做搜尋而 JOIN 進 `category_allocations` 或 `transactions`」。
 
-    順便當成 `CATEGORY_SORT_KEYS` 的煙霧測試：每一個 key 都要能真的組出一句合法 SQL。
+    順便當成 `CATEGORY_SORT_FIELDS` 的煙霧測試：**每一個欄位、升冪與降冪、
+    單獨一層與兩層組合**都要能真的組出一句合法 SQL。
     """
-    from tagcor_ledger.domain.models import CategoryTreeFilter
-    from tagcor_ledger.infrastructure.stores.categories import CATEGORY_SORT_KEYS
+    from tagcor_ledger.domain.models import CategoryTreeFilter, SortLevel
+    from tagcor_ledger.infrastructure.stores.categories import CATEGORY_SORT_FIELDS
 
+    fields = list(CATEGORY_SORT_FIELDS)
     checked = 0
-    for sort_key in CATEGORY_SORT_KEYS:
+    for field in fields:
         for descending in (False, True):
-            tree_filter = CategoryTreeFilter(
-                level=2,
-                search="7",
-                status="active",
-                sort_key=sort_key,
-                descending=descending,
-            )
-            _assert_no_growing_table_scan(
-                store, lambda f=tree_filter: store.list_category_tree(tree_filter=f)
-            )
-            checked += 1
-    assert checked == len(CATEGORY_SORT_KEYS) * 2, checked
+            # 單層，以及「這一層 ＋ 另一個欄位」的兩層組合 —— 多層是 v0.19 才有的，
+            # 只測單層的話組裝那一段等於沒測到。
+            second = next(other for other in fields if other != field)
+            for spec in (
+                (SortLevel(field=field, descending=descending),),
+                (
+                    SortLevel(field=field, descending=descending),
+                    SortLevel(field=second),
+                ),
+            ):
+                tree_filter = CategoryTreeFilter(
+                    level=2, search="7", status="active", sort=spec
+                )
+                _assert_no_growing_table_scan(
+                    store, lambda f=tree_filter: store.list_category_tree(tree_filter=f)
+                )
+                checked += 1
+    assert checked == len(fields) * 4, checked
 
 
-def test_an_unknown_sort_key_falls_back_instead_of_reaching_sql(store: LedgerStore) -> None:
-    """**`sort_key` 只能是白名單裡的值。** 未知的值退回預設，不是拼進 `ORDER BY`。
+def test_an_unknown_sort_field_falls_back_instead_of_reaching_sql(
+    store: LedgerStore,
+) -> None:
+    """**欄位只能是白名單裡的值。** 未知的整層跳過，不是拼進 `ORDER BY`。
 
     那是唯一一個把字串拼進 SQL 的地方，所以它必須是封閉的清單 —— 這條測試就是
-    在證明「畫面送什麼進來都不會變成 SQL 片段」。
+    在證明「畫面送什麼進來都不會變成 SQL 片段」。多層之後這件事更要守：
+    一份規格裡只要有一層被原樣拼進去就破功了。
     """
-    from tagcor_ledger.domain.models import CategoryTreeFilter
+    from tagcor_ledger.domain.models import CategoryTreeFilter, SortLevel
 
-    injected = CategoryTreeFilter(sort_key="node.name; DROP TABLE categories")
+    injected = CategoryTreeFilter(
+        sort=(
+            SortLevel(field="node.name; DROP TABLE categories"),
+            # 混一層合法的進去：整份都認不出來時退回預設是一條路，
+            # 「有一層合法、有一層是攻擊」是另一條，兩條都要走過。
+            SortLevel(field="name"),
+        )
+    )
     rows = store.list_category_tree(tree_filter=injected)
-    assert rows, "退回預設排序之後應該照樣列得出東西"
+    assert rows, "跳過不認得的那一層之後應該照樣列得出東西"
     # 表還在，而且內容沒變。
     assert store.list_categories(), "categories 被動到了"

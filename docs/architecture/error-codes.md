@@ -76,7 +76,12 @@
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
 |---|---|---|
 | `REORDER_LIST_STALE` | 送進來的 id 與資料庫現況不是同一組（排序視窗開著的時候清單變了） | 關掉排序視窗重開一次。**這個碼三種聚合共用** —— 帳戶、類別／項目、模板遇到的是同一件事，說法也一樣 |
-| `ACCOUNT_REORDER_FAILED` / `CATEGORY_REORDER_FAILED` / `TEMPLATE_REORDER_FAILED` | **退路碼**：寫入層失敗，原因不是上面那個 | 匯出診斷資訊回報 |
+| `SORT_SPEC_PAGE_UNKNOWN` | 要存排序規格的頁名不在 settings.py 那份允許清單裡 | 正常操作不會發生（頁名是程式裡的常數）；回報 |
+| `ACCOUNT_REORDER_FAILED` / `CATEGORY_REORDER_FAILED` / `TEMPLATE_REORDER_FAILED` / `SORT_SPEC_SAVE_FAILED` | **退路碼**：寫入層失敗，原因不是上面那個 | 匯出診斷資訊回報 |
+
+**認不出來的排序欄位不會有錯誤碼。** `order_by()` 直接跳過那一層，整份規格都認不出來
+就退回該清單的預設順序 —— 一個「畫面怎麼排」的偏好不值得讓操作失敗，而且真正的
+安全邊界在白名單本身，不在錯誤訊息。
 
 ## 交易
 

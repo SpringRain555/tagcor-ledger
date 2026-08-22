@@ -40,6 +40,7 @@
 | 備份刪不掉、清單看不懂哪一份是哪一份 | `infrastructure/maintenance.py`（每個 `sqlite3.connect()` 都要包 `closing`）＋ `ui/formatting.py::backup_row_text` | `tests/integration/test_backup_deletion.py` |
 | 查詢變慢 | `infrastructure/stores/` 的 SQL | `tests/integration/test_query_plans.py` |
 | **測試**變慢（尤其是越後面越慢） | `ui/theme.py::apply_dark_theme` —— application 層級的操作要傳播給每一個活著的 widget，一個 process 只能套一次 | `test_the_theme_is_only_applied_once_per_process` |
+| 名冊的順序不對、排序設定沒記住 | `ui/widgets/reorder_dialog.py` ＋ `sort_editor.py`；`ORDER BY` 由 `stores/base.py::order_by()` 從各 store 的白名單組 | `tests/unit/test_order_by.py`、`tests/ui/test_reorder.py`、`tests/integration/test_category_order.py` |
 | 文件與程式對不上 | `docs/architecture/ui-workflows.md` | `tests/unit/test_docs_drift.py` |
 | 圖跟文字對不上 | `docs/architecture/*.md` 的 mermaid 區塊 | `tests/unit/test_diagrams_drift.py` |
 | 畫面上出現不該有的用詞 | `ui/` 的字串常數 | `test_architecture.py` 的 `RETIRED_UI_WORDS` |

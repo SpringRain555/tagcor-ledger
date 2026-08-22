@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import calendar
+from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import date, timedelta
 import sqlite3
@@ -25,12 +26,26 @@ from uuid import uuid4
 from tagcor_ledger.domain.models import (
     RecurringSchedule,
     ScheduledOccurrence,
+    SortLevel,
     TransactionTemplate,
 )
 from tagcor_ledger.domain.money import Money
 from tagcor_ledger.infrastructure.clock import now_iso, today_taipei
 from tagcor_ledger.infrastructure.database import connect_database, database_transaction
-from tagcor_ledger.infrastructure.stores.base import StoreBase
+from tagcor_ledger.infrastructure.stores.base import StoreBase, order_by
+
+TEMPLATE_SORT_FIELDS: dict[str, str] = {
+    "custom": "sort_order",
+    "name": "name COLLATE NOCASE",
+    "entry_type": "entry_type",
+    # 「套用時輸入」的模板 `amount_minor` 是 NULL。SQLite 的 NULL 排在最前面，
+    # 依金額排時它們會擠在開頭 —— 那是對的：它們**沒有**金額，不是金額為 0。
+    "amount": "amount_minor",
+}
+"""模板的 `ORDER BY` 白名單。組裝規則見 `base.order_by()`。"""
+
+TEMPLATE_DEFAULT_ORDER: tuple[str, ...] = ("sort_order",)
+TEMPLATE_TIEBREAKERS: tuple[str, ...] = ("name COLLATE NOCASE", "template_id")
 
 
 def _new_correlation_id() -> str:
@@ -42,8 +57,19 @@ def _new_correlation_id() -> str:
 class AutomationStore(StoreBase):
     """模板／定期收支／待確認三個聚合。由 `LedgerStore` 組進去，不自己開 migration。"""
 
-    def list_templates(self, *, include_archived: bool = False) -> list[TransactionTemplate]:
+    def list_templates(
+        self,
+        *,
+        include_archived: bool = False,
+        sort: Sequence[SortLevel] = (),
+    ) -> list[TransactionTemplate]:
         where = "" if include_archived else "WHERE status = 'active'"
+        order = order_by(
+            sort,
+            fields=TEMPLATE_SORT_FIELDS,
+            default=TEMPLATE_DEFAULT_ORDER,
+            tiebreakers=TEMPLATE_TIEBREAKERS,
+        )
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
                 f"""
@@ -51,7 +77,7 @@ class AutomationStore(StoreBase):
                        destination_account_id, category_id, amount_minor, currency,
                        description, sort_order
                 FROM transaction_templates {where}
-                ORDER BY sort_order, name COLLATE NOCASE
+                ORDER BY {order}
                 """
             ).fetchall()
         return [TransactionTemplate(**dict(row)) for row in rows]

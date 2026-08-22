@@ -5,6 +5,7 @@ UI 上叫「定期收支」，schema 仍是 `recurring_schedules` —— 那是�
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict
 import sqlite3
 from uuid import uuid4
@@ -15,6 +16,7 @@ from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import (
     RecurringSchedule,
     ScheduledOccurrence,
+    SortLevel,
     TransactionTemplate,
 )
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
@@ -26,13 +28,20 @@ class AutomationService:
         # 於是 controller 沒辦法把同一個 store 分給它，`initialize_database` 也多跑一次。
         self.store = store or LedgerStore(paths)
 
-    def list_templates(self, *, include_archived: bool = False) -> Result:
+    def list_templates(
+        self,
+        *,
+        include_archived: bool = False,
+        sort: Sequence[SortLevel] = (),
+    ) -> Result:
         return Result.ok(
             "模板已載入。",
             details={
                 "templates": [
                     asdict(item)
-                    for item in self.store.list_templates(include_archived=include_archived)
+                    for item in self.store.list_templates(
+                        include_archived=include_archived, sort=tuple(sort)
+                    )
                 ]
             },
         )

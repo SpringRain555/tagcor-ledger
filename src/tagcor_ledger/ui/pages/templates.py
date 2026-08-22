@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.application.result import Result
+from tagcor_ledger.domain.models import SortLevel
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, template_values
 from tagcor_ledger.ui.widgets.draft_dialog import DraftDialog
@@ -33,6 +34,23 @@ from tagcor_ledger.ui.widgets.table import (
 )
 
 
+SORT_PAGE = "templates"
+SORT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("自訂順序", "custom"),
+    ("模板名稱", "name"),
+    ("類型", "entry_type"),
+    ("金額", "amount"),
+)
+"""排序視窗裡可以選的欄位。key 必須在 `TEMPLATE_SORT_FIELDS` 白名單裡。
+
+**「模板」這一頁不是 `CatalogPage` 的子類**（它沒有新增／改名／封存那一組共用按鈕，
+只有自己的四顆），所以這幾個常數放在模組層而不是類別屬性上。"""
+
+DEFAULT_SORT: tuple[SortLevel, ...] = (SortLevel(field="custom"),)
+"""還沒設定過時用的規格。**不能用空的** —— 空規格填進排序視窗會退成「下拉裡的
+第一個」，那不是一個想清楚過的預設值。"""
+
+
 class TemplatesPage(QWidget):
     apply_requested = Signal(dict)
     changed = Signal()
@@ -40,6 +58,7 @@ class TemplatesPage(QWidget):
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
         self.controller = controller
+        self.sort: tuple[SortLevel, ...] = controller.sort_spec(SORT_PAGE) or DEFAULT_SORT
         self.table = QTableView()
         self.model = RowsModel(
             ["名稱", "類型", "金額（TWD）", "備註"],
@@ -88,11 +107,11 @@ class TemplatesPage(QWidget):
         self.order_button.clicked.connect(self.edit_order)
 
     def edit_order(self) -> None:
-        """模板只有一組。**排序視窗列出全部（含封存的）**，因為它排的是儲存順序。"""
+        """模板只有一組。**拖曳清單列出全部（含封存的）**，因為它排的是儲存順序。"""
         rows = self.controller.list_templates(include_archived=True)
         dialog = ask_order(
             self,
-            "模板順序",
+            "模板排序",
             [
                 ReorderEntry(
                     identifier=str(row["template_id"]),
@@ -101,13 +120,21 @@ class TemplatesPage(QWidget):
                 )
                 for row in rows
             ],
-            caption="拖曳調整模板順序",
+            caption="自訂順序（拖曳）",
+            sort_fields=SORT_FIELDS,
+            sort_spec=self.sort,
         )
-        if dialog is not None:
-            self._finish(self.controller.set_template_order(dialog.parent_order()))
+        if dialog is None:
+            return
+        # 規格先存、再套順序 —— 反過來的話存檔失敗時畫面已經照新規格重畫了。
+        result = self.controller.save_sort_spec(SORT_PAGE, dialog.sort_spec())
+        if result.success:
+            self.sort = dialog.sort_spec()
+            result = self.controller.set_template_order(dialog.parent_order())
+        self._finish(result)
 
     def refresh(self) -> None:
-        self.model.replace_rows(self.controller.list_templates())
+        self.model.replace_rows(self.controller.list_templates(sort=self.sort))
 
     def edit_selected(self) -> None:
         self.edit(self.model.selected_item(self.table))

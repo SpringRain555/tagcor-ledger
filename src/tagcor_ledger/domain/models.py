@@ -92,22 +92,41 @@ class TransactionFilter:
 
 
 @dataclass(frozen=True, slots=True)
+class SortLevel:
+    """多層排序的一層：依哪個欄位、升冪還是降冪。
+
+    `field` **只是一個 key**，不是 SQL 片段。它會拿去查各個 store 自己的白名單
+    （`CATEGORY_SORT_FIELDS` 等）換成固定的運算式 —— 查不到就整層跳過。
+    這是唯一把字串放進 `ORDER BY` 的路徑，所以那份白名單必須是封閉的。
+    """
+
+    field: str
+    descending: bool = False
+
+
+SortSpec = tuple[SortLevel, ...]
+"""一份排序規格：由上而下的層級。空的代表「用那份清單自己的預設順序」。
+
+**為什麼空的不等於「不排序」**：SQL 沒有指定 `ORDER BY` 時的列順序是不保證的，
+畫面每次重整都可能不一樣。空規格一律退回該 store 寫死的預設。
+"""
+
+
+@dataclass(frozen=True, slots=True)
 class CategoryTreeFilter:
     """類別樹的篩選與排序條件。**全部在 SQL 裡處理，不撈回 Python 再過濾。**
 
     `status` 是 `active` / `archived` / `all`；**預設 `all`**，因為名冊分頁是管理用的，
     看不到封存的東西就沒辦法恢復它。
 
-    `sort_key` 只接受 `CATEGORY_SORT_KEYS` 裡的值 —— 它會變成 `ORDER BY` 的一部分，
-    所以**絕對不能讓使用者輸入直接進去**。查不到就退回 `default`。
+    `sort` 空的時候用 store 的預設順序（項目跟在自己的類別後面）。
     """
 
     level: int | None = None
     parent_id: str | None = None
     search: str = ""
     status: str = "all"
-    sort_key: str = "default"
-    descending: bool = False
+    sort: SortSpec = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -242,3 +242,164 @@ def test_reordering_templates_does_not_run_the_draft_validation(tmp_path: Path) 
     store.set_template_order([second, first])
 
     assert [t.template_id for t in store.list_templates()] == [second, first]
+
+
+# --- 多層排序（v0.19.0）--------------------------------------------------------
+
+
+def test_a_two_level_spec_sorts_by_the_second_field_inside_ties(tmp_path: Path) -> None:
+    """第二層要在第一層平手的時候真的有作用 —— 否則多層等於單層。"""
+    from tagcor_ledger.domain.models import SortLevel
+
+    store = _store(tmp_path)
+    parents = _make(store, ["甲類", "乙類"])
+    # 兩個類別底下各兩個項目，刻意讓「狀態」全部一樣、名稱交錯
+    _make(store, ["丙", "甲"], parent_id=parents["甲類"])
+    _make(store, ["丁", "乙"], parent_id=parents["乙類"])
+    # 讓甲類排在乙類前面。**整組都要送** —— 預設帳本本來就有一個「伙食」，
+    # 只送自己造的那兩個會撞上 `REORDER_LIST_STALE`（守門有效，是測試寫錯）。
+    everyone = _ids(store, level=1)
+    others = [i for i in everyone if i not in (parents["甲類"], parents["乙類"])]
+    store.set_category_order(
+        [parents["甲類"], parents["乙類"], *others], parent_id=None, level=1
+    )
+
+    nodes = store.list_category_tree(
+        tree_filter=CategoryTreeFilter(
+            level=2,
+            sort=(SortLevel(field="parent_custom"), SortLevel(field="name")),
+        )
+    )
+    pairs = [(node.parent_name, node.category.name) for node in nodes]
+
+    # 斷言的是**性質**，不是硬寫的名次：中文照碼位排（丙 < 甲、丁 < 乙），
+    # 而且預設帳本本來就有一個「伙食／7-11」。寫死順序只會測到我對排序規則的誤解。
+    groups = [parent for parent, _ in pairs]
+    assert groups.index("甲類") < groups.index("乙類"), f"第一層沒生效：{pairs}"
+    assert groups == sorted(groups, key=lambda g: groups.index(g)), (
+        f"同一個類別的項目沒有連在一起：{pairs}"
+    )
+    for parent in ("甲類", "乙類"):
+        inside = [name for group, name in pairs if group == parent]
+        assert inside == sorted(inside), f"{parent} 底下第二層沒有照名稱排：{inside}"
+        assert len(inside) == 2, inside
+
+
+def test_descending_actually_reverses(tmp_path: Path) -> None:
+    from tagcor_ledger.domain.models import SortLevel
+
+    store = _store(tmp_path)
+    _make(store, ["甲類", "乙類", "丙類"])
+    up = _names(store, level=1)  # 預設 = 自訂順序（目前全部平手，等於名稱序）
+    nodes = store.list_category_tree(
+        tree_filter=CategoryTreeFilter(
+            level=1, sort=(SortLevel(field="name", descending=True),)
+        )
+    )
+    assert [node.category.name for node in nodes] == list(reversed(sorted(up)))
+
+
+def test_an_unknown_field_is_skipped_and_the_rest_still_applies(tmp_path: Path) -> None:
+    """認不出來的**只跳過那一層**，不是整份丟掉，也不是拼進 SQL。"""
+    from tagcor_ledger.domain.models import SortLevel
+
+    store = _store(tmp_path)
+    _make(store, ["甲類", "乙類", "丙類"])
+    nodes = store.list_category_tree(
+        tree_filter=CategoryTreeFilter(
+            level=1,
+            sort=(
+                SortLevel(field="沒有這個欄位"),
+                SortLevel(field="name", descending=True),
+            ),
+        )
+    )
+    names = [node.category.name for node in nodes]
+    assert names == list(reversed(sorted(names))), f"合法的那一層沒有生效：{names}"
+
+
+def test_the_same_field_twice_does_not_break_the_query(tmp_path: Path) -> None:
+    """重複的欄位不能讓查詢壞掉。
+
+    **這一條只證明「SQL 仍然合法」，不證明去重有做。** 去重是字串層級的規則
+    （`name ASC, name DESC` 的結果本來就等於 `name ASC`，查詢分不出來），
+    所以那件事由 `tests/unit/test_order_by.py` 守。
+    """
+    from tagcor_ledger.domain.models import SortLevel
+
+    store = _store(tmp_path)
+    _make(store, ["甲類", "乙類"])
+    nodes = store.list_category_tree(
+        tree_filter=CategoryTreeFilter(
+            level=1,
+            sort=(SortLevel(field="name"), SortLevel(field="name", descending=True)),
+        )
+    )
+    names = [node.category.name for node in nodes]
+    assert names == sorted(names), f"第一層應該贏：{names}"
+
+
+def test_an_all_unknown_spec_falls_back_to_the_default_order(tmp_path: Path) -> None:
+    """**先排一個跟名稱序不同的自訂順序**，否則這條測不到東西。
+
+    第一版沒排：全部平手時「退回預設」與「只剩 tiebreaker」都落在名稱序，
+    拿掉退回那段程式測試照樣綠（陽性對照抓到的）。
+    """
+    from tagcor_ledger.domain.models import SortLevel
+
+    store = _store(tmp_path)
+    _make(store, ["甲類", "乙類", "丙類"])
+    reversed_ids = list(reversed(_ids(store, level=1)))
+    store.set_category_order(reversed_ids, parent_id=None, level=1)
+    default = _names(store, level=1)
+    assert default != sorted(default), "自訂順序沒排開，這條又測不到東西了"
+
+    nodes = store.list_category_tree(
+        tree_filter=CategoryTreeFilter(level=1, sort=(SortLevel(field="亂打的"),))
+    )
+    assert [node.category.name for node in nodes] == default
+
+
+def test_accounts_and_templates_take_a_spec_too(tmp_path: Path) -> None:
+    from tagcor_ledger.domain.models import SortLevel
+
+    store = _store(tmp_path)
+    for name in ("郵局", "悠遊付", "信用卡"):
+        store.create_account(name=name)
+    by_name = [
+        a.name
+        for a in store.list_accounts(sort=(SortLevel(field="name", descending=True),))
+    ]
+    assert by_name == list(reversed(sorted(by_name))), by_name
+
+    for name in ("早餐", "捷運", "房租"):
+        _template(store, name)
+    templates = [
+        t.name
+        for t in store.list_templates(sort=(SortLevel(field="name", descending=True),))
+    ]
+    assert templates == list(reversed(sorted(templates))), templates
+
+
+def test_a_tie_falls_through_to_the_stored_order_not_to_chance(tmp_path: Path) -> None:
+    """第一層全部平手時，後面接的 tiebreaker 要真的決定順序。
+
+    **不要用「查兩次結果一樣」來測 tiebreaker** —— SQLite 對同一個查詢同一份資料
+    本來就會給同一個順序，那樣寫拿掉 tiebreaker 也不會紅（陽性對照抓到的）。
+    這裡改成斷言那個順序**是什麼**：tiebreaker 是名稱，所以整組平手時就是名稱序。
+    """
+    from tagcor_ledger.domain.models import SortLevel
+
+    store = _store(tmp_path)
+    _make(store, ["甲類", "乙類", "丙類"])
+    # 先把自訂順序排成跟名稱序相反，確認接下來看到的名稱序不是 sort_order 造成的
+    store.set_category_order(
+        list(reversed(_ids(store, level=1))), parent_id=None, level=1
+    )
+    assert _names(store, level=1) != sorted(_names(store, level=1))
+
+    nodes = store.list_category_tree(
+        tree_filter=CategoryTreeFilter(level=1, sort=(SortLevel(field="status"),))
+    )
+    names = [node.category.name for node in nodes]
+    assert names == sorted(names), f"整組平手時沒有落到名稱 tiebreaker：{names}"

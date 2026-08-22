@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,8 @@ from tagcor_ledger.domain.models import (
     CategoryTreeFilter,
     CreateBalanceSnapshotRequest,
     RecurringSchedule,
+    SortLevel,
+    SortSpec,
     SystemPathSettings,
     TransactionFilter,
     TransactionTemplate,
@@ -95,8 +98,14 @@ class LedgerController:
         )
         return self.balance_snapshot_reminder_due
 
-    def account_options(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
-        result = self.accounts.list(include_archived=include_archived)
+    def account_options(
+        self,
+        *,
+        include_archived: bool = False,
+        sort: Sequence[SortLevel] = (),
+    ) -> list[dict[str, Any]]:
+        """帳戶清單。**不給 `sort` 就是自訂順序** —— 下拉選單與資產總覽都走這一條。"""
+        result = self.accounts.list(include_archived=include_archived, sort=sort)
         return list(result.details.get("accounts", []))
 
     def overview_snapshot(self) -> dict[str, Any]:
@@ -348,6 +357,13 @@ class LedgerController:
     def set_template_order(self, ordered_ids: list[str]) -> Result:
         return self.automation.set_template_order(ordered_ids)
 
+    def sort_spec(self, page: str) -> SortSpec:
+        """名冊分頁記得住的排序規格。沒存過回傳空的，由頁面換成自己的預設。"""
+        return self.settings.get_sort_spec(page)
+
+    def save_sort_spec(self, page: str, spec: Sequence[SortLevel]) -> Result:
+        return self.settings.save_sort_spec(page, spec)
+
     def get_settings(self) -> ApplicationSettings:
         return self.settings.get()
 
@@ -519,8 +535,15 @@ class LedgerController:
         """各表筆數。給重製確認框用 —— 不可逆的操作要講得出「會失去什麼」。"""
         return self.diagnostics.counts()
 
-    def list_templates(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
-        result = self.automation.list_templates(include_archived=include_archived)
+    def list_templates(
+        self,
+        *,
+        include_archived: bool = False,
+        sort: Sequence[SortLevel] = (),
+    ) -> list[dict[str, Any]]:
+        result = self.automation.list_templates(
+            include_archived=include_archived, sort=sort
+        )
         return list(result.details.get("templates", []))
 
     def save_template(self, template: TransactionTemplate) -> Result:

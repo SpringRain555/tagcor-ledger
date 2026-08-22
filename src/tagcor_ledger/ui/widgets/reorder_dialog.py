@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt
@@ -43,6 +44,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tagcor_ledger.domain.models import SortLevel
+from tagcor_ledger.ui.widgets.sort_editor import SortEditor
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 
@@ -164,6 +167,8 @@ class ReorderDialog(QDialog):
         parent: QWidget | None = None,
         caption: str = "拖曳調整順序",
         child_caption: str = "",
+        sort_fields: Sequence[tuple[str, str]] = (),
+        sort_spec: Sequence[SortLevel] = (),
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
@@ -175,20 +180,28 @@ class ReorderDialog(QDialog):
         self._current_parent: str | None = None
         if any(entry.children for entry in entries):
             self.children = OrderList(child_caption or "底下的項目", [])
+        # **排序方式與自訂順序並排在同一個視窗裡。** 它們是同一件事的兩半：
+        # 左邊決定「照什麼排」，右邊決定「自訂那一層長什麼樣」。分成兩個入口的話，
+        # 使用者得先猜哪一個才是他要的。
+        self.sort_editor = SortEditor(sort_fields) if sort_fields else None
         self._build()
+        if self.sort_editor is not None:
+            self.sort_editor.set_spec(sort_spec)
 
     def _build(self) -> None:
         lists = QHBoxLayout()
+        if self.sort_editor is not None:
+            side = QVBoxLayout()
+            side.addWidget(self.sort_editor)
+            side.addStretch()
+            lists.addLayout(side)
         lists.addWidget(self.parents)
         if self.children is not None:
             lists.addWidget(self.children)
 
-        hint = QLabel(
-            "拖曳或用上移／下移調整，按「確定」才會存下來。"
-            "這份順序也會用在記帳頁的下拉選單。"
-        )
-        hint.setObjectName("hintLabel")
-        hint.setWordWrap(True)
+        self.hint = QLabel()
+        self.hint.setObjectName("hintLabel")
+        self.hint.setWordWrap(True)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -202,12 +215,35 @@ class ReorderDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(lists)
-        layout.addWidget(hint)
+        layout.addWidget(self.hint)
         layout.addWidget(buttons)
+
+        if self.sort_editor is not None:
+            self.sort_editor.changed.connect(self._sync_hint)
+        self._sync_hint()
 
         if self.children is not None:
             self.parents.list.currentRowChanged.connect(lambda *_: self._show_children())
             self._show_children()
+
+    def _sync_hint(self) -> None:
+        """排序方式沒用到自訂順序時要**明講拖曳不會反映在清單上**。
+
+        不講的話，使用者拖了半天按確定、清單卻沒變 —— 看起來像功能壞掉，
+        實際上是他選了「照名稱排」。順序**有**存下去，只是沒有拿來用。
+        """
+        base = "拖曳或用上移／下移調整自訂順序，按「確定」才會存下來。"
+        if self.sort_editor is not None and not self.sort_editor.uses_custom():
+            self.hint.setText(
+                base + "\n"
+                "目前的排序方式沒有用到「自訂順序」，所以拖曳的結果不會顯示在清單上"
+                "（順序仍然會存起來）。要看到效果，請把某一層改成自訂順序。"
+            )
+            return
+        self.hint.setText(base + "這份順序也會用在記帳頁的下拉選單。")
+
+    def sort_spec(self) -> tuple[SortLevel, ...]:
+        return self.sort_editor.spec() if self.sort_editor is not None else ()
 
     def _show_children(self) -> None:
         """換到另一個上層時，先把目前這一組的順序記下來再換。
@@ -258,10 +294,18 @@ def ask_order(
     *,
     caption: str = "拖曳調整順序",
     child_caption: str = "",
+    sort_fields: Sequence[tuple[str, str]] = (),
+    sort_spec: Sequence[SortLevel] = (),
 ) -> ReorderDialog | None:
     """開排序視窗。**取消回傳 `None`** —— 那不是失敗，呼叫端不要跳錯誤訊息。"""
     dialog = ReorderDialog(
-        title, entries, parent=parent, caption=caption, child_caption=child_caption
+        title,
+        entries,
+        parent=parent,
+        caption=caption,
+        child_caption=child_caption,
+        sort_fields=sort_fields,
+        sort_spec=sort_spec,
     )
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None

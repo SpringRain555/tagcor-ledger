@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.application.result import Result
-from tagcor_ledger.domain.models import CategoryTreeFilter
+from tagcor_ledger.domain.models import CategoryTreeFilter, SortLevel
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import (
     account_values,
@@ -43,7 +43,7 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.widgets.filters import CatalogFilterBar
-from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, ask_order
+from tagcor_ledger.ui.widgets.reorder_dialog import ReorderDialog, ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.simple_form import ChoiceField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
     SETTINGS_TABLE_ROWS,
@@ -67,20 +67,33 @@ class CatalogPage(QWidget):
     """重新命名時那一格的標籤。三個分頁各自說自己的話 ——「名稱」對「帳戶」與
     「項目」都成立，所以它等於沒說。"""
 
-    SORT_KEYS: tuple[str | None, ...] = ()
-    """欄索引 → SQL 的 `sort_key`。`None` 表示那一欄不能排；空 tuple 表示整頁不能排。
+    SORT_FIELDS: tuple[tuple[str, str], ...] = ()
+    """排序視窗裡可以選的欄位：`(顯示文字, 白名單 key)`，順序就是下拉裡的順序。
 
-    值必須是 `CATEGORY_SORT_KEYS` 裡有的 key —— 那份白名單才是唯一能拼進
-    `ORDER BY` 的東西。"""
+    key 必須是那個 store 的白名單（`CATEGORY_SORT_FIELDS` 等）裡有的值 ——
+    那份白名單才是唯一能拼進 `ORDER BY` 的東西。"""
+
+    SORT_PAGE = ""
+    """記住排序規格用的頁名，必須在 `SORT_SPEC_PAGES` 裡。空的代表這一頁不記。"""
+
+    DEFAULT_SORT: tuple[SortLevel, ...] = ()
+    """使用者還沒設定過時用的規格。
+
+    **不能靠「空規格」代表預設。** 排序視窗的第一層一定要選一個欄位（那是「排序方式」
+    的意思），空規格填進去會退成「下拉裡的第一個」—— 對「項目」那頁來說就是只剩
+    `parent_custom` 一層，同一個類別底下的項目會掉回名稱順序。**這是實作時真的踩到的。**
+    """
 
     REORDERABLE = False
-    """這一頁要不要「上移／下移」。開了就要實作 `_reorder()`。"""
+    """這一頁要不要「排序…」按鈕。開了就要實作 `edit_order()`。"""
 
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
         self.controller = controller
-        self.sort_key = "default"
-        self.descending = False
+        # **排序規格從設定讀回來**，不是每次開程式都從預設開始。使用者排好了就該
+        # 一直是那樣，否則「記得住」這件事等於沒做。沒存過就用這一頁的預設。
+        saved = controller.sort_spec(self.SORT_PAGE) if self.SORT_PAGE else ()
+        self.sort: tuple[SortLevel, ...] = saved or self.DEFAULT_SORT
         self.filter_bar: CatalogFilterBar | None = None
         self.model = RowsModel(
             list(self.HEADERS),
@@ -169,62 +182,38 @@ class CatalogPage(QWidget):
         # 高度平均塞進每個 widget 之間 —— 按鈕與表格會浮在分頁中間。
         layout.addStretch()
 
-        self._setup_sorting()
-
         add_button.clicked.connect(self.add_item)
         rename.clicked.connect(self.rename_selected)
         toggle.clicked.connect(self.toggle_selected)
         delete_button.clicked.connect(self.delete_selected)
 
-    def _setup_sorting(self) -> None:
-        """點表頭排序。**排序在 SQL 裡做，不是 `setSortingEnabled(True)`。**
-
-        `QTableView.setSortingEnabled(True)` 會叫 model 自己在 Python 裡排 —— 那正是
-        `AGENTS.md` 禁止的事。這裡只借用表頭的「可點 ＋ 顯示指示箭頭」，真正的排序
-        是把 `sort_key` 送回 SQL 再查一次。
-        """
-        if not self.SORT_KEYS:
-            return
-        header = self.table.horizontalHeader()
-        header.setSectionsClickable(True)
-        header.setSortIndicatorShown(True)
-        # **三段循環：升冪 → 降冪 → 收回箭頭。** 收回時 `column` 是 -1，那就是
-        # 「回到自訂順序」—— 沒有這一段的話，使用者一旦點過表頭就再也回不去，
-        # 而自訂順序才是這兩頁的預設。
-        header.setSortIndicatorClearable(True)
-        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
-        header.sortIndicatorChanged.connect(self._sort_changed)
-
-    def _sort_changed(self, column: int, order: Qt.SortOrder) -> None:
-        if column < 0:
-            # 箭頭被收回去了 —— 回到自訂順序。
-            self.sort_key = "default"
-            self.descending = False
-            self.refresh()
-            return
-        key = self.SORT_KEYS[column] if column < len(self.SORT_KEYS) else None
-        if key is None:
-            # 那一欄不能排。把指示箭頭收回去，不要留一個會動但沒有作用的箭頭。
-            self.table.horizontalHeader().setSortIndicator(
-                -1, Qt.SortOrder.AscendingOrder
-            )
-            return
-        self.sort_key = key
-        self.descending = order == Qt.SortOrder.DescendingOrder
-        self.refresh()
-
     def refresh(self) -> None:
         self.model.replace_rows(self._rows())
 
-    # --- 自訂順序 ---------------------------------------------------------------
+    # --- 排序 --------------------------------------------------------------------
 
     def edit_order(self) -> None:
-        """開排序視窗。子類用 `_order_entries()` 與 `_save_order()` 回答內容與寫法。
+        """開排序視窗。子類負責「清單從哪來」與「順序寫回哪裡」。
 
         **視窗裡的清單不受這一頁的搜尋與篩選影響。** 它排的是儲存順序，而儲存順序
         是整組的 —— 只排看得見的那幾筆，剩下的位置就無法定義。
+
+        **點表頭排序已經拿掉了**（v0.19.0）。以前兩種入口並存，點表頭會把多層規格
+        整個換成單層，而使用者看不出剛才設的東西為什麼不見了。排序現在只有一個入口。
         """
         raise NotImplementedError
+
+    def _apply_sort(self, dialog: ReorderDialog) -> Result:
+        """把視窗裡的排序規格存起來並套用。
+
+        **規格先存、再套。** 反過來的話，存檔失敗時畫面已經照新規格重畫了 ——
+        使用者會以為成功，下次開程式才發現變回去。
+        """
+        spec = dialog.sort_spec()
+        result = self.controller.save_sort_spec(self.SORT_PAGE, spec)
+        if result.success:
+            self.sort = spec
+        return result
 
     def selected_id(self) -> str | None:
         item = self.model.selected_item(self.table)
@@ -282,19 +271,25 @@ class AccountsPage(CatalogPage):
     ID_FIELD = "account_id"
     NAME_LABEL = "帳戶名稱"
     REORDERABLE = True
+    SORT_PAGE = "accounts"
+    SORT_FIELDS = (("自訂順序", "custom"), ("帳戶名稱", "name"), ("狀態", "status"))
+    DEFAULT_SORT = (SortLevel(field="custom"),)
+    """**沒有「目前餘額」。** 餘額不在 `accounts` 表上，是靠 posting 加總出來的
+    （見 `ACCOUNT_SORT_FIELDS`）—— 這裡沒有可以排的欄位。"""
 
     _values = staticmethod(account_values)
 
     def edit_order(self) -> None:
-        """帳戶只有一組，所以只有一份清單。
+        """帳戶只有一組，所以只有一份拖曳清單。
 
-        這份順序同時決定**記帳頁的帳戶下拉與資產總覽**的列法 —— 那正是排它的理由，
-        每天要選的那個帳戶不該埋在第五個。
+        自訂順序同時決定**記帳頁的帳戶下拉與資產總覽**的列法 —— 那正是排它的理由，
+        每天要選的那個帳戶不該埋在第五個。**排序規格只影響這一頁**：下拉與總覽沒有
+        排序 UI，不該跟著某一頁的偏好變。
         """
         rows = self.controller.account_options(include_archived=True)
         dialog = ask_order(
             self,
-            "帳戶順序",
+            "帳戶排序",
             [
                 ReorderEntry(
                     identifier=str(row["account_id"]),
@@ -303,13 +298,19 @@ class AccountsPage(CatalogPage):
                 )
                 for row in rows
             ],
-            caption="拖曳調整帳戶順序",
+            caption="自訂順序（拖曳）",
+            sort_fields=self.SORT_FIELDS,
+            sort_spec=self.sort,
         )
-        if dialog is not None:
-            self._finish(self.controller.set_account_order(dialog.parent_order()))
+        if dialog is None:
+            return
+        result = self._apply_sort(dialog)
+        if result.success:
+            result = self.controller.set_account_order(dialog.parent_order())
+        self._finish(result)
 
     def _rows(self) -> list[dict[str, Any]]:
-        return self.controller.account_options(include_archived=True)
+        return self.controller.account_options(include_archived=True, sort=self.sort)
 
     def _create(self) -> Result | None:
         values = ask_form(
@@ -366,8 +367,7 @@ class CategoryPageBase(CatalogPage):
                 parent_id=bar.parent_id() if bar is not None else None,
                 search=bar.search_text() if bar is not None else "",
                 status=bar.status_value() if bar is not None else "all",
-                sort_key=self.sort_key,
-                descending=self.descending,
+                sort=self.sort,
             )
         )
 
@@ -406,7 +406,14 @@ class CategoriesPage(CategoryPageBase):
     ADD_LABEL = "新增類別"
     NAME_LABEL = "類別名稱"
     LEVEL = 1
-    SORT_KEYS = ("name", "item_count", "status")
+    SORT_PAGE = "categories"
+    SORT_FIELDS = (
+        ("自訂順序", "custom"),
+        ("類別名稱", "name"),
+        ("項目數", "item_count"),
+        ("狀態", "status"),
+    )
+    DEFAULT_SORT = (SortLevel(field="custom"),)
 
     _values = staticmethod(category_values)
 
@@ -421,20 +428,24 @@ class CategoriesPage(CategoryPageBase):
         return self.controller.create_category(str(values["name"]))
 
     def edit_order(self) -> None:
-        """第一層全部是一組（`parent_id` 都是 `None`），所以只有一份清單。"""
+        """第一層全部是一組（`parent_id` 都是 `None`），所以只有一份拖曳清單。"""
         rows = [row for row in self._all_categories() if int(row["level"]) == 1]
         dialog = ask_order(
             self,
-            "類別順序",
+            "類別排序",
             [self._entry(row) for row in rows],
-            caption="拖曳調整類別順序",
+            caption="自訂順序（拖曳）",
+            sort_fields=self.SORT_FIELDS,
+            sort_spec=self.sort,
         )
-        if dialog is not None:
-            self._finish(
-                self.controller.set_category_order(
-                    dialog.parent_order(), parent_id=None, level=1
-                )
+        if dialog is None:
+            return
+        result = self._apply_sort(dialog)
+        if result.success:
+            result = self.controller.set_category_order(
+                dialog.parent_order(), parent_id=None, level=1
             )
+        self._finish(result)
 
 
 class ItemsPage(CategoryPageBase):
@@ -445,7 +456,20 @@ class ItemsPage(CategoryPageBase):
     NAME_LABEL = "項目名稱"
     LEVEL = 2
     WITH_PARENT_FILTER = True
-    SORT_KEYS = ("parent_name", "name", "status")
+    SORT_PAGE = "items"
+    SORT_FIELDS = (
+        ("所屬類別（自訂順序）", "parent_custom"),
+        ("所屬類別名稱", "parent_name"),
+        ("項目（自訂順序）", "custom"),
+        ("項目名稱", "name"),
+        ("狀態", "status"),
+    )
+    DEFAULT_SORT = (SortLevel(field="parent_custom"), SortLevel(field="custom"))
+    """**自訂順序在這一頁是兩個欄位。** `sort_order` 的意義只在同一組之內 ——
+    項目跨類別比自己的 `sort_order` 會互相穿插（每組都是 10、20、30），
+    要先用「所屬類別（自訂順序）」把同一個類別的聚在一起，第二層才輪得到「項目」。
+
+    預設的 `[parent_custom, custom]` 就是 v0.18 之前寫死的那個排序，現在它可以改了。"""
 
     _values = staticmethod(item_values)
 
@@ -464,7 +488,9 @@ class ItemsPage(CategoryPageBase):
         if self.filter_bar is not None:
             self.filter_bar.set_parents(
                 self.controller.category_tree(
-                    tree_filter=CategoryTreeFilter(level=1, sort_key="name")
+                    tree_filter=CategoryTreeFilter(
+                        level=1, sort=(SortLevel(field="name"),)
+                    )
                 )
             )
         super().refresh()
@@ -521,16 +547,20 @@ class ItemsPage(CategoryPageBase):
         ]
         dialog = ask_order(
             self,
-            "項目順序",
+            "項目排序",
             entries,
             caption="類別順序",
             child_caption="底下的項目",
+            sort_fields=self.SORT_FIELDS,
+            sort_spec=self.sort,
         )
         if dialog is None:
             return
-        result = self.controller.set_category_order(
-            dialog.parent_order(), parent_id=None, level=1
-        )
+        result = self._apply_sort(dialog)
+        if result.success:
+            result = self.controller.set_category_order(
+                dialog.parent_order(), parent_id=None, level=1
+            )
         for parent_id, ordered in dialog.child_orders().items():
             if not result.success:
                 break

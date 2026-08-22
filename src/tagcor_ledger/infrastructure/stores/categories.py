@@ -16,29 +16,46 @@ from tagcor_ledger.infrastructure.stores.base import (
     NotFoundError,
     StoreBase,
     has_any_reference,
+    order_by,
 )
 
-CATEGORY_SORT_KEYS: dict[str, tuple[str, ...]] = {
-    # 預設：項目跟在自己的類別後面。這是「這份資料本來的形狀」，不是某一欄的排序。
-    "default": (
-        "COALESCE(category_parent.sort_order, category_node.sort_order)",
-        "COALESCE(category_parent.name, category_node.name) COLLATE NOCASE",
-        "category_node.level",
-        "category_node.sort_order",
-        "category_node.name COLLATE NOCASE",
-    ),
-    "name": ("category_node.name COLLATE NOCASE",),
-    # 依所屬類別排時，同一個類別底下再照項目名 —— 否則同組之內是隨機順序。
-    "parent_name": (
-        "COALESCE(category_parent.name, '') COLLATE NOCASE",
-        "category_node.name COLLATE NOCASE",
-    ),
-    "item_count": ("item_count", "category_node.name COLLATE NOCASE"),
-    "status": ("category_node.status", "category_node.name COLLATE NOCASE"),
+CATEGORY_SORT_FIELDS: dict[str, str] = {
+    "custom": "category_node.sort_order",
+    "name": "category_node.name COLLATE NOCASE",
+    "item_count": "item_count",
+    "status": "category_node.status",
+    # 「項目」那頁才用得到：先照所屬類別、再照項目自己。
+    "parent_custom": "category_parent.sort_order",
+    # 不用 `COALESCE(..., '')`：排序時 NULL 在 ASC 本來就排最前、DESC 排最後，
+    # 跟空字串一樣。少一個字面值，白名單的「不得出現引號」就守得住。
+    "parent_name": "category_parent.name COLLATE NOCASE",
 }
-"""**`ORDER BY` 的白名單。** key 是畫面傳進來的 `sort_key`，value 是要拼進 SQL 的
-欄位運算式。畫面永遠只能送 key，不能送片段 —— 這是唯一一個把字串拼進 SQL 的地方，
-所以它必須是封閉的清單。"""
+"""**`ORDER BY` 的白名單。** key 是畫面送進來的欄位名，value 是固定的 SQL 運算式。
+畫面永遠只能送 key —— 這份清單必須是封閉的，組裝規則見 `base.order_by()`。
+
+**自訂順序拆成 `custom` 與 `parent_custom` 兩個欄位**，因為 `sort_order` 的意義
+只在同一組之內。項目跨類別比自己的 `sort_order` 會互相穿插（每組都是 10、20、30），
+要先用 `parent_custom` 把同一類別的聚在一起，第二層才輪得到 `custom`。
+"""
+
+CATEGORY_DEFAULT_ORDER: tuple[str, ...] = (
+    "COALESCE(category_parent.sort_order, category_node.sort_order)",
+    "COALESCE(category_parent.name, category_node.name) COLLATE NOCASE",
+    "category_node.level",
+    "category_node.sort_order",
+)
+"""沒有指定規格時的順序：**項目跟在自己的類別後面**。
+
+這不是「某一欄的排序」，是這份資料本來的形狀，而且要同時容納只有第一層、只有第二層、
+以及兩層混在一起（排序視窗就是這樣查的）三種情況 —— 所以用 `COALESCE` 而不是
+單一欄位，也因此它沒辦法表達成一個 `SortLevel`。
+"""
+
+CATEGORY_TIEBREAKERS: tuple[str, ...] = (
+    "category_node.name COLLATE NOCASE",
+    "category_node.category_id",
+)
+"""完全同分時的最終順序。少了它，畫面每次重整都可能換一個樣子。"""
 
 
 class CategoryStore(StoreBase):
@@ -106,11 +123,14 @@ class CategoryStore(StoreBase):
             "" if selected.status == "all" else f"AND category_item.status = '{selected.status}'"
         )
 
-        # **`ORDER BY` 只從白名單來。** `sort_key` 是畫面傳進來的，任何字串內插都是
-        # 一條注入路徑；這裡查不到就退回預設，不接受未知的值。
-        terms = CATEGORY_SORT_KEYS.get(selected.sort_key, CATEGORY_SORT_KEYS["default"])
-        direction = " DESC" if selected.descending else ""
-        order = ", ".join(f"{term}{direction}" for term in terms)
+        # **`ORDER BY` 只從白名單來。** 規格是畫面傳進來的，任何字串內插都是一條
+        # 注入路徑；`order_by()` 查不到的欄位整層跳過，不接受未知的值。
+        order = order_by(
+            selected.sort,
+            fields=CATEGORY_SORT_FIELDS,
+            default=CATEGORY_DEFAULT_ORDER,
+            tiebreakers=CATEGORY_TIEBREAKERS,
+        )
 
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(

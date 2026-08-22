@@ -6,15 +6,50 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 import json
 import sqlite3
 from typing import Any
 from uuid import uuid4
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.domain.models import TransactionRecord
+from tagcor_ledger.domain.models import SortLevel, TransactionRecord
 from tagcor_ledger.domain.money import Money
 from tagcor_ledger.infrastructure.clock import now_iso
+
+
+def order_by(
+    spec: Sequence[SortLevel],
+    *,
+    fields: Mapping[str, str],
+    default: Sequence[str],
+    tiebreakers: Sequence[str],
+) -> str:
+    """把多層排序規格組成 `ORDER BY` 的內容。
+
+    **這是整個專案唯一把字串拼進 `ORDER BY` 的地方**，所以規則寫死在這裡：
+
+    - 每一層的 `field` 只是一個 key，拿去查 `fields` 換成固定運算式。
+      **查不到就整層跳過** —— 不接受未知的值，更不會把它原樣放進 SQL。
+    - **同一個欄位出現第二次直接跳過。** 第一層已經排過的欄位不可能在第二層
+      再分出勝負，留著只是讓 `ORDER BY` 變長。
+    - 一層都沒剩就用 `default`（每份清單自己的預設順序）。
+    - **`tiebreakers` 一律接在最後。** 名稱與 id 保證兩筆完全同分時順序仍然固定 ——
+      少了它，畫面每次重整都可能換一個樣子，看起來像資料在跳。
+
+    升／降只影響那一層；`tiebreakers` 永遠升冪，它們是為了穩定不是為了表達意圖。
+    """
+    terms: list[str] = []
+    used: set[str] = set()
+    for level in spec:
+        expression = fields.get(level.field)
+        if expression is None or level.field in used:
+            continue
+        used.add(level.field)
+        terms.append(f"{expression} DESC" if level.descending else expression)
+    if not terms:
+        terms = list(default)
+    return ", ".join([*terms, *tiebreakers])
 
 
 class StoreError(RuntimeError):
