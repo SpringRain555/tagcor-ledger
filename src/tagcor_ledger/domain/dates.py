@@ -1,24 +1,21 @@
 """月份與日期運算。**純函式，只依賴標準函式庫。**
 
-定存的每一期到期日、每一次領息，以及定期收支的下一次到期，全部建立在這幾個函式上。
+定存的每一期到期日與每一次領息都建立在這幾個函式上。
 2026-08-22 之前它們散在 `application/deposits.py` 與
 `infrastructure/stores/automation.py` 兩邊，各自是私有函式 —— 於是
 「目標月份沒有那一天要退到月底」這條規則有兩份實作，而兩份都沒有直接的單元測試。
 
-## 月底夾取只有一份實作，但有兩個 anchor
+## 月底夾取只有一份實作
 
 `clamped_date()` 是唯一實作「那個月裝不下就退到當月最後一天」的地方。
-v0.20.0 時 `add_months()` 與 `next_due_date()` 各有一份，當時的註解說「合併要動到
-正常運作的邏輯」—— **那個判斷是錯的**。兩者的差別從來不在夾取，在**誰當 anchor**，
-而那是呼叫端的事：
+v0.20.0 時 `add_months()` 與 `next_due_date()`（定期收支用的）各有一份，當時的註解說
+「合併要動到正常運作的邏輯」—— **那個判斷是錯的**。兩者的差別從來不在夾取，
+在**誰當 anchor**，而那是呼叫端的事。
 
-| 呼叫端 | anchor 是什麼 | 例子 |
-|---|---|---|
-| `add_months()` | 來源日期自己的日 | `add_months("2026-02-28", 1)` → `2026-03-28` |
-| `next_due_date()` | 起存日的日（`anchor_day`） | 2/28 起算、anchor 31 → `2026-03-31` |
-
-**第二種是刻意的**：少了 `anchor_day`，1/31 的月繳排程會在二月被夾成 28 之後永遠
-回不到 31 號。語意差留在呼叫端，實作只留一份。
+**`next_due_date()` 在 v0.23.0 隨定期收支一起移除**
+（[ADR-0011](../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)），
+所以現在只剩一個 anchor：`add_months()` 一律用來源日期自己的日
+（`add_months("2026-02-28", 1)` → `2026-03-28`）。
 
 ## 命名
 
@@ -79,22 +76,3 @@ def monthly_dates(start_date: str, maturity_date: str, today: str) -> list[str]:
         dates.append(due)
         index += 1
     return dates
-
-
-def next_due_date(current: date, frequency: str, interval: int, anchor_day: int) -> date:
-    """定期收支的下一次到期日。
-
-    `anchor_day` 是**起存日的日**，不是 `current` 的日 —— 差別見模組說明。
-    認不出來的頻率丟碼，不猜一個日期回去。
-    """
-    if frequency == "daily":
-        return current + timedelta(days=interval)
-    if frequency == "weekly":
-        return current + timedelta(weeks=interval)
-    if frequency == "monthly":
-        month_index = current.year * 12 + current.month - 1 + interval
-        year, month_zero = divmod(month_index, 12)
-        return clamped_date(year, month_zero + 1, anchor_day)
-    if frequency == "yearly":
-        return clamped_date(current.year + interval, current.month, anchor_day)
-    raise ValueError("SCHEDULE_FREQUENCY_INVALID")

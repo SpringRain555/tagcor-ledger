@@ -233,16 +233,6 @@ class AccountStore(StoreBase):
                         "account_id = ? OR destination_account_id = ?",
                         (account_id, account_id),
                     ),
-                    (
-                        "recurring_schedules",
-                        "account_id = ? OR destination_account_id = ?",
-                        (account_id, account_id),
-                    ),
-                    (
-                        "scheduled_occurrences",
-                        "account_id = ? OR destination_account_id = ?",
-                        (account_id, account_id),
-                    ),
                 ],
             ):
                 raise ValueError("ACCOUNT_IN_USE")

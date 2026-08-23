@@ -5,7 +5,7 @@
                          "document":  "data-model.md",
                          "index":  1,
                          "svg":  "data-model-1.svg",
-                         "sha256":  "06509c908d804228d271b84b2806f8a1ff8b28db8b9bb16e9b514b2ccd5f5862"
+                         "sha256":  "ff87f83144f3274b3849bf59bd1bb4450f0937f6329cea9cd4d7c7298bc88c69"
                      },
                      {
                          "document":  "overview.md",
@@ -35,19 +35,25 @@
                          "document":  "state-machines.md",
                          "index":  3,
                          "svg":  "state-machines-3.svg",
-                         "sha256":  "2fe72e9b7f105d6e6657a5b06bb23a1c976bbec431ac302bbc264dba9461550d"
+                         "sha256":  "1671ee42afb3cc14dd01bda83f183ca1dee310a8f666021d2d0f4ea0ad5a3c09"
                      },
                      {
                          "document":  "state-machines.md",
                          "index":  4,
                          "svg":  "state-machines-4.svg",
+                         "sha256":  "16e795aa660c1a21baf2d769b1c724d6ac31c4e5fbe297422fe699495ae3618e"
+                     },
+                     {
+                         "document":  "state-machines.md",
+                         "index":  5,
+                         "svg":  "state-machines-5.svg",
                          "sha256":  "266ab76b66c12d45ca04c3e4b5968a0447915c3312285693bd6c3617ffb4284c"
                      },
                      {
                          "document":  "ui-workflows.md",
                          "index":  1,
                          "svg":  "ui-workflows-1.svg",
-                         "sha256":  "3f0d9b7d07570460cee4e1b7a793e2482048c6676b3a29bf46045a1f0fb30aa2"
+                         "sha256":  "7f7c9c3a7e178110e6ca4945c162d1b323b77142070f7261d0a1c36208ee1c6f"
                      },
                      {
                          "document":  "ui-workflows.md",

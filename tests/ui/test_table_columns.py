@@ -42,8 +42,13 @@ SAMPLES: dict[str, dict[str, Any]] = {
     "template_values": {
         "name": "早餐",
         "entry_type": "expense",
+        "account_name": "現金",
+        "destination_account_name": None,
+        "category_name": "伙食",
+        "subcategory_name": "早餐",
         "amount_minor": 85,
         "description": "",
+        "status": "active",
     },
     "schedule_values": {
         "name": "房租",
@@ -52,6 +57,7 @@ SAMPLES: dict[str, dict[str, Any]] = {
         "frequency": "monthly",
         "next_due_date": "2026-09-01",
         "end_date": None,
+        "status": "active",
     },
     "occurrence_values": {
         "due_date": "2026-09-01",

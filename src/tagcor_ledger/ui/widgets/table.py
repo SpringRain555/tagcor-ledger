@@ -204,7 +204,7 @@ def setup_table(
     header.setHighlightSections(False)
     header.setStretchLastSection(False)
     # **表頭不可點。** Qt 的預設是可點，而可點的表頭看起來就像可以排序 ——
-    # 這個專案裡沒有任何一張表用點表頭排序（v0.19.0 起排序統一走「排序…」視窗）。
+    # 這個專案裡沒有任何一張表用點表頭排序（v0.19.0 起排序統一走「排序設定」視窗）。
     # 留著預設值等於在畫面上放一個按了沒反應的東西。
     header.setSectionsClickable(False)
     header.setSortIndicatorShown(False)

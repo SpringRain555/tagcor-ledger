@@ -4,8 +4,8 @@
 **一條單元測試都沒有** —— 它的行為只被慢的 UI 測試間接碰到，而那些測試斷言的是
 「表格上有沒有這個字」，不是「這個函式對這個輸入回什麼」。
 
-覆蓋率掃描指出得更明確：`schedule_values()`、`occurrence_values()` 與
-`deposit_event_values()` **從頭到尾一行都沒有執行過**，所有壞輸入的退路
+覆蓋率掃描指出得更明確：`deposit_event_values()` **從頭到尾一行都沒有執行過**，
+所有壞輸入的退路
 （`display_date` 認不出來的字串、`_time_from_backup_id` 認不出來的資料夾名）也是。
 
 **這裡是純字串轉換，不碰 Qt 也不碰資料庫**，所以是毫秒級的。
@@ -18,20 +18,21 @@ from typing import Any
 import pytest
 
 from tagcor_ledger.ui.formatting import (
+    account_values,
     backup_row_text,
     backup_state_text,
+    category_values,
     deposit_event_values,
     deposit_term_values,
     display_date,
     display_datetime,
     group_digits,
-    inbox_values,
+    item_values,
     minor_text,
-    occurrence_values,
     rate_text,
-    schedule_values,
     signed_amount_text,
     template_values,
+    transaction_values,
 )
 from tagcor_ledger.ui.formatting.messages import _time_from_backup_id
 
@@ -173,52 +174,94 @@ def test_a_backup_row_falls_back_to_the_folder_name_for_its_time() -> None:
 
 def test_a_template_without_an_amount_says_so_instead_of_showing_zero() -> None:
     with_amount = template_values(
-        {"name": "早餐", "entry_type": "expense", "amount_minor": 85, "description": "x"}
+        {
+            "name": "早餐",
+            "entry_type": "expense",
+            "account_name": "現金",
+            "destination_account_name": None,
+            "category_name": "伙食",
+            "subcategory_name": "早餐",
+            "amount_minor": 85,
+            "description": "x",
+            "status": "active",
+        }
     )
     without = template_values(
-        {"name": "加油", "entry_type": "expense", "amount_minor": None, "description": ""}
-    )
-    assert with_amount == ["早餐", "支出", "85", "x"]
-    assert without[2] == "套用時輸入"
-
-
-def test_a_schedule_row_reads_as_a_sentence() -> None:
-    """「每 2 月」而不是 `monthly` / `2`，而且沒有結束日要寫「無」不是空白。"""
-    assert schedule_values(
         {
-            "name": "房租",
+            "name": "加油",
             "entry_type": "expense",
-            "interval_count": 2,
-            "frequency": "monthly",
-            "next_due_date": "2026-09-01",
-            "end_date": None,
-        }
-    ) == ["房租", "支出", "每 2 月", "2026-09-01", "無"]
-
-
-def test_an_occurrence_without_an_amount_says_it_is_not_filled_in_yet() -> None:
-    pending = occurrence_values(
-        {
-            "due_date": "2026-09-01",
-            "schedule_name": "房租",
-            "entry_type": "expense",
+            "account_name": "現金",
+            "destination_account_name": None,
+            "category_name": "交通",
+            "subcategory_name": None,
             "amount_minor": None,
-            "invalid_reason": None,
+            "description": "",
+            "status": "archived",
         }
     )
-    assert pending == ["2026-09-01", "房租", "支出", "尚未填寫", "可確認"]
+    assert with_amount == ["早餐", "支出", "現金", "伙食 / 早餐", "85", "x", "使用中"]
+    # 指到第一層類別的模板只有一半 —— 不該印成「交通 / 」。
+    assert without[3] == "交通"
+    assert without[4] == "套用時輸入"
+    assert without[6] == "已封存"
 
-    blocked = occurrence_values(
-        {
-            "due_date": "2026-09-01",
-            "schedule_name": "房租",
-            "entry_type": "expense",
-            "amount_minor": 12_000,
-            "invalid_reason": "類別已封存",
-        }
+
+def test_a_transfer_template_shows_both_accounts_and_no_category() -> None:
+    """轉帳的「帳戶」欄是來源 → 目的，類別欄是空的 —— 與交易紀錄同一個拼法。
+
+    這一條守的是 `entry_target_text()` 真的被兩張表共用：模板頁如果自己拼一份，
+    同一筆資料在兩個地方就會長得不一樣。
+    """
+    row = {
+        "name": "月初轉帳",
+        "entry_type": "transfer",
+        "account_name": "郵局",
+        "destination_account_name": "現金",
+        "category_name": None,
+        "subcategory_name": None,
+        "amount_minor": 5_000,
+        "description": "",
+        "status": "active",
+    }
+    values = template_values(row)
+    assert values[2] == "郵局 → 現金"
+    assert values[3] == ""
+
+    transaction = dict(
+        row,
+        occurred_at="2026-08-22T12:00:00+08:00",
+        entry_type_name="轉帳",
+        amount="5000",
     )
-    assert blocked[3] == "12,000"
-    assert blocked[4] == "類別已封存"
+    assert transaction_values(transaction)[2] == values[2]
+    assert transaction_values(transaction)[3] == values[3]
+
+
+def test_archived_reads_the_same_word_everywhere() -> None:
+    """**「已封存」在四個 `*_values` 裡必須是同一個拼法。**
+
+    同一個狀態有兩種說法，兩張表就會對同一筆資料講不同的話。模板是 v0.22.0 才長出
+    狀態欄的，正是最容易冒出「已停用」「已收起」這種同義詞的地方。
+    """
+    template = {
+        "name": "早餐",
+        "entry_type": "expense",
+        "account_name": "現金",
+        "destination_account_name": None,
+        "category_name": "伙食",
+        "subcategory_name": "早餐",
+        "amount_minor": 85,
+        "description": "",
+        "status": "archived",
+    }
+    account = {"name": "現金", "balance_minor": 0, "status": "archived"}
+    category = {"name": "伙食", "item_count": 0, "status": "archived"}
+    item = {"parent_name": "伙食", "name": "早餐", "status": "archived"}
+
+    assert template_values(template)[-1] == "已封存"
+    assert account_values(account)[-1] == "已封存"
+    assert category_values(category)[-1] == "已封存"
+    assert item_values(item)[-1] == "已封存"
 
 
 def test_a_deposit_event_without_a_suggestion_points_at_the_passbook() -> None:
@@ -231,7 +274,9 @@ def test_a_deposit_event_without_a_suggestion_points_at_the_passbook() -> None:
             "suggested_amount_minor": None,
         }
     )
-    assert unknown == ["2026-09-01", "郵局一年期", "到期", "需照存摺填寫"]
+    # 日期走 `display_date()` —— 這個 formatter 在 v0.23.0 之前沒有頁面用它，
+    # 於是它一直印 ISO 字串而沒有人看到。待確認改用它的時候差點就把畫面換掉了。
+    assert unknown == ["2026/09/01", "郵局一年期", "到期", "需照存摺填寫"]
 
     known = deposit_event_values(
         {
@@ -265,42 +310,3 @@ def test_a_deposit_term_prefers_the_rate_derived_from_what_actually_happened() -
     fallback = deposit_term_values(term)
     assert fallback[4] == "1.6%"
     assert fallback[5] == "尚未確認"
-
-
-@pytest.mark.parametrize(
-    ("source", "row", "expected_source", "expected_amount"),
-    [
-        (
-            "schedule",
-            {
-                "due_date": "2026-09-01T00:00:00+08:00",
-                "schedule_name": "房租",
-                "entry_type": "expense",
-                "amount_minor": 12_000,
-                "invalid_reason": None,
-            },
-            "定期",
-            "12,000",
-        ),
-        (
-            "deposit",
-            {
-                "due_date": "2026-09-01T00:00:00+08:00",
-                "contract_name": "郵局一年期",
-                "event_type": "maturity",
-                "suggested_amount_minor": None,
-            },
-            "定存",
-            "需照存摺填寫",
-        ),
-    ],
-)
-def test_the_inbox_puts_two_different_shapes_into_one_table(
-    source: str, row: dict[str, Any], expected_source: str, expected_amount: str
-) -> None:
-    """待確認是**一張表**，兩種來源靠「來源」欄分辨 —— 沒有那一欄就看不懂「類型」在講什麼。"""
-    values = inbox_values(dict(row, source=source))
-    assert len(values) == 6
-    assert values[0] == "2026/09/01"
-    assert values[1] == expected_source
-    assert values[4] == expected_amount

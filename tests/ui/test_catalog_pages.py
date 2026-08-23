@@ -71,10 +71,11 @@ def test_a_category_with_items_can_be_selected_and_renamed(window, monkeypatch) 
     assert window.transactions.model.index(0, 3).data() == "伙食費 / 7-11"
 
 
-def test_operation_settings_has_six_tabs_in_the_agreed_order(window) -> None:
-    """**順序本身就是分組**：前四個是記帳會用到的名冊，後兩個是會自己到期的東西。
+def test_operation_settings_has_five_tabs_in_the_agreed_order(window) -> None:
+    """**順序本身就是分組**：前四個是記帳會用到的名冊，最後一個是會自己到期的東西。
 
-    所以這裡連順序一起釘住，不只是「有沒有這六個」。
+    所以這裡連順序一起釘住，不只是「有沒有這五個」。
+    定期收支在 v0.23.0 移除（ADR-0011），分頁從六個變五個。
     """
 
     tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
@@ -84,7 +85,6 @@ def test_operation_settings_has_six_tabs_in_the_agreed_order(window) -> None:
         "類別",
         "項目",
         "模板",
-        "定期收支",
         "定存",
     ]
     # 分頁與屬性必須是同一個物件，不然 refresh() 會刷到沒有顯示出來的那一份。
@@ -94,16 +94,15 @@ def test_operation_settings_has_six_tabs_in_the_agreed_order(window) -> None:
         page.categories,
         page.items,
         page.templates,
-        page.recurring,
         page.deposits,
     ]
 
 
-def test_the_word_schedule_no_longer_appears_in_the_ui(window) -> None:
-    """「週期排程」是實作的名字，使用者想的是「每個月會自動扣款的那些」。
+def test_recurring_income_and_expense_is_gone_from_the_ui(window) -> None:
+    """定期收支在 v0.23.0 整個移除了（ADR-0011），畫面上不該再有它的殘跡。
 
-    程式識別字 `recurring_schedules` / `schedule_id` **不動** —— 那是 schema，
-    改它要 migration，而使用者看不到它。這條只掃畫面上的字。
+    這一條以前守的是「別把它叫成『週期排程』」（那是實作的名字）。功能本身移除之後
+    要守的變成**沒有半個入口留在畫面上** —— 一顆通往不存在功能的按鈕比錯的用詞更糟。
     """
 
     texts = [
@@ -113,9 +112,8 @@ def test_the_word_schedule_no_longer_appears_in_the_ui(window) -> None:
     assert tabs is not None
     texts += [tabs.tabText(index) for index in range(tabs.count())]
 
-    assert "定期收支" in texts
-    offenders = [text for text in texts if "排程" in text]
-    assert not offenders, f"畫面上還有「排程」：{offenders}"
+    offenders = [text for text in texts if "定期收支" in text or "排程" in text]
+    assert not offenders, f"畫面上還有定期收支的殘跡：{offenders}"
 
 
 def test_items_page_filters_by_category(window) -> None:
@@ -334,7 +332,7 @@ def test_catalog_pages_filter_by_search_status_and_parent(window) -> None:
 
 
 def test_the_header_is_no_longer_a_sorting_entry_point(window) -> None:
-    """點表頭排序在 v0.19.0 拿掉了，排序只有「排序…」視窗一個入口。
+    """點表頭排序在 v0.19.0 拿掉了，排序只有「排序設定」視窗一個入口。
 
     以前兩種入口並存：點表頭會把使用者在視窗裡設好的多層規格整個換成單層，
     而畫面上沒有任何東西說明剛才設的為什麼不見了。

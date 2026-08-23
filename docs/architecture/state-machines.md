@@ -123,20 +123,21 @@ stateDiagram-v2
 
 ---
 
-## 3. 待確認項目：`scheduled_occurrences` 與 `deposit_events`
+## 3. 待確認項目：`deposit_events`
 
-**兩個來源、同一張轉移表。** 使用者看到的是**一個收件匣**（`controller.list_inbox()`
-把兩邊合成一份，每一列帶一個 `source`），所以狀態機也寫在一起 —— 分開寫的那一版
-正是「同一頁上下兩張表」的來源。
+**一個來源、一張轉移表。** 使用者看到的是一個收件匣（`controller.list_inbox()`），
+今天由定存獨家供應。
 
-| 來源 | 資料表 | 狀態欄 | 誰產生 |
-|---|---|---|---|
-| `schedule`（定期收支） | `scheduled_occurrences` | `CHECK (status IN ('pending', 'confirmed', 'skipped'))` | `AutomationService.generate_due()` |
-| `deposit`（定存） | `deposit_events` | 同上三個值 | `DepositService.generate_due()` |
+> **v0.23.0 之前有兩個來源。** 定期收支的 `scheduled_occurrences` 走的是一模一樣的
+> 三個狀態，所以兩者寫在同一節；那個功能移除之後
+> （[ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)）這一節只剩定存。
+
+`deposit_events` 的狀態欄：`CHECK (status IN ('pending', 'confirmed', 'skipped'))`，
+由 `DepositService.generate_due()` 產生。
 
 | 狀態 | 定義 |
 |---|---|
-| `pending` 待確認 | 定期收支或定存產生的**草稿**，尚未成為交易。不影響任何餘額 |
+| `pending` 待確認 | 定存產生的**草稿**，尚未成為交易。不影響任何餘額 |
 | `confirmed` 已確認 | 使用者確認過，**已經產生對應的交易** |
 | `skipped` 已略過 | 使用者決定這一期不記。不產生交易，但留下「我看過並決定跳過」的紀錄 |
 
@@ -144,14 +145,13 @@ stateDiagram-v2
 
 | 從 ＼ 到 | `pending` | `confirmed` | `skipped` |
 |---|---|---|---|
-| **`pending`** | ▶ 編輯內容（狀態不變） | ▶ 確認（產生交易） | ▶ 略過 |
+| **`pending`** | — | ▶ 確認（產生交易） | ▶ 略過 |
 | **`confirmed`** | ✗ | — | ✗ |
 | **`skipped`** | ✗ | ✗ | — |
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pending: 定期收支／定存產生
-    pending --> pending: 編輯內容（狀態不變）
+    [*] --> pending: 定存到期／領息產生
     pending --> confirmed: 確認（同一個 SQLite transaction 內產生交易）
     pending --> skipped: 略過（不產生交易）
     confirmed --> [*]
@@ -163,27 +163,24 @@ stateDiagram-v2
 ```
 
 `confirmed` 與 `skipped` 都是**終點**。想改變已確認的結果，去作廢它產生的那筆交易；
-`OCCURRENCE_NOT_PENDING` 就是在擋非 `pending` 的修改。
+`DEPOSIT_EVENT_NOT_PENDING` 就是在擋非 `pending` 的修改。
 
-### 兩個來源的差別（只有這兩點）
+### 確認時只問實際金額
 
-| | 定期收支 | 定存 |
-|---|---|---|
-| 確認時問什麼 | 開對話框，可先改帳戶／類別／金額／備註 | 只問**實際金額**，以存摺為準 |
-| 「全部確認」會不會處理 | **會**（`batch_confirm_valid`） | **不會** |
-
-**「全部確認」不碰定存是刻意的。** 建議利息是程式試算的，權威值在存摺上；批次套用
-試算值等於替使用者決定了一個他沒看過的數字。UI 上會講清楚還剩幾件，不是默默跳過。
+**不開一張可以改帳戶與類別的表單。** 定存事件的帳戶、流向與類別都是合約當初就決定
+好的（三種計息方式 × 四種到期轉存方式）；在確認的當下改它們等於改一份已經生效的
+合約。唯一會與試算值不同的是**金額**，因為權威值在存摺上。
 
 ### 這裡刻意不做的事
 
-- **定期收支與定存都不會自動入帳。** 它們只產生 `pending` 項目，一定要由使用者確認。
-  這與「每一筆都手動輸入」的核心一致，也是與 Firefly III 的明確分歧（後者會自動建立交易）。
-- **確認與帳務寫入在同一個 SQLite transaction 內。** 不會出現「狀態變成 confirmed 但交易沒建出來」。
-- **每次產生最多 366 期**，且 `(schedule_id, due_date)`、
-  `(term_id, event_type, due_date)` 各自唯一，所以重複產生是冪等的。
-- **不合併兩張資料表。** 使用者看到的是同一張畫面，但一個是「每 N 個月重複同一筆」、
-  一個是「一期一期滾、有利率與到期轉存方式」；合併 schema 只會讓兩邊的欄位都變成可空。
+- **定存不會自動入帳。** 它只產生 `pending` 項目，一定要由使用者確認。
+  這與「每一筆都手動輸入」的核心一致（[ADR-0006](../decisions/ADR-0006-manual-entry-only.md)）。
+- **確認與帳務寫入在同一個 SQLite transaction 內。** 不會出現「狀態變成 confirmed
+  但交易沒建出來」。
+- **沒有「全部確認」。** 建議利息是程式試算的，權威值在存摺上；批次套用試算值等於
+  替使用者決定了一個他沒看過的數字。
+- **產生是冪等的**：`(term_id, event_type, due_date)` 唯一，而且只看未來 7 天，
+  一次做完 —— 所以沒有「一次最多 N 期」那種上限，也不需要「繼續產生」。
 
 ---
 
@@ -235,15 +232,52 @@ GnuCash 的文件把這兩種帳戶分得很清楚（見 `docs/research/market-s
 
 ---
 
-## 5. 模板 `transaction_templates` 與 定期收支 `recurring_schedules`
+## 5. 模板 `transaction_templates`
 
-兩者都是 `CHECK (status IN ('active', 'archived'))`，轉移與帳戶／類別相同（`active ↔ archived`）。
+`CHECK (status IN ('active', 'archived'))`，轉移與帳戶／類別相同（`active ↔ archived`）。
 
-> **UI 上叫「定期收支」，資料表仍叫 `recurring_schedules`。** 那是 schema，
-> 改它要 migration，而使用者看不到它。用詞對照見 [glossary](glossary.md)。
+> **v0.23.0 之前這一節還包含定期收支**（`recurring_schedules`），兩者的狀態機一模一樣。
+> 那個功能整個移除了，理由見
+> [ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)。
 
-- **套用模板只預填記帳頁，不直接入帳。**
-- **封存定期收支不會刪掉已經產生的 `pending` 項目**，那些仍需個別處理。
+### 轉移表
+
+| 從 ＼ 到 | `active` | `archived` | 刪除 |
+|---|---|---|---|
+| **`active`** | — | ▶ 封存 | ✂ **永遠可以** |
+| **`archived`** | ▶ 恢復 | — | ✂ **永遠可以** |
+
+```mermaid
+stateDiagram-v2
+    [*] --> active: 建立
+    active --> archived: 封存
+    archived --> active: 恢復
+    active --> [*]: 刪除
+    archived --> [*]: 刪除
+    note left of archived
+        仍然在資料庫裡，而且仍然
+        擋著它引用的帳戶與類別被刪除。
+    end note
+```
+
+### 刪除沒有「未使用」這個條件
+
+**整份 schema 裡沒有任何一張表指向 `transaction_templates`**，那是查過的結論不是疏漏。
+套用模板產生的是一筆獨立的交易，而那筆交易不記得自己從哪個模板來 —— 所以刪掉模板
+動不到任何歷史資料。對照組是帳戶與類別：它們被 posting、盤點與模板引用，
+所以刪除前一定要檢查（`ACCOUNT_IN_USE` / `CATEGORY_IN_USE`）。
+
+### 恢復要擋同名
+
+schema 有 `idx_templates_active_name`（`UNIQUE(name) WHERE status = 'active'`），
+恢復一個與現有使用中模板同名的會丟 `TEMPLATE_ACTIVE_NAME_CONFLICT`。
+少了這一步浮上畫面的會是 SQLite 的英文原文。
+
+### 其他
+
+- **模板的「填入記帳頁」只預填，不直接入帳。**
+- **封存的模板仍然擋著它引用的帳戶與類別被刪除。** 這在 v0.22.0 之前是個死結：
+  那一頁不列封存的，所以使用者看不到擋路的是什麼（見 [changelog](../changelog.md)）。
 
 ---
 

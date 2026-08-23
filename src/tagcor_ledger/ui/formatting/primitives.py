@@ -18,14 +18,6 @@ from typing import Any
 
 ENTRY_NAMES = {"expense": "支出", "income": "收入", "transfer": "轉帳"}
 STATUS_NAMES = {"active": "有效", "voided": "已作廢"}
-FREQUENCY_NAMES = {
-    "daily": "日",
-    "weekly": "週",
-    "monthly": "月",
-    "yearly": "年",
-}
-
-
 def minor_text(value: int | str) -> str:
     """給**輸入框**用的純數字字串。不加千分位 —— 它會被原封不動讀回來再解析。"""
     return str(int(value))
@@ -90,11 +82,6 @@ def display_date(value: str) -> str:
         return datetime.fromisoformat(value).strftime("%Y/%m/%d")
     except ValueError:
         return value
-
-
-INBOX_SOURCE_NAMES = {"schedule": "定期", "deposit": "定存"}
-"""待確認那一列是哪裡來的。**這一欄不能省** —— 兩種來源的「類型」講的是不同的事
-（一邊是收入／支出／轉帳，一邊是到期／領息／存入），沒有這一欄就看不懂。"""
 
 
 DEPOSIT_TERM_STATUS_NAMES = {

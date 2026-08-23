@@ -1,13 +1,16 @@
-"""操作設定：六個分頁的容器。
+"""操作設定：五個分頁的容器。
 
-它自己沒有畫面邏輯，只負責放標題與把底下六頁的訊號往上轉。
+它自己沒有畫面邏輯，只負責放標題與把底下五頁的訊號往上轉。
 
 ## 分頁順序本身就是分組
 
 **帳戶／類別／項目／模板** —— 記帳時會用到的東西，你自己決定什麼時候用。
-**定期收支／定存** —— 會自己到期、自己產生待確認的東西。
+**定存** —— 會自己到期、自己產生待確認的東西。
 
-前四個是「名冊」，後兩個是「會動的」。中間那條界線不需要寫成標題，順序就講完了。
+前四個是「名冊」，最後一個是「會動的」。中間那條界線不需要寫成標題，順序就講完了。
+
+v0.23.0 之前「會動的」有兩個，另一個是定期收支
+（[ADR-0011](../../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)）。
 
 ## 為什麼「類別」與「項目」分開
 
@@ -27,7 +30,6 @@ from PySide6.QtWidgets import QLabel, QTabWidget, QWidget
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.pages.catalog import AccountsPage, CategoriesPage, ItemsPage
 from tagcor_ledger.ui.pages.deposits import DepositsPage
-from tagcor_ledger.ui.pages.recurring import RecurringPage
 from tagcor_ledger.ui.pages.templates import TemplatesPage
 from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 
@@ -42,7 +44,6 @@ class OperationSettingsPage(QWidget):
         self.categories = CategoriesPage(controller)
         self.items = ItemsPage(controller)
         self.templates = TemplatesPage(controller)
-        self.recurring = RecurringPage(controller)
         self.deposits = DepositsPage(controller)
         self._build()
 
@@ -53,7 +54,6 @@ class OperationSettingsPage(QWidget):
             (self.categories, "類別"),
             (self.items, "項目"),
             (self.templates, "模板"),
-            (self.recurring, "定期收支"),
             (self.deposits, "定存"),
         )
 

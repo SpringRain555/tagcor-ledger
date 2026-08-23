@@ -14,13 +14,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from tagcor_ledger.ui.controller.automation import AutomationSection
 from tagcor_ledger.ui.controller.balance import BalanceSection
 from tagcor_ledger.ui.controller.deposits import DepositSection
 from tagcor_ledger.ui.controller.ledger import LedgerSection
+from tagcor_ledger.ui.controller.templates import TemplateSection
 
 
-class OverviewSection(LedgerSection, AutomationSection, DepositSection, BalanceSection):
+class OverviewSection(LedgerSection, TemplateSection, DepositSection, BalanceSection):
     def overview_snapshot(self) -> dict[str, Any]:
         """資產總覽要顯示的每一項，一次組好。
 
@@ -89,30 +89,26 @@ class OverviewSection(LedgerSection, AutomationSection, DepositSection, BalanceS
         }
 
     def list_inbox(self) -> list[dict[str, Any]]:
-        """待確認的單一清單：定期收支與定存合成一份，依到期日排序。
+        """待確認清單。**v0.23.0 之後只有定存一個來源。**
 
-        **使用者不需要知道待確認來自哪個子系統。** 以前是同一頁上下兩張表，於是
-        「我還有幾件事要處理」得自己把兩個數字加起來，六顆按鈕還得先想清楚哪三顆
-        是對上面那張表的。
+        以前這裡把定期收支與定存合成一份，每一列多帶一個 `source` 讓
+        `inbox_values()` 決定怎麼顯示、「確認入帳」決定分派給誰。定期收支移除之後
+        （[ADR-0011](../../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)）
+        那個欄位每一列都印同一個字，分派也只剩一條路，所以整組拿掉了。
 
-        兩邊的欄位形狀確實不同，所以每一列多帶一個 `source`：
-        `inbox_values()` 靠它決定怎麼顯示，「確認入帳」靠它決定分派給誰。
-        排序的第二、三順位是 `source` 與 id —— 只用到期日排的話，同一天的項目
-        每次重整順序都可能不一樣。
+        **這個方法留著沒有被摺進 `list_deposit_pending()`**：待確認是一個獨立的
+        概念（「有哪些草稿等我確認」），今天它剛好只由定存供應。頁面問的是
+        「待確認有什麼」，不是「定存有什麼待處理」。
+
+        排序的第二順位是 `event_id` —— 只用到期日排的話，同一天的項目每次重整
+        順序都可能不一樣。
         """
-        rows = [dict(item, source="schedule") for item in self.list_pending()]
-        rows += [dict(item, source="deposit") for item in self.list_deposit_pending()]
-        rows.sort(
-            key=lambda item: (
-                str(item["due_date"]),
-                str(item["source"]),
-                str(item.get("occurrence_id") or item.get("event_id") or ""),
-            )
-        )
+        rows = list(self.list_deposit_pending())
+        rows.sort(key=lambda item: (str(item["due_date"]), str(item.get("event_id") or "")))
         return rows
 
     def inbox_count(self) -> int:
-        """待確認的總筆數 —— **定期收支與定存一起算**。
+        """待確認的總筆數。
 
         側邊欄的數字與資產總覽的數字都走這一個方法。兩邊各自算就會出現「側邊欄說 2、
         總覽說 3」，而使用者沒有辦法知道哪一個才對。

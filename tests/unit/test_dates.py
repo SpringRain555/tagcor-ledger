@@ -4,7 +4,7 @@
 當月最後一天」只寫在 docstring 裡，`monthly_dates()` 則是連一條測試都沒有 ——
 而定存的每一期到期日、每一次領息與每一次續存都建立在這兩個函式上。
 
-（`next_due_date()` 的月底與閏年已經有直接測試，在
+（月底與閏年已經有直接測試，在
 `tests/integration/test_phase2_automation.py`；那一份不重複，只在這裡補它缺的
 「未知頻率」與「每日」兩格。）
 
@@ -14,15 +14,12 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 
 from tagcor_ledger.domain.dates import (
     add_months,
     days_in_month,
     monthly_dates,
-    next_due_date,
 )
 
 
@@ -121,14 +118,3 @@ def test_monthly_dates_do_not_drift_off_the_month_end() -> None:
 
 # --- 定期收支的下一次到期 ---------------------------------------------------------
 
-
-def test_daily_and_weekly_intervals_are_plain_addition() -> None:
-    assert next_due_date(date(2026, 1, 1), "daily", 1, 1) == date(2026, 1, 2)
-    assert next_due_date(date(2026, 1, 1), "daily", 10, 1) == date(2026, 1, 11)
-    assert next_due_date(date(2026, 2, 26), "daily", 3, 26) == date(2026, 3, 1)
-
-
-def test_an_unknown_frequency_is_refused_not_guessed() -> None:
-    """認不出來就丟碼。靜靜回一個日期會讓壞掉的排程一直產生錯的到期日。"""
-    with pytest.raises(ValueError, match="SCHEDULE_FREQUENCY_INVALID"):
-        next_due_date(date(2026, 1, 1), "fortnightly", 1, 1)

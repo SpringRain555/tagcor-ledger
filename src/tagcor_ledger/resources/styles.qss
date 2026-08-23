@@ -5,7 +5,7 @@
  * `tests/unit/test_resources.py` 會掃過來比對 —— 想加新顏色就先去那邊宣告。
  *
  *   #0D0D0F  底層      #16161A  卡片/表格/輸入框   #1F1F25  懸停/次要按鈕
- *   #26262E  選取列    #33333C  邊框               #3A3A44  懸停邊框
+ *   #2E2E38  選取列    #33333C  邊框               #3A3A44  懸停邊框
  *   #E8E8EA  主要文字  #9A9AA5  次要文字           #7A7A85  停用/placeholder
  *   #B4B4BE  焦點框    #8C2F2A  危險               #F0736A 支出   #5EC07C 收入
  *
@@ -106,7 +106,7 @@ QListWidget {
     border: 1px solid #33333C;
     border-radius: 6px;
     padding: 7px 10px;
-    selection-background-color: #26262E;
+    selection-background-color: #2E2E38;
     selection-color: #E8E8EA;
 }
 
@@ -178,7 +178,7 @@ QComboBox QAbstractItemView {
     border: 1px solid #33333C;
     border-radius: 6px;
     padding: 4px;
-    selection-background-color: #26262E;
+    selection-background-color: #2E2E38;
     selection-color: #E8E8EA;
     outline: 0;
 }
@@ -187,7 +187,7 @@ QAbstractItemView {
     color: #E8E8EA;
     background-color: #16161A;
     alternate-background-color: #1F1F25;
-    selection-background-color: #26262E;
+    selection-background-color: #2E2E38;
     selection-color: #E8E8EA;
     outline: 0;
 }
@@ -211,7 +211,7 @@ QListWidget::item:hover {
 
 QListWidget::item:selected {
     color: #E8E8EA;
-    background-color: #26262E;
+    background-color: #2E2E38;
 }
 
 /* 側邊欄外框。**分隔線畫在這一層，不能畫在清單上** —— 側邊欄是兩個清單夾一段
@@ -268,7 +268,7 @@ QPushButton {
 }
 
 QPushButton:hover {
-    background-color: #26262E;
+    background-color: #2E2E38;
     border-color: #3A3A44;
 }
 
@@ -421,7 +421,7 @@ QTableWidget,
 QTableView {
     gridline-color: #1F1F25;
     alternate-background-color: #16161A;
-    selection-background-color: #26262E;
+    selection-background-color: #2E2E38;
     border-radius: 8px;
     padding: 0;
 }
@@ -437,9 +437,23 @@ QTableView::item:hover {
     background-color: #1F1F25;
 }
 
+/* 選取列：底色 ＋ 上下兩條橫線。
+ *
+ * **底色一個人扛不起來。** 選取底 #2E2E38 對一般列底 #16161A 的對比只有 1.34，
+ * 而它已經是上限了 —— 再亮一階，支出紅對選取列的對比就掉到 4.5 以下。
+ * 明度這個維度在深色主題裡本來就很窄，硬撐只會兩件事都做不好。
+ *
+ * 橫線是**形狀**，不吃明度預算：每一格都畫上下框線，接起來就是一條貫穿整列的線。
+ *
+ * **padding 要從 7px 收成 6px。** 列高由 `verticalHeader().defaultSectionSize()`
+ * 固定在 34px，而 Qt 的 ::item 是 content-box —— 直接加 2px 框線會把文字的可用高度
+ * 壓掉 2px，中文的上下就會被切到。7+1 = 6+1+1，選取前後的內容高度一模一樣。 */
 QTableWidget::item:selected,
 QTableView::item:selected {
-    background-color: #26262E;
+    background-color: #2E2E38;
+    padding: 6px 8px;
+    border-top: 1px solid #9A9AA5;
+    border-bottom: 1px solid #9A9AA5;
 }
 
 QHeaderView::section {
@@ -489,7 +503,7 @@ QMenu::item {
 }
 
 QMenu::item:selected {
-    background-color: #26262E;
+    background-color: #2E2E38;
     color: #E8E8EA;
 }
 
@@ -621,7 +635,7 @@ QCalendarWidget QMenu {
 }
 
 QCalendarWidget QMenu::item:selected {
-    background-color: #26262E;
+    background-color: #2E2E38;
     color: #E8E8EA;
 }
 

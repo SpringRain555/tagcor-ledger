@@ -3,7 +3,12 @@
 > **兩處用詞已被 v0.14.0 取代（2026-08-20）**：UI 上的「快速記帳」改叫**記帳**、
 > 「週期排程」改叫**定期收支**（程式識別字 `recurring_schedules` 不動）。
 > 下面的條文不改寫 —— 它記錄的是當時談定的需求；用詞現況見
-> [glossary](../architecture/glossary.md)。**功能需求本身全部仍然有效。**
+> [glossary](../architecture/glossary.md)。
+>
+> **⚠ 週期排程（定期收支）整個功能在 v0.23.0 移除了**
+> （[ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)）。
+> 下面關於週期排程的條文**已經不是現行規格**，模板取代了它。
+> 其餘功能需求仍然有效。
 
 ## Phase 1
 

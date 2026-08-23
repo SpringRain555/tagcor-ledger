@@ -216,13 +216,13 @@ def test_templates_can_be_reordered(tmp_path: Path) -> None:
     store = _store(tmp_path)
     for name in ("早餐", "捷運", "房租"):
         _template(store, name)
-    before = [template.template_id for template in store.list_templates()]
+    before = [row.template.template_id for row in store.list_templates()]
     assert len(before) == 3
 
     store.set_template_order(list(reversed(before)))
 
-    assert [t.template_id for t in store.list_templates()] == list(reversed(before))
-    assert [t.template_id for t in _store(tmp_path).list_templates()] == list(
+    assert [r.template.template_id for r in store.list_templates()] == list(reversed(before))
+    assert [r.template.template_id for r in _store(tmp_path).list_templates()] == list(
         reversed(before)
     ), "重開之後順序沒留住"
 
@@ -241,7 +241,7 @@ def test_reordering_templates_does_not_run_the_draft_validation(tmp_path: Path) 
 
     store.set_template_order([second, first])
 
-    assert [t.template_id for t in store.list_templates()] == [second, first]
+    assert [r.template.template_id for r in store.list_templates()] == [second, first]
 
 
 # --- 多層排序（v0.19.0）--------------------------------------------------------
@@ -375,8 +375,8 @@ def test_accounts_and_templates_take_a_spec_too(tmp_path: Path) -> None:
     for name in ("早餐", "捷運", "房租"):
         _template(store, name)
     templates = [
-        t.name
-        for t in store.list_templates(sort=(SortLevel(field="name", descending=True),))
+        r.template.name
+        for r in store.list_templates(sort=(SortLevel(field="name", descending=True),))
     ]
     assert templates == list(reversed(sorted(templates))), templates
 

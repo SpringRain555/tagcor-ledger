@@ -36,9 +36,9 @@ COUNT_LABELS = {
     "balance_snapshots": "餘額盤點",
     "accounts": "帳戶",
     "categories": "類別與項目",
-    "transaction_templates": "模板",
     # 鍵是**表名**、值是**使用者看到的名字**，兩者刻意不同：改 UI 用詞不動 schema。
-    "recurring_schedules": "定期收支",
+    "transaction_templates": "模板",
+    "deposit_contracts": "定存合約",
 }
 
 

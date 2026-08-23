@@ -22,8 +22,6 @@ from tagcor_ledger.domain.deposits import (
 from tagcor_ledger.ui.formatting.primitives import (
     DEPOSIT_TERM_STATUS_NAMES,
     ENTRY_NAMES,
-    FREQUENCY_NAMES,
-    INBOX_SOURCE_NAMES,
     STATUS_NAMES,
     display_date,
     group_digits,
@@ -45,15 +43,27 @@ def balance_gap_values(item: dict[str, Any]) -> list[str]:
     ]
 
 
-def transaction_values(item: dict[str, Any]) -> list[str]:
+def entry_target_text(item: dict[str, Any]) -> tuple[str, str]:
+    """「錢從哪個帳戶走、記到哪個類別」—— 交易與模板共用的兩欄。
+
+    回傳 `(帳戶, 類別)`：轉帳的帳戶欄是「來源 → 目的」，類別欄是空的；
+    收入／支出反過來。**兩張表用同一個函式**，否則同一筆資料在交易紀錄與模板頁
+    會被拼成兩種樣子 —— 而這正是「一列長什麼樣只由 `ui/formatting/` 決定」那條
+    規則要防的東西。
+    """
+    account = str(item["account_name"])
+    if item["entry_type"] == "transfer":
+        account += f" → {item.get('destination_account_name') or ''}"
     category = " / ".join(
         str(part)
         for part in (item.get("category_name"), item.get("subcategory_name"))
         if part
     )
-    account = str(item["account_name"])
-    if item["entry_type"] == "transfer":
-        account += f" → {item.get('destination_account_name') or ''}"
+    return account, category
+
+
+def transaction_values(item: dict[str, Any]) -> list[str]:
+    account, category = entry_target_text(item)
     # 幣別不放進每一列 —— 目前固定 TWD，寫在欄位標題就夠，每列重複只是雜訊。
     return [
         display_date(str(item["occurred_at"])),
@@ -113,75 +123,31 @@ def item_values(item: dict[str, Any]) -> list[str]:
 
 
 def template_values(item: dict[str, Any]) -> list[str]:
+    """「模板」分頁：名稱／類型／帳戶／類別／金額／備註／狀態。
+
+    **帳戶與類別是 v0.22.0 加的。** 只列名稱與金額時，兩個都叫「午餐」的模板在
+    「填入記帳頁」之前分不出誰是誰 —— 而分辨它們正是這一頁存在的理由。
+    兩欄的拼法與交易紀錄共用 `entry_target_text()`，所以同一筆資料在兩張表上
+    長得一樣。
+
+    **狀態欄也是 v0.22.0 才有的。** 在那之前這一頁只列使用中的模板，而「封存」沒有
+    對應的「恢復」—— 於是封存等同刪除，但那一列其實還在資料庫裡，還擋著它引用的
+    帳戶與類別被刪掉。狀態欄放最後，與帳戶／類別／項目三頁一致。
+    """
     amount = (
         group_digits(item["amount_minor"])
         if item.get("amount_minor") is not None
         else "套用時輸入"
     )
+    account, category = entry_target_text(item)
     return [
         str(item["name"]),
         ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
+        account,
+        category,
         amount,
         str(item["description"]),
-    ]
-
-
-def schedule_values(item: dict[str, Any]) -> list[str]:
-    interval = int(item["interval_count"])
-    frequency = FREQUENCY_NAMES.get(str(item["frequency"]), str(item["frequency"]))
-    return [
-        str(item["name"]),
-        ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
-        f"每 {interval} {frequency}",
-        str(item["next_due_date"]),
-        str(item.get("end_date") or "無"),
-    ]
-
-
-def occurrence_values(item: dict[str, Any]) -> list[str]:
-    amount = (
-        group_digits(item["amount_minor"])
-        if item.get("amount_minor") is not None
-        else "尚未填寫"
-    )
-    return [
-        str(item["due_date"]),
-        str(item["schedule_name"]),
-        ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
-        amount,
-        str(item.get("invalid_reason") or "可確認"),
-    ]
-
-
-def inbox_values(item: dict[str, Any]) -> list[str]:
-    """待確認的單一表格：到期日／來源／名稱／類型／金額／狀態說明。
-
-    定期收支與定存的欄位形狀不同，統一成字串的地方就是這裡 —— 頁面只擺 widget。
-
-    **定存的金額欄寫「需照存摺填寫」而不是 0。** 建議值是程式試算的，權威值在存摺上；
-    印一個 0 會讓人以為那就是答案。
-    """
-    source = str(item["source"])
-    if source == "deposit":
-        suggested = item.get("suggested_amount_minor")
-        return [
-            display_date(str(item["due_date"])),
-            INBOX_SOURCE_NAMES[source],
-            str(item["contract_name"]),
-            DEPOSIT_EVENT_TYPE_NAMES.get(
-                DepositEventType(str(item["event_type"])), str(item["event_type"])
-            ),
-            group_digits(suggested) if suggested is not None else "需照存摺填寫",
-            "確認時輸入實際金額",
-        ]
-    amount = item.get("amount_minor")
-    return [
-        display_date(str(item["due_date"])),
-        INBOX_SOURCE_NAMES[source],
-        str(item["schedule_name"]),
-        ENTRY_NAMES.get(str(item["entry_type"]), str(item["entry_type"])),
-        group_digits(amount) if amount is not None else "尚未填寫",
-        str(item.get("invalid_reason") or "可確認"),
+        "使用中" if item["status"] == "active" else "已封存",
     ]
 
 
@@ -223,9 +189,21 @@ def deposit_term_values(item: dict[str, Any]) -> list[str]:
 
 
 def deposit_event_values(item: dict[str, Any]) -> list[str]:
+    """待確認那張表的一列：到期日／合約／類型／建議金額。
+
+    **日期要走 `display_date()`。** 這個函式在 v0.23.0 之前沒有任何頁面用它
+    （待確認走的是自己的 `inbox_values()`，而那一份有轉格式），所以它印 ISO 字串
+    一直沒有人看到。合併成一份的時候差一點就把畫面上的日期換成 `2021-01-15`。
+
+    **`deposit_term_values()` 的兩個日期目前還是 ISO 的**，那是另一件事：
+    它們在定存頁上一直是那個樣子，改了要連那一頁的測試一起改。記在這裡，不順手動。
+
+    **金額欄寫「需照存摺填寫」而不是 0。** 建議值是程式試算的，權威值在存摺上；
+    印一個 0 會讓人以為那就是答案。
+    """
     suggested = item.get("suggested_amount_minor")
     return [
-        str(item["due_date"]),
+        display_date(str(item["due_date"])),
         str(item["contract_name"]),
         DEPOSIT_EVENT_TYPE_NAMES.get(
             DepositEventType(str(item["event_type"])), str(item["event_type"])

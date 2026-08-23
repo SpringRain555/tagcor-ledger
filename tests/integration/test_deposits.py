@@ -74,6 +74,53 @@ def _posting_count(service: DepositService) -> int:
         return int(connection.execute("SELECT COUNT(*) FROM account_postings").fetchone()[0])
 
 
+def test_confirming_a_deposit_event_goes_through_the_same_transaction_writer(
+    service: DepositService,
+) -> None:
+    """定存確認不得自己另寫一份「建立交易」。
+
+    **這條從 `test_phase2_automation.py` 搬過來**（v0.23.0 移除定期收支時）。
+    原本守的是定期收支確認，而那條路已經不存在了 —— 但不變量本身沒有變：
+    「一筆交易長什麼樣」只有 `stores/base.py` 的 `_write_transaction()` /
+    `_write_transfer()` 說了算，任何會建立交易的路徑都必須走它。
+
+    自己寫一份的代價不是重複，是**分岔**：schema 一改要改兩個地方，而只有一邊有
+    測試盯著。判準用稽核列 —— 走共用寫入路徑就一定會留下 `transaction.create`，
+    自己另寫一份就不會。
+
+    `test_architecture.py` 從 AST 那一側守同一件事（那三張表只能有一個寫入點）；
+    這一條是行為面的交叉驗證，兩邊都要有。
+    """
+    _make_contract(
+        service,
+        interest_method=str(InterestMethod.LUMP_SUM),
+        maturity_action=str(MaturityAction.NONE),
+    )
+    service.generate_due(today="2027-02-15")
+    event = service.store.list_pending_events()[0]
+
+    result = service.confirm(event.event_id, actual_amount_minor=1_600)
+    assert result.success, result.message
+    transaction_id = str(result.details["transaction_id"])
+
+    with sqlite3.connect(service.paths.database_path) as connection:
+        rows = [
+            dict(zip(("action", "entity_id"), row, strict=True))
+            for row in connection.execute(
+                "SELECT action, entity_id FROM audit_events ORDER BY audit_id"
+            )
+        ]
+    created = [
+        row
+        for row in rows
+        if row["action"] == "transaction.create" and row["entity_id"] == transaction_id
+    ]
+    assert created, (
+        "定存確認出來的交易沒有 transaction.create 稽核列 —— "
+        f"表示它沒有走共用的寫入路徑。實際稽核列：{rows}"
+    )
+
+
 # --- 最重要的一條 -----------------------------------------------------------
 
 

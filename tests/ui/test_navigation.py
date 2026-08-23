@@ -211,26 +211,22 @@ def test_pending_badge_is_drawn_beside_the_label_not_inside_it(window) -> None:
     assert item.data(BADGE_ROLE) is None
 
     controller = window.controller
-    schedule = controller.save_schedule(
-        controller.new_schedule(
-            name="排程",
-            entry_type="expense",
-            account_id="acct_cash",
-            destination_account_id=None,
-            category_id="cat_food_711",
-            amount_minor=5000,
-            description="",
-            frequency="monthly",
-            interval_count=1,
-            start_date="2026-01-01",
-            end_date=None,
-        )
-    )
-    assert schedule.success
-    assert controller.generate_due().success
+    account_id = str(controller.account_options()[0]["account_id"])
+    assert controller.create_deposit_contract(
+        account_id=account_id,
+        name="郵局定存",
+        interest_method="lump_sum",
+        maturity_action="renew_principal_only",
+        interest_destination_account_id=account_id,
+        term_months=12,
+        start_date="2020-01-15",
+        principal="100000",
+        annual_rate_ppm=16_000,
+    ).success
+    assert controller.generate_deposit_events().success
     window.refresh_pending_badge()
     assert item.text() == "待確認"  # 文字不動
-    assert item.data(BADGE_ROLE) == len(controller.list_pending())
+    assert item.data(BADGE_ROLE) == len(controller.list_inbox())
 
 
 def test_main_window_applies_scoped_dark_theme(window) -> None:

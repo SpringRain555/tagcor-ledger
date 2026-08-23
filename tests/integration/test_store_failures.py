@@ -9,9 +9,9 @@
 handler 包著一個「會丟 `NotFoundError` 的 store 方法」，卻沒有把它列進去。目前沒有
 出事，靠的是巧合：
 
-- `automation.py` 那 10 個 —— `templates.py`／`schedules.py`／`occurrences.py`
-  剛好一律用 `ValueError("TEMPLATE_NOT_FOUND")` 這種寫法，沒有用 `NotFoundError`。
-  哪天有人「統一一下」改用 `NotFoundError`，這 10 條路同時變成當機。
+- `templates.py` 那幾個 —— `stores/templates.py` 有一部分用
+  `ValueError("TEMPLATE_NOT_FOUND")`、一部分用 `NotFoundError`，所以那一層
+  **一定要用 `STORE_FAILURES` 常數**，自己拼 tuple 遲早漏掉一種。
 - `balance.py` 那幾個 —— `_balance_gap_for_snapshot()` 真的會丟
   `NotFoundError("ACCOUNT_NOT_FOUND")`，只是 `delete_account()` 擋著不讓帳戶在
   還有盤點時被刪掉，所以那個防禦性檢查目前碰不到。**它是防禦性檢查，不是死碼** ——
@@ -32,11 +32,11 @@ from typing import Any
 import pytest
 
 from tagcor_ledger.app.paths import AppPaths, resolve_app_paths
-from tagcor_ledger.application.automation import AutomationService
 from tagcor_ledger.application.balance import BalanceSnapshotService
 from tagcor_ledger.application.deposits import DepositService
 from tagcor_ledger.application.failures import ERROR_MESSAGES
 from tagcor_ledger.application.result import Result
+from tagcor_ledger.application.templates import TemplateService
 from tagcor_ledger.application.transaction_service import (
     AddTransaction,
     AddTransactionRequest,
@@ -60,23 +60,7 @@ class Case:
     code: str = "ACCOUNT_NOT_FOUND"
 
 
-def _schedule(service: AutomationService) -> Any:
-    return service.new_schedule(
-        name="房租",
-        entry_type="expense",
-        account_id="acct_cash",
-        destination_account_id=None,
-        category_id="cat_food_711",
-        amount_minor=12_000,
-        description="",
-        frequency="monthly",
-        interval_count=1,
-        start_date="2026-01-01",
-        end_date=None,
-    )
-
-
-def _template(service: AutomationService) -> Any:
+def _template(service: TemplateService) -> Any:
     return service.new_template(
         name="早餐",
         entry_type="expense",
@@ -89,67 +73,36 @@ def _template(service: AutomationService) -> Any:
 
 
 CASES: list[Case] = [
-    # ---- AutomationService：9 個單層 handler，目前一個都沒有列 NotFoundError ----
+    # ---- TemplateService：五個單層 handler，全部走 STORE_FAILURES ----
     Case(
-        "automation.save_template",
-        AutomationService,
+        "templates.save_template",
+        TemplateService,
         "save_template",
         lambda s: s.save_template(_template(s)),
     ),
     Case(
-        "automation.archive_template",
-        AutomationService,
+        "templates.archive_template",
+        TemplateService,
         "archive_template",
         lambda s: s.archive_template("tpl_x"),
     ),
     Case(
-        "automation.set_template_order",
-        AutomationService,
+        "templates.restore_template",
+        TemplateService,
+        "restore_template",
+        lambda s: s.restore_template("tpl_x"),
+    ),
+    Case(
+        "templates.delete_template",
+        TemplateService,
+        "delete_template",
+        lambda s: s.delete_template("tpl_x"),
+    ),
+    Case(
+        "templates.set_template_order",
+        TemplateService,
         "set_template_order",
         lambda s: s.set_template_order(["tpl_x"]),
-    ),
-    Case(
-        "automation.save_schedule",
-        AutomationService,
-        "save_schedule",
-        lambda s: s.save_schedule(_schedule(s)),
-    ),
-    Case(
-        "automation.archive_schedule",
-        AutomationService,
-        "archive_schedule",
-        lambda s: s.archive_schedule("sched_x"),
-    ),
-    Case(
-        "automation.generate_due",
-        AutomationService,
-        "generate_due_occurrences",
-        lambda s: s.generate_due(),
-    ),
-    Case(
-        "automation.update_occurrence",
-        AutomationService,
-        "update_occurrence",
-        lambda s: s.update_occurrence(
-            "occ_x",
-            amount_minor=100,
-            account_id="acct_cash",
-            destination_account_id=None,
-            category_id="cat_food_711",
-            description="",
-        ),
-    ),
-    Case(
-        "automation.confirm",
-        AutomationService,
-        "confirm_occurrence",
-        lambda s: s.confirm("occ_x"),
-    ),
-    Case(
-        "automation.skip",
-        AutomationService,
-        "skip_occurrence",
-        lambda s: s.skip("occ_x"),
     ),
     # ---- BalanceSnapshotService：`_balance_gap_for_snapshot()` 真的會丟 ----
     Case(

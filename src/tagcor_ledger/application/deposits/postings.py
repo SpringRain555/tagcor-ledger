@@ -161,7 +161,7 @@ class PostingSection(DepositServiceBase):
         `UNIQUE`，那是刻意的設計（一次操作一筆交易），所以共用會撞。
 
         到期若同時有利息與本金，會產生兩筆交易，而 `deposit_events.transaction_id`
-        只存得下一筆。存的是**第一筆（利息）**，和既有 `scheduled_occurrences` 只連
+        只存得下一筆。存的是**第一筆（利息）**，和已經移除的定期收支當初只連
         一筆交易的做法一致。兩筆的日期、描述與定存名稱都對得起來，人工要找得回來。
         """
         primary: str | None = None

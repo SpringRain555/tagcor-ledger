@@ -90,10 +90,18 @@ class DepositsPage(QWidget):
         edit_button = QPushButton("修改所選合約")
         delete_button = QPushButton("刪除所選合約")
         refresh_button = QPushButton("重新整理")
+        self.generate_button = QPushButton("產生到期與領息項目")
         set_button_role(add_button, "primary")
+        set_button_role(self.generate_button, "primary")
         set_button_role(delete_button, "danger")
         row = QHBoxLayout()
-        for widget in (add_button, edit_button, delete_button, refresh_button):
+        for widget in (
+            add_button,
+            edit_button,
+            delete_button,
+            self.generate_button,
+            refresh_button,
+        ):
             row.addWidget(widget)
         row.addStretch()
 
@@ -128,8 +136,28 @@ class DepositsPage(QWidget):
         edit_button.clicked.connect(self.edit_contract)
         delete_button.clicked.connect(self.delete_contract)
         refresh_button.clicked.connect(self.refresh)
+        self.generate_button.clicked.connect(self.generate_events)
         edit_term_button.clicked.connect(self.edit_term)
         self.contracts.selectionModel().selectionChanged.connect(lambda *_: self.reload_terms())
+
+    def generate_events(self) -> None:
+        """把到期與領息放進待確認。**只產生草稿，不建立任何交易。**
+
+        啟動時本來就會跑一次，所以這顆按鈕平常按下去不會多出東西 —— 它是給
+        「程式開著的時候剛建了一份合約」用的。重複按沒有副作用（`deposit_events`
+        有 `UNIQUE (term_id, event_type, due_date)`），所以不必先問「還有幾件」。
+        """
+        result = self.controller.generate_deposit_events()
+        if not result.success:
+            QMessageBox.warning(self, "產生失敗", result_message(result))
+            return
+        QMessageBox.information(
+            self,
+            "產生完成",
+            f"已產生 {int(result.details.get('generated', 0))} 件待確認項目。\n\n"
+            "它們不會自動入帳 —— 到「待確認」按確認並照存摺輸入金額。",
+        )
+        self.changed.emit()
 
     def refresh(self) -> None:
         self.contract_model.replace_rows(self.controller.list_deposit_contracts())

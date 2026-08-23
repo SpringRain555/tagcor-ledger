@@ -11,7 +11,6 @@ from typing import Any
 
 from tagcor_ledger.app.path_settings import PathSettingsService
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.application.automation import AutomationService
 from tagcor_ledger.application.balance import BalanceSnapshotService
 from tagcor_ledger.application.catalogs import AccountService, CategoryService
 from tagcor_ledger.application.deposits import DepositService
@@ -19,6 +18,7 @@ from tagcor_ledger.application.diagnostics import DiagnosticsService
 from tagcor_ledger.application.reference import ReferenceLibrary
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.application.settings import SettingsService
+from tagcor_ledger.application.templates import TemplateService
 from tagcor_ledger.application.transaction_service import (
     AddTransaction,
     AddTransfer,
@@ -50,7 +50,7 @@ class ControllerBase:
         self.accounts = AccountService(self.paths, self.store)
         self.categories = CategoryService(self.paths, self.store)
         self.settings = SettingsService(self.paths)
-        self.automation = AutomationService(self.paths, self.store)
+        self.templates = TemplateService(self.paths, self.store)
         self.balance = BalanceSnapshotService(self.paths, self.store)
         self.maintenance = MaintenanceService(self.paths)
         self.diagnostics = DiagnosticsService(self.paths)
@@ -65,8 +65,13 @@ class ControllerBase:
         self.void_transaction_record = VoidTransaction(self.paths, self.store)
 
     def _run_startup_tasks(self) -> None:
-        self.startup_generation = self.automation.generate_due()
-        self.generation_has_more = bool(self.startup_generation.details.get("has_more"))
+        """開程式時把已經到期的定存事件放進待確認。**只產生草稿，不建立任何交易。**
+
+        v0.23.0 之前這裡還會產生定期收支的期次，而那一段有「一次最多 366 期」的上限，
+        所以另外記了一個 `generation_has_more` 給待確認頁浮出「還有更多漏期」。
+        定存沒有那個概念 —— 它只看未來 7 天，一次做完而且冪等
+        （`UNIQUE (term_id, event_type, due_date)`）。
+        """
         self.deposits.generate_due()
         self.refresh_balance_snapshot_reminder_due()
 

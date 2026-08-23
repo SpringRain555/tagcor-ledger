@@ -12,7 +12,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 7
+LATEST_SCHEMA_VERSION = 8
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -396,6 +396,32 @@ def migrate_v7(connection: sqlite3.Connection) -> None:
     )
 
 
+def migrate_v8(connection: sqlite3.Connection) -> None:
+    """移除定期收支：`scheduled_occurrences` 與 `recurring_schedules` 兩張表。
+
+    **理由寫在 [ADR-0011](../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)。**
+    一句話版本：模板能表達同一件事，而定期收支唯一多出來的「到期那天主動提醒」
+    對這位使用者沒有作用 —— 他的觸發點是簡訊與存摺。
+
+    **順序不能反。** `scheduled_occurrences.schedule_id` 有一條外鍵指向
+    `recurring_schedules`，先砍母表會在 `PRAGMA foreign_keys = ON` 的連線上失敗。
+
+    **沒有東西反過來指向這兩張表。** `confirmed_transaction_id` 是從 occurrence
+    指向 `transactions` 的，所以交易本身完全不受影響 —— 失去的只有
+    「這筆交易是從哪一筆定期收支來的」這條線索。
+
+    v3 建的表在這裡被砍掉，全新的資料庫因此會經歷「建了又砍」。**那是對的**：
+    migration 是一條照順序重演的歷史，不是最終 schema 的宣告。回頭去改 v3
+    對已經跑過 v3 的資料庫毫無效果，而那正是使用者手上那一個。
+    """
+    connection.executescript(
+        """
+        DROP TABLE IF EXISTS scheduled_occurrences;
+        DROP TABLE IF EXISTS recurring_schedules;
+        """
+    )
+
+
 def _add_column_if_missing(
     connection: sqlite3.Connection, table: str, column: str, definition: str
 ) -> None:
@@ -414,6 +440,7 @@ MIGRATIONS: dict[int, Migration] = {
     5: migrate_v5,
     6: migrate_v6,
     7: migrate_v7,
+    8: migrate_v8,
 }
 
 

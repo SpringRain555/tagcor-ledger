@@ -38,6 +38,6 @@ __all__ = ["ControllerBase", "LedgerController"]
 class LedgerController(OverviewSection, MaintenanceSection, DataPathSection):
     """UI 唯一的入口。
 
-    `OverviewSection` 已經把 ledger／automation／deposits／balance 四段帶進來了，
+    `OverviewSection` 已經把 ledger／templates／deposits／balance 四段帶進來了，
     所以這裡只要再加維護與資料路徑兩段。
     """

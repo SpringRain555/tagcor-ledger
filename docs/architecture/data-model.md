@@ -16,13 +16,12 @@
 - `settings`：ledger 內的一般偏好，例如預設帳戶、預設流向、每頁筆數、盤點提醒。
 - `schema_migrations`：migration registry。
 - `transaction_templates`：交易模板。
-- `recurring_schedules`：定期收支（UI 用詞；表名維持 `recurring_schedules`，改它要 migration）。
-- `scheduled_occurrences`：待確認項目 snapshot。
 - `balance_snapshots`：餘額盤點。
 - `deposit_contracts`：定存的持續關係 —— 哪個帳戶、怎麼計息、到期怎麼處理、利率是固定還是機動。
 - `deposit_terms`：定存的**每一期**。續存產生新的一期，舊的不改寫，所以歷次利率留得下來。
-- `deposit_events`：定存的到期與領息，等待使用者確認。**不走 `scheduled_occurrences`**
-  —— 排程引擎不需要懂計息 —— 但在同一個「待確認」頁呈現，維持單一收件匣。
+- `deposit_events`：定存的到期與領息，等待使用者確認。**這是「待確認」頁唯一的來源**
+  —— v0.23.0 移除定期收支之後（[ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)），
+  `recurring_schedules` 與 `scheduled_occurrences` 兩張表由 `migrate_v8` 砍掉。
 
 ```mermaid
 erDiagram
@@ -35,7 +34,6 @@ erDiagram
     accounts ||--o{ deposit_contracts : "定存帳戶"
     deposit_contracts ||--|{ deposit_terms : "續存產生新的一期"
     deposit_terms ||--o{ deposit_events : "到期／領息，待確認"
-    recurring_schedules ||--o{ scheduled_occurrences : "到期產生待確認"
 
     accounts {
         text account_id PK
@@ -98,15 +96,20 @@ Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snap
 
 - v1：核心帳務表、舊 payee schema、FTS、settings、audit。
 - v2：`transactions.replaces_transaction_id`。
-- v3：模板、定期收支（`recurring_schedules`）、待確認項目。
+- v3：模板、定期收支（`recurring_schedules`）、待確認項目（`scheduled_occurrences`）。
 - v4：`balance_snapshots`。
 - v5：移除 payee schema、重建 FTS、移除啟動備份設定。
 - v6：`deposit_contracts`、`deposit_terms`、`deposit_events` 三張表與各自的索引。
 - v7：`deposit_contracts.rate_type`（`fixed`／`floating`）、
   `deposit_terms.effective_rate_ppm`（從實際利息反推的年利率）。
 
-**v7 是新的一版而不是改 v6**，因為使用者的資料庫已經跑過 v6 了 —— migration 記錄下來
-就不會再跑第二次，改 v6 的內容對既有資料庫毫無效果。
+- v8：**砍掉** `scheduled_occurrences` 與 `recurring_schedules`（順序不可反 —— 前者有
+  外鍵指向後者）。理由見 [ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)。
+
+**每一版都是新的一版，不改舊的那一版**，因為使用者的資料庫已經跑過了 —— migration
+記錄下來就不會再跑第二次，改舊版的內容對既有資料庫毫無效果。所以 v3 建的兩張表由
+v8 砍掉，全新的資料庫會經歷「建了又砍」：**migration 是一條照順序重演的歷史，
+不是最終 schema 的宣告。**
 
 系統若偵測到資料庫 schema 比程式支援版本更新，必須拒絕啟動或還原。
 

@@ -9,6 +9,9 @@
 **2026-08-22 補上了那個測試**（`test_architecture.py` 的
 `test_the_store_package_reexports_exactly_what_ledger_store_composes`），
 所以這次拆檔時漏掉哪一個會直接紅。
+
+**`ScheduleStore` 與 `OccurrenceStore` 在 v0.23.0 隨定期收支一起移除**，
+理由見 [ADR-0011](../../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)。
 """
 
 from __future__ import annotations
@@ -20,8 +23,6 @@ from tagcor_ledger.infrastructure.stores.categories import CategoryStore
 from tagcor_ledger.infrastructure.stores.deposit_contracts import DepositContractStore
 from tagcor_ledger.infrastructure.stores.deposit_events import DepositEventStore
 from tagcor_ledger.infrastructure.stores.deposit_terms import DepositTermStore
-from tagcor_ledger.infrastructure.stores.occurrences import OccurrenceStore
-from tagcor_ledger.infrastructure.stores.schedules import ScheduleStore
 from tagcor_ledger.infrastructure.stores.templates import TemplateStore
 from tagcor_ledger.infrastructure.stores.transactions import TransactionStore
 
@@ -33,8 +34,6 @@ __all__ = [
     "DepositEventStore",
     "DepositTermStore",
     "NotFoundError",
-    "OccurrenceStore",
-    "ScheduleStore",
     "StoreBase",
     "StoreError",
     "TemplateStore",

@@ -1,7 +1,10 @@
-"""模板與定期收支共用的編輯對話框。
+"""模板的編輯對話框。
 
-同一份表單服務兩件事，差別只在**多出四列週期欄位**（週期、間隔倍數、開始日期、
-結束日期）。兩份幾乎一樣的表單各自維護，遲早會有一邊漏掉某個欄位的驗證。
+這個檔案以前叫 `draft_dialog.py`，而 `DraftDialog` 用一個 `schedule: bool` 同時服務
+模板與定期收支 —— 差別是**多出四列週期欄位**（週期、間隔倍數、開始日期、結束日期）。
+v0.23.0 移除定期收支之後那個旗標永遠是 `False`
+（[ADR-0011](../../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)），
+留著它就是留一個永遠不會走的分支，而那正是下一個人要花時間讀懂再刪掉的東西。
 """
 
 from __future__ import annotations
@@ -9,43 +12,41 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
     QLineEdit,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import (
-    ENTRY_NAMES,
-    FREQUENCY_NAMES,
-    error_text,
-    minor_text,
-)
-from tagcor_ledger.ui.widgets.forms import date_field, fill_combo, select_data
+from tagcor_ledger.ui.formatting import ENTRY_NAMES, error_text, minor_text
+from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
 
 
-class DraftDialog(QDialog):
+class TemplateDialog(QDialog):
+    NAME_LABEL = "模板名稱"
+    """第一格的標籤。
+
+    **不要用「名稱」。** 這張表單裡的每一列都是某個東西的名稱（帳戶、類別、項目），
+    所以「名稱」等於沒說 —— 使用者要往上看視窗標題才知道在填哪一個的名字。
+    `CatalogPage.NAME_LABEL` 三個子類各自說自己的話，就是同一條。
+    """
+
     def __init__(
         self,
         controller: LedgerController,
         *,
-        schedule: bool,
         current: dict[str, Any] | None,
         parent: QWidget,
     ) -> None:
         super().__init__(parent)
         self.controller = controller
-        self.schedule = schedule
         self.current = current
         self.name = QLineEdit()
         self.flow = QComboBox()
@@ -55,30 +56,20 @@ class DraftDialog(QDialog):
         self.detail = QComboBox()
         self.amount = QLineEdit()
         self.description = QLineEdit()
-        self.frequency = QComboBox()
-        self.interval = QSpinBox()
-        self.start_date = date_field()
-        self.has_end = QCheckBox("設定結束日期")
-        self.end_date = date_field(QDate.currentDate().addYears(1))
         self.error = QLabel()
         self.saved_value: Any = None
         self._build()
         self._load()
 
     def _build(self) -> None:
-        self.setWindowTitle("定期收支" if self.schedule else "模板")
+        self.setWindowTitle("模板")
         for key in ("expense", "income", "transfer"):
             self.flow.addItem(ENTRY_NAMES[key], key)
-        for key in ("daily", "weekly", "monthly", "yearly"):
-            self.frequency.addItem(FREQUENCY_NAMES[key], key)
-        self.interval.setRange(1, 999)
-        self.has_end.toggled.connect(self.end_date.setEnabled)
-        self.end_date.setEnabled(False)
         self.error.setObjectName("errorLabel")
         # 同 EntryPage：留參考給 _sync_flow 用 setRowVisible 一起收掉標籤。
         self.form = QFormLayout()
         form = self.form
-        form.addRow("名稱", self.name)
+        form.addRow(self.NAME_LABEL, self.name)
         form.addRow("流向", self.flow)
         form.addRow("帳戶", self.account)
         form.addRow("轉入帳戶", self.destination)
@@ -86,12 +77,6 @@ class DraftDialog(QDialog):
         form.addRow("項目", self.detail)
         form.addRow("金額（可留空）", self.amount)
         form.addRow("備註", self.description)
-        if self.schedule:
-            form.addRow("週期", self.frequency)
-            form.addRow("間隔倍數", self.interval)
-            form.addRow("開始日期", self.start_date)
-            form.addRow("", self.has_end)
-            form.addRow("結束日期", self.end_date)
         form.addRow("", self.error)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
@@ -127,71 +112,52 @@ class DraftDialog(QDialog):
             if self.current.get("amount_minor") is not None:
                 self.amount.setText(minor_text(int(self.current["amount_minor"])))
             self.description.setText(str(self.current.get("description", "")))
-            if self.schedule:
-                select_data(self.frequency, self.current["frequency"])
-                self.interval.setValue(int(self.current["interval_count"]))
-                self.start_date.setDate(QDate.fromString(self.current["start_date"], "yyyy-MM-dd"))
-                if self.current.get("end_date"):
-                    self.has_end.setChecked(True)
-                    self.end_date.setDate(
-                        QDate.fromString(self.current["end_date"], "yyyy-MM-dd")
-                    )
         self._sync_flow()
 
     def save(self) -> None:
+        """把表單組成一個 `TransactionTemplate` 放進 `saved_value`，由呼叫端寫入。
+
+        ## `replace()` 為什麼一定要帶 `status`
+
+        `new_template()` 把 `status` 寫死成 `"active"`（它的用途是「建一個新的」），
+        而 `save_template()` 是 UPSERT 且會寫 `status = excluded.status`。
+        **編輯一筆已封存的模板因此會靜悄悄把它變回使用中** —— 這條路在 v0.22.0
+        之前走不到，因為模板頁根本不列封存的；列出來的那一刻它就成立了。
+
+        `sort_order` 同理：自訂順序不該因為改了個名字就跳回 100。
+        沒帶回去的欄位都要問一次「新建的預設值蓋掉舊值，對嗎」。
+        """
         try:
             amount_minor = (
                 Money.from_decimal_string(self.amount.text().strip()).amount_minor
                 if self.amount.text().strip()
                 else None
             )
-            values = {
-                "name": self.name.text().strip(),
-                "entry_type": str(self.flow.currentData()),
-                "account_id": str(self.account.currentData()),
-                "destination_account_id": (
+            template = self.controller.new_template(
+                name=self.name.text().strip(),
+                entry_type=str(self.flow.currentData()),
+                account_id=str(self.account.currentData()),
+                destination_account_id=(
                     str(self.destination.currentData())
                     if self.flow.currentData() == "transfer"
                     else None
                 ),
-                "category_id": (
+                category_id=(
                     str(self.detail.currentData())
                     if self.flow.currentData() != "transfer"
                     else None
                 ),
-                "amount_minor": amount_minor,
-                "description": self.description.text().strip(),
-            }
-            if self.schedule:
-                values.update(
-                    {
-                        "frequency": str(self.frequency.currentData()),
-                        "interval_count": self.interval.value(),
-                        "start_date": self.start_date.date().toString("yyyy-MM-dd"),
-                        "end_date": (
-                            self.end_date.date().toString("yyyy-MM-dd")
-                            if self.has_end.isChecked()
-                            else None
-                        ),
-                    }
+                amount_minor=amount_minor,
+                description=self.description.text().strip(),
+            )
+            if self.current:
+                template = replace(
+                    template,
+                    template_id=str(self.current["template_id"]),
+                    sort_order=int(self.current["sort_order"]),
+                    status=str(self.current["status"]),
                 )
-                schedule_value = self.controller.new_schedule(**values)
-                if self.current:
-                    schedule_value = replace(
-                        schedule_value,
-                        schedule_id=str(self.current["schedule_id"]),
-                        next_due_date=str(self.current["next_due_date"]),
-                    )
-                self.saved_value = schedule_value
-            else:
-                template_value = self.controller.new_template(**values)
-                if self.current:
-                    template_value = replace(
-                        template_value,
-                        template_id=str(self.current["template_id"]),
-                        sort_order=int(self.current["sort_order"]),
-                    )
-                self.saved_value = template_value
+            self.saved_value = template
             self.accept()
         except (MoneyError, ValueError) as exc:
             self.error.setText(error_text(exc, fallback="請檢查輸入內容。"))

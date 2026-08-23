@@ -1,14 +1,19 @@
-"""待確認：兩種來源合成一張表，以及「確認入帳」之後別頁要跟著動。
+"""待確認：定存到期的草稿，以及「確認入帳」之後別頁要跟著動。
 
 跨頁連動集中在 `main_window.py::_ledger_changed()`，那條線少接一段不會有
 任何東西報錯 —— 所以這裡有測試盯著。
+
+**v0.23.0 之前這一頁有兩個來源**，所以有一組測試在守「兩種形狀合成一張表、
+確認與略過依來源分派、全部確認不碰定存」。定期收支移除之後
+（[ADR-0011](../../docs/decisions/ADR-0011-drop-recurring-schedules.md)）
+那些分派都不存在了，測試跟著走 —— 但**「確認入帳要建立真的交易並連動別頁」
+那一條留著，只是改走定存**：它守的是跨頁連動，與來源是誰無關。
 """
 
+from typing import Any
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QTableView,
-)
+from PySide6.QtWidgets import QTableView
 
 from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.navigation import PageId
@@ -23,30 +28,11 @@ def _inbox_rows(window: MainWindow) -> list[list[str]]:
     ]
 
 
-def _make_schedule(controller, name: str, start_date: str) -> None:
-    result = controller.save_schedule(
-        controller.new_schedule(
-            name=name,
-            entry_type="expense",
-            account_id="acct_cash",
-            destination_account_id=None,
-            category_id="cat_food_711",
-            amount_minor=1200000,
-            description="",
-            frequency="monthly",
-            interval_count=1,
-            start_date=start_date,
-            end_date=None,
-        )
-    )
-    assert result.success, result.message
-
-
-def _make_deposit(controller) -> None:
+def _make_deposit(controller: Any, *, name: str = "郵局定存") -> None:
     account_id = str(controller.account_options()[0]["account_id"])
     result = controller.create_deposit_contract(
         account_id=account_id,
-        name="郵局定存",
+        name=name,
         interest_method="lump_sum",
         maturity_action="renew_principal_only",
         interest_destination_account_id=account_id,
@@ -56,29 +42,29 @@ def _make_deposit(controller) -> None:
         annual_rate_ppm=16_000,
     )
     assert result.success, result.message
+    # **合約建好不會自己產生事件** —— 那是啟動任務或定存頁那顆按鈕做的。
+    assert controller.generate_deposit_events().success
 
 
-def test_the_inbox_is_one_table_with_a_source_column(window) -> None:
-    """定期收支與定存**在同一張表**，靠「來源」欄分辨。
+def test_the_inbox_is_one_table_of_deposit_events(window) -> None:
+    """一張表，四欄，依到期日排序。
 
-    以前是上下兩張表加六顆按鈕：「我還有幾件事要處理」要自己把兩個數字加起來，
-    按按鈕之前還得先想清楚哪三顆是對上面那張表的。
+    **沒有「來源」欄，也沒有「狀態說明」欄。** 兩者在只剩一個來源之後都變成
+    「每一列印同一個字」—— 依 `formatting/rows.py` 自己的規則那就是雜訊。
+    「金額以存摺為準」那句話改成表格上方講一次。
     """
     controller = window.controller
-
-    _make_schedule(controller, "房租", "2026-06-01")
-    _make_deposit(controller)
-    assert controller.generate_due().success
+    _make_deposit(controller, name="郵局定存")
+    _make_deposit(controller, name="郵局二年期")
     window.inbox.refresh()
 
     model = window.inbox.model
     assert [
         model.headerData(column, Qt.Orientation.Horizontal)
         for column in range(model.columnCount())
-    ] == ["到期日", "來源", "名稱", "類型", "金額（TWD）", "狀態說明"]
+    ] == ["到期日", "定存合約", "類型", "建議金額（TWD）"]
 
-    sources = {row[1] for row in _inbox_rows(window)}
-    assert sources == {"定期", "定存"}, sources
+    assert model.rowCount() >= 2, "測試資料沒有產生待確認項目，這條測試等於沒作用"
     # 一張表，不是兩張。
     assert len(window.inbox.findChildren(QTableView)) == 1
 
@@ -87,11 +73,14 @@ def test_the_inbox_is_one_table_with_a_source_column(window) -> None:
     assert dates == sorted(dates)
     assert all("/" in date_text for date_text in dates), dates
 
+    assert window.inbox.hint.isVisibleTo(window.inbox)
+    assert "存摺" in window.inbox.hint.text()
+
 
 def test_the_inbox_explains_itself_when_it_is_empty(window) -> None:
     """**這一段文字就是「我忘記這頁是做什麼的」的正解。**
 
-    空表格加三顆停用的按鈕說不出任何事情。沒有項目時整組操作收起來，換成說明。
+    空表格加兩顆停用的按鈕說不出任何事情。沒有項目時整組操作收起來，換成說明。
     """
     window.show_page(PageId.INBOX)
 
@@ -99,161 +88,62 @@ def test_the_inbox_explains_itself_when_it_is_empty(window) -> None:
     assert page.model.rowCount() == 0
     assert page.empty.isVisibleTo(page)
     assert not page.table.isVisibleTo(page)
-    for button in (page.confirm_button, page.skip_button, page.confirm_all_button):
+    assert not page.hint.isVisibleTo(page)
+    for button in (page.confirm_button, page.skip_button):
         assert not button.isVisibleTo(page)
 
     text = page.empty.text()
-    assert "定期收支" in text
     assert "定存" in text
     assert "確認之後才會變成交易" in text
-    assert "操作設定 → 定期收支" in text
+    assert "操作設定 → 定存" in text
+    assert "定期收支" not in text, "定期收支已經移除了，空狀態不該再提它"
 
     # 有東西之後就換回表格。
-    _make_schedule(window.controller, "房租", "2026-06-01")
-    assert window.controller.generate_due().success
+    _make_deposit(window.controller)
     page.refresh()
     assert page.table.isVisibleTo(page)
     assert not page.empty.isVisibleTo(page)
     assert page.confirm_button.isVisibleTo(page)
+    assert page.hint.isVisibleTo(page)
 
 
-def test_confirming_dispatches_by_source(window, monkeypatch) -> None:
-    """「確認入帳」對定期收支開修改對話框，對定存問實際金額。
-
-    兩種來源在同一張表裡，所以分派錯了不會有任何錯誤訊息 —— 只會開錯一個視窗。
-    """
-    controller = window.controller
-    _make_deposit(controller)
-    assert controller.generate_due().success
-    window.inbox.refresh()
-
-    rows = [
-        index
-        for index in range(window.inbox.model.rowCount())
-        if window.inbox.model.items[index]["source"] == "deposit"
-    ]
-    assert rows, "沒有定存項目，這條測試等於沒作用"
-    window.inbox.table.selectRow(rows[0])
-
-    asked: list[str] = []
-
-    def fake_get_text(*args: object, **kwargs: object) -> tuple[str, bool]:
-        asked.append(str(args[2]) if len(args) > 2 else "")
-        return ("842", True)
-
-    monkeypatch.setattr("PySide6.QtWidgets.QInputDialog.getText", fake_get_text)
-    before = controller.inbox_count()
-    window.inbox.confirm_selected()
-
-    assert asked, "定存項目沒有問實際金額"
-    assert "存摺" in asked[0], asked[0]
-    assert controller.inbox_count() == before - 1
-
-
-def test_confirm_all_leaves_deposits_alone_and_says_so(window, monkeypatch) -> None:
-    """**「全部確認」不碰定存。**
-
-    定存的權威金額在存摺上，建議值只是試算 —— 批次套用試算值等於替使用者決定了一個
-    他沒看過的數字。但也不能默默跳過，訊息要講清楚還剩幾件。
-    """
-    controller = window.controller
-    _make_schedule(controller, "房租", "2026-06-01")
-    _make_deposit(controller)
-    assert controller.generate_due().success
-    window.inbox.refresh()
-
-    shown: list[str] = []
-    monkeypatch.setattr(
-        "PySide6.QtWidgets.QMessageBox.information",
-        lambda *args, **kwargs: shown.append(str(args[2])),
-    )
-    window.inbox.confirm_all()
-
-    assert shown and "定存" in shown[0], shown
-    remaining = {item["source"] for item in controller.list_inbox()}
-    assert remaining == {"deposit"}, f"定存不該被批次確認掉：{remaining}"
-
-
-def test_generate_button_only_shows_up_when_there_is_more_to_generate(window) -> None:
-    """「繼續產生」平常不出現。
-
-    啟動時本來就會產生一次，所以平常按它什麼都不會發生 —— **一顆按了沒反應的按鈕
-    比沒有按鈕更糟**。只有真的還有漏期時才浮出一行提示與一顆行內按鈕。
-    """
-    page = window.inbox
-
-    assert not window.controller.generation_has_more
-    assert not page.more_button.isVisibleTo(page)
-    assert not page.more_hint.isVisibleTo(page)
-
-    window.controller.generation_has_more = True
-    page.refresh()
-    assert page.more_button.isVisibleTo(page)
-    assert "漏期" in page.more_hint.text()
-
-
-def test_confirming_an_inbox_item_refreshes_the_transaction_list(window) -> None:
+def test_confirming_an_inbox_item_refreshes_the_transaction_list(window, monkeypatch) -> None:
     """待確認按下確認入帳會建立**真的交易**，所以交易紀錄與側邊欄數字都要跟著動。
 
-    以前 `inbox.changed` 只接到側邊欄徽章，於是確認完房租切到交易紀錄，那一筆不在那裡。
+    以前 `inbox.changed` 只接到側邊欄徽章，於是確認完切到交易紀錄，那一筆不在那裡。
+    **這一條在 v0.23.0 之前走的是定期收支**，改走定存 —— 它守的是跨頁連動，
+    與草稿是誰產生的無關。
     """
     controller = window.controller
-
-    schedule = controller.new_schedule(
-        name="房租",
-        entry_type="expense",
-        account_id="acct_cash",
-        destination_account_id=None,
-        category_id="cat_food_711",
-        amount_minor=12_000,
-        description="每月房租",
-        frequency="yearly",
-        interval_count=1,
-        start_date="2026-01-01",
-        end_date="2026-01-01",
-    )
-    assert controller.save_schedule(schedule).success
-    assert controller.generate_due().success
+    _make_deposit(controller)
     window.inbox.refresh()
 
-    occurrence = controller.list_pending()[0]
     badge_before = window.sidebar.item_for(PageId.INBOX).data(BADGE_ROLE)
     assert badge_before, "先要有一件待確認，否則這條測試什麼都沒驗到"
     assert window.transactions.model.rowCount() == 0
 
-    assert controller.confirm_occurrence(str(occurrence["occurrence_id"])).success
-    window.inbox.refresh()
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.inbox.QInputDialog.getText",
+        lambda *args, **kwargs: ("1600", True),
+    )
+    window.inbox.table.selectRow(0)
+    window.inbox.confirm_selected()
 
-    assert window.transactions.model.rowCount() == 1, (
+    assert window.transactions.model.rowCount() >= 1, (
         "確認入帳會建立交易，交易紀錄必須重載 —— 沒有就代表 inbox 只通知了徽章"
     )
-    assert not window.sidebar.item_for(PageId.INBOX).data(BADGE_ROLE)
 
 
-def _select_deposit_row(window: MainWindow) -> None:
-    """選中待確認表裡的定存那一列。"""
-    model = window.inbox.model
-    for row in range(model.rowCount()):
-        if str(model.items[row]["source"]) == "deposit":
-            window.inbox.table.selectRow(row)
-            return
-    raise AssertionError("表裡沒有定存項目")
+def test_a_bad_amount_when_confirming_says_so_in_chinese(window, monkeypatch) -> None:
+    """確認時打錯金額：跳中文警告，**而且不入帳**。
 
-
-def test_a_bad_amount_when_confirming_a_deposit_says_so_in_chinese(
-    window, monkeypatch
-) -> None:
-    """確認定存時打錯金額：跳中文警告，**而且不入帳**。
-
-    2026-08-22 之前這條路（`_confirm_deposit()` 的 `except MoneyError`）沒有任何
-    測試走過。它是「使用者照存摺輸入實際利息」的入口 —— 打錯字被安靜吞掉的話，
+    這是「使用者照存摺輸入實際利息」的入口 —— 打錯字被安靜吞掉的話，
     帳上會多一筆金額不對的利息收入。
     """
     controller = window.controller
     _make_deposit(controller)
-    assert controller.generate_due().success
     window.inbox.refresh()
-    _select_deposit_row(window)
+    window.inbox.table.selectRow(0)
     before = window.inbox.model.rowCount()
 
     monkeypatch.setattr(
@@ -282,9 +172,8 @@ def test_cancelling_the_amount_prompt_leaves_the_item_alone(window, monkeypatch)
     """在金額對話框按取消 = 什麼都不做。"""
     controller = window.controller
     _make_deposit(controller)
-    assert controller.generate_due().success
     window.inbox.refresh()
-    _select_deposit_row(window)
+    window.inbox.table.selectRow(0)
     before = window.inbox.model.rowCount()
 
     monkeypatch.setattr(
@@ -295,3 +184,18 @@ def test_cancelling_the_amount_prompt_leaves_the_item_alone(window, monkeypatch)
 
     window.inbox.refresh()
     assert window.inbox.model.rowCount() == before
+
+
+def test_skipping_removes_the_item_without_creating_a_transaction(window) -> None:
+    """略過 = 「我看過，這一期不記」。**不產生交易。**"""
+    controller = window.controller
+    _make_deposit(controller)
+    window.inbox.refresh()
+    before = window.inbox.model.rowCount()
+    assert before >= 1
+
+    window.inbox.table.selectRow(0)
+    window.inbox.skip_selected()
+
+    assert window.inbox.model.rowCount() == before - 1
+    assert window.transactions.model.rowCount() == 0

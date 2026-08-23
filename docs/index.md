@@ -52,12 +52,12 @@
 | | 狀態 |
 |---|---|
 | [REQ-0001 穩固核心](requirements/REQ-0001-stable-core.md) | 已實作 |
-| [REQ-0002 Phase 1–2](requirements/REQ-0002-phase-1-2.md) | 已實作 |
+| [REQ-0002 Phase 1–2](requirements/REQ-0002-phase-1-2.md) | 已實作；**週期排程那一段在 v0.23.0 移除**（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
 | [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作 |
-| [REQ-0004 Phase 4 設定與路徑](requirements/REQ-0004-phase-4-settings-paths-terms.md) | 已實作 |
+| [REQ-0004 Phase 4 設定與路徑](requirements/REQ-0004-phase-4-settings-paths-terms.md) | 已實作；操作設定現在是**五個**分頁（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
 | [REQ-0005 Phase 4.1 深色 UI](requirements/REQ-0005-phase-4-1-dark-ui-docs.md) | 已實作 |
 | [REQ-0006 資料與程式分離](requirements/REQ-0006-data-program-separation.md) | 已實作 |
-| [REQ-0007 郵局定存](requirements/REQ-0007-time-deposits.md) | 已實作（schema v6–v7） |
+| [REQ-0007 郵局定存](requirements/REQ-0007-time-deposits.md) | 已實作（schema v6–v7）。**v0.23.0 起是「待確認」頁唯一的來源** |
 | [REQ-0008 法規參考庫](requirements/REQ-0008-reference-db.md) | 已實作 |
 | [REQ-0009 例外處理與可觀測性](requirements/REQ-0009-observability.md) | 已實作 |
 | [REQ-0010 對帳缺口](requirements/REQ-0010-reconciliation-gap.md) | **刻意尚未實作** |
@@ -74,6 +74,7 @@
 - [ADR-0008 AGENTS.md 是唯一正本](decisions/ADR-0008-agents-md-canonical.md)
 - [ADR-0009 UI 維持 PySide6](decisions/ADR-0009-keep-pyside6.md)
 - [ADR-0010 對外轉帳記成收入／支出](decisions/ADR-0010-external-transfers.md)
+- [ADR-0011 移除定期收支](decisions/ADR-0011-drop-recurring-schedules.md)
 
 ## Architecture
 

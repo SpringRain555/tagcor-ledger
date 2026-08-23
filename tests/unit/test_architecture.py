@@ -539,7 +539,10 @@ def test_no_module_grows_back_into_a_monolith(label: str, root: Path, limit: int
 # **鍵是實作的名字，值是使用者腦子裡的名字。** 程式識別字（`recurring_schedules`、
 # `schedule_id`）不在此限 —— 那是 schema，改它要 migration，而使用者看不到它。
 RETIRED_UI_WORDS = {
-    "排程": "定期收支",
+    # 定期收支整個移除了（v0.23.0，ADR-0011），所以連「定期收支」自己都是淘汰的用詞
+    # —— 一顆通往不存在功能的按鈕比錯的用詞更糟。「排程」是它更早以前的名字。
+    "排程": "（已移除，見 ADR-0011）",
+    "定期收支": "（已移除，見 ADR-0011）",
     "快速記帳": "記帳",
     # 第一層叫「類別」、第二層叫「項目」，所以項目的那一欄是**它屬於誰**，
     # 不是「它上面還有一層」。列表的表頭一直都寫「所屬類別」，只有新增項目的
@@ -572,11 +575,17 @@ def _value_strings(path: Path) -> list[str]:
 
 
 def test_extractor_separates_documentation_from_values() -> None:
-    """陽性對照：抽取邏輯壞掉時這裡先失敗，而不是讓底下的檢查靜默通過。"""
-    page = SOURCE_ROOT / "ui" / "pages" / "recurring.py"
+    """陽性對照：抽取邏輯壞掉時這裡先失敗，而不是讓底下的檢查靜默通過。
+
+    以前拿 `recurring.py` 當樣本，那一頁在 v0.23.0 移除了（ADR-0011）。
+    換成模板頁 —— 它同樣是「按鈕文字很多、模組 docstring 很長」的形狀。
+    """
+    page = SOURCE_ROOT / "ui" / "pages" / "templates.py"
     values = _value_strings(page)
-    assert "新增定期收支" in values, "抓不到按鈕文字，抽取器壞了"
-    assert not any("為什麼改叫" in value for value in values), "docstring 被當成值抓進來了"
+    assert "新增模板" in values, "抓不到按鈕文字，抽取器壞了"
+    assert not any("封存」以前等於刪除" in value for value in values), (
+        "docstring 被當成值抓進來了"
+    )
 
 
 def test_ui_does_not_use_retired_wording() -> None:
@@ -587,9 +596,13 @@ def test_ui_does_not_use_retired_wording() -> None:
     才看得到，實機點過去的機率很低。
 
     **2026-08-22 把掃描範圍從 `ui/` 擴到 `application/`。** 那一層的
-    `Result.ok("排程已儲存。")` 與 `fallback_message` 一樣會走到畫面上
-    （`recurring.py::_finish()` 失敗時直接進 `QMessageBox`），而舊的守門只掃 `ui/`，
-    於是「定期收支」這一頁存檔失敗時跳出來的訊息裡寫的是「排程」。
+    `Result.ok(...)` 與 `fallback_message` 一樣會走到畫面上（頁面的 `_finish()`
+    失敗時直接進 `QMessageBox`），而舊的守門只掃 `ui/`。
+
+    **v0.23.0 起「定期收支」本身也在名單上。** 功能整個移除了，所以要守的從
+    「別叫錯名字」變成「沒有半個入口留在畫面上」—— 一顆通往不存在功能的按鈕
+    比錯的用詞更糟。docstring 與註解不算（`_value_strings()` 已經濾掉），
+    所以解釋歷史的段落照樣寫得出「定期收支」。
     """
     offenders: list[str] = []
     for path in _modules("ui", "application"):

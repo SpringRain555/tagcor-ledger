@@ -121,21 +121,18 @@
 | `BALANCE_SNAPSHOT_UPDATE_FAILED` / `BALANCE_SNAPSHOT_LIST_FAILED` / `BALANCE_SNAPSHOT_EXPORT_FAILED` | **退路碼**：對應操作失敗 | 匯出診斷資訊回報 |
 | `BALANCE_GAP_LOAD_FAILED` / `BALANCE_GAP_TRANSACTIONS_FAILED` | 差額或期間交易查詢失敗 | 匯出診斷資訊 |
 
-## 模板、排程與待確認
+## 模板
 
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
 |---|---|---|
-| `AUTOMATION_ID_REQUIRED` | 草稿的主鍵是空的。**這是程式錯誤，不是操作錯誤** —— id 由 `new_template()` / `new_schedule()` 產，使用者沒有辦法把它清空。擋在這裡是因為兩個 `save_*` 都是 UPSERT，而空字串是合法主鍵，寫進去不會失敗 | 匯出診斷資訊回報 |
-| `AUTOMATION_NAME_REQUIRED` | 模板／排程沒有名稱 | 填名稱 |
-| `AUTOMATION_AMOUNT_INVALID` | 金額格式不對 | 金額可留空（套用時再填），但填了就要合法 |
+| `TEMPLATE_ID_REQUIRED` | 模板的主鍵是空的。**這是程式錯誤，不是操作錯誤** —— id 由 `new_template()` 產，使用者沒有辦法把它清空。擋在這裡是因為 `save_template()` 是 UPSERT，而空字串是合法主鍵，寫進去不會失敗 | 匯出診斷資訊回報 |
+| `TEMPLATE_NAME_REQUIRED` | 模板沒有名稱 | 填名稱 |
+| `TEMPLATE_AMOUNT_INVALID` | 金額格式不對 | 金額可留空（填入記帳頁時再填），但填了就要合法 |
 | `TRANSACTION_DRAFT_INVALID` | 收入／支出的草稿缺類別 | 選類別 |
 | `TRANSFER_DRAFT_INVALID` | 轉帳草稿缺轉入帳戶，或誤填了類別 | 轉帳要有轉入帳戶、不要類別 |
-| `TEMPLATE_NOT_FOUND` / `SCHEDULE_NOT_FOUND` | 不存在 | 重新載入 |
-| `SCHEDULE_FREQUENCY_INVALID` | 頻率不是每日／每週／每月／每年 | 選合法的頻率 |
-| `SCHEDULE_INTERVAL_INVALID` | 間隔倍數不合法 | 要是正整數 |
-| `OCCURRENCE_NOT_PENDING` | 想修改一筆已確認或已略過的待確認項目 | 兩者都是終點。要改結果就去作廢它產生的交易 |
-| `OCCURRENCE_AMOUNT_REQUIRED` | 確認時金額還是空的 | 填金額才能入帳 |
-| `TEMPLATE_SAVE_FAILED` / `TEMPLATE_ARCHIVE_FAILED` / `SCHEDULE_SAVE_FAILED` / `SCHEDULE_ARCHIVE_FAILED` / `SCHEDULE_GENERATE_FAILED` / `OCCURRENCE_CONFIRM_FAILED` / `OCCURRENCE_SKIP_FAILED` / `OCCURRENCE_UPDATE_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
+| `TEMPLATE_NOT_FOUND` | 不存在 | 重新載入 |
+| `TEMPLATE_ACTIVE_NAME_CONFLICT` | 恢復一個封存的模板，但已經有同名的使用中模板（schema 有 `idx_templates_active_name` 這條部分唯一索引） | 先把其中一個改名 |
+| `TEMPLATE_SAVE_FAILED` / `TEMPLATE_ARCHIVE_FAILED` / `TEMPLATE_RESTORE_FAILED` / `TEMPLATE_DELETE_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
 
 ## 設定
 

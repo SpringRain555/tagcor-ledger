@@ -155,39 +155,24 @@ class TransactionTemplate:
 
 
 @dataclass(frozen=True, slots=True)
-class RecurringSchedule:
-    schedule_id: str
-    name: str
-    status: str
-    entry_type: str
-    account_id: str
-    destination_account_id: str | None
-    category_id: str | None
-    amount_minor: int | None
-    currency: str
-    description: str
-    frequency: str
-    interval_count: int
-    start_date: str
-    next_due_date: str
-    end_date: str | None
+class TemplateRow:
+    """模板清單的一列：模板本身 ＋ 顯示需要的四個名字。
 
+    **組合原本的 dataclass，不是把欄位攤平複製一份** —— 比照 `CategoryNode`
+    與 `BalanceGap`。`TransactionTemplate` 同時是**寫入**用的型別
+    （`new_template()` 產、`save_template()` 收），把顯示用的名字加到它身上，
+    就等於要求每一個建立模板的地方都先去查四個名字。
 
-@dataclass(frozen=True, slots=True)
-class ScheduledOccurrence:
-    occurrence_id: str
-    schedule_id: str
-    schedule_name: str
-    due_date: str
-    status: str
-    entry_type: str
-    account_id: str
-    destination_account_id: str | None
-    category_id: str | None
-    amount_minor: int | None
-    currency: str
-    description: str
-    invalid_reason: str | None
+    四個名字由同一句查詢 join 出來，不是 1+N。`category_name` 是第一層、
+    `subcategory_name` 是第二層 —— 與 `TransactionRecord` 同一套拼法，
+    所以 `template_values()` 與 `transaction_values()` 能用同一個組字串的寫法。
+    """
+
+    template: TransactionTemplate
+    account_name: str
+    destination_account_name: str | None
+    category_name: str | None
+    subcategory_name: str | None
 
 
 @dataclass(frozen=True, slots=True)

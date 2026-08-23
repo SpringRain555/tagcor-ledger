@@ -25,7 +25,7 @@ def test_deposits_tab_and_pending_deposit_section_exist(window) -> None:
     assert not page.confirm_button.isVisibleTo(page)
 
 
-def test_deposit_contract_flows_into_pending_inbox(window) -> None:
+def test_deposit_contract_flows_into_pending_inbox(window, monkeypatch) -> None:
     controller = window.controller
 
     account_id = str(controller.account_options()[0]["account_id"])
@@ -46,13 +46,22 @@ def test_deposit_contract_flows_into_pending_inbox(window) -> None:
     assert window.operation_settings.deposits.contract_model.rowCount() == 1
 
     # 起存日在過去，所以一按「產生」就會出現到期項目。
-    assert controller.generate_due().success
-    window.inbox.refresh()
-    sources = [
-        window.inbox.model.items[row]["source"]
+    # **走真正的按鈕**，不是直接呼叫 controller —— 那顆按鈕在 v0.23.0 才補上
+    # （README 早就寫著它存在，程式裡卻沒有），走它才測得到有沒有接線。
+    page = window.operation_settings.deposits
+    told: list[str] = []
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.deposits.QMessageBox.information",
+        lambda parent, title, text: told.append(text),
+    )
+    page.generate_button.click()
+    assert told and "不會自動入帳" in told[0], told
+
+    contracts = [
+        str(window.inbox.model.items[row]["contract_name"])
         for row in range(window.inbox.model.rowCount())
     ]
-    assert "deposit" in sources
+    assert "郵局定存" in contracts, contracts
 
 
 def test_adding_an_account_that_already_exists_just_selects_it(window, qtbot, monkeypatch) -> None:

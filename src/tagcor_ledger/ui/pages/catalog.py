@@ -85,7 +85,7 @@ class CatalogPage(QWidget):
     """
 
     REORDERABLE = False
-    """這一頁要不要「排序…」按鈕。開了就要實作 `edit_order()`。"""
+    """這一頁要不要「排序設定」按鈕。開了就要實作 `edit_order()`。"""
 
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
@@ -158,7 +158,7 @@ class CatalogPage(QWidget):
             # **排序是獨立視窗，不是表格上的兩顆按鈕。** 上一版把「上移／下移」放在
             # 這裡，代價是依欄位排序時必須停用它們 —— 畫面上那一列的鄰居不是儲存
             # 順序裡的鄰居。搬進視窗之後衝突就不存在了：那個視窗永遠顯示自訂順序。
-            self.order_button = QPushButton("排序…")
+            self.order_button = QPushButton("排序設定")
             self.order_button.setToolTip(
                 "開一個視窗，用拖曳排出自己想要的順序。\n"
                 "這份順序也會用在記帳頁的下拉選單 —— 常用的排前面。"
@@ -168,7 +168,7 @@ class CatalogPage(QWidget):
         row.addStretch()
 
         setup_table(self.table, self.model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
-        # 「新增」與「排序…」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
+        # 「新增」與「排序設定」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
         bind_selection(self.table, rename, toggle, delete_button)
         layout = QVBoxLayout(self)
         layout.addLayout(row)

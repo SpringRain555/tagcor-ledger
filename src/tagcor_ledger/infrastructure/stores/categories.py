@@ -373,8 +373,6 @@ class CategoryStore(StoreBase):
                 [
                     ("category_allocations", "category_id = ?", (category_id,)),
                     ("transaction_templates", "category_id = ?", (category_id,)),
-                    ("recurring_schedules", "category_id = ?", (category_id,)),
-                    ("scheduled_occurrences", "category_id = ?", (category_id,)),
                 ],
             ):
                 raise ValueError("CATEGORY_IN_USE")

@@ -32,8 +32,9 @@ _COUNTED_TABLES = (
     "account_postings",
     "balance_snapshots",
     "transaction_templates",
-    "recurring_schedules",
-    "scheduled_occurrences",
+    "deposit_contracts",
+    "deposit_terms",
+    "deposit_events",
 )
 
 

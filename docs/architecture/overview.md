@@ -31,7 +31,7 @@ flowchart TD
 ## 分層
 
 - `domain`：純模型、`Money` 與定存的計息規則。**不依賴 Qt、sqlite3，也不依賴其他層。**
-- `application`：use case ＋ `Result`。交易、帳戶／類別、模板與定期收支、盤點、定存、
+- `application`：use case ＋ `Result`。交易、帳戶／類別、模板、盤點、定存、
   法規庫、設定、診斷。
 - `infrastructure`：schema migration、store、備份／還原／重製、CSV 匯出、時鐘。
 - `ui`：PySide6 widgets 與 controller。
@@ -48,7 +48,7 @@ src/tagcor_ledger/
 │   ├── transaction_service.py  收入／支出／轉帳／編輯／作廢／替換轉帳／列表
 │   ├── catalogs.py     帳戶、類別／項目
 │   ├── balance.py      餘額盤點與未解釋差額
-│   ├── automation.py   模板與定期收支
+│   ├── templates.py    模板（v0.23.0 前叫 automation.py，那時還管定期收支）
 │   ├── deposits/       定存。用繼承把 contracts（合約與期）／events（產生待確認）／
 │   │                   postings（確認入帳與續約）組成 DepositService；
 │   │                   base（共同基底＋DepositPosting）、views（送給 UI 的 dict）
@@ -58,13 +58,12 @@ src/tagcor_ledger/
 │   ├── result.py       Result：成功／失敗與錯誤碼
 │   └── failures.py     錯誤碼 → 中文說法。**一個碼的句子只寫在這裡**
 ├── infrastructure/
-│   ├── migrations.py   v1 → v7 的 schema
+│   ├── migrations.py   v1 → v8 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
 │   ├── stores/         一個聚合一個檔：accounts／categories／transactions／
 │   │                   balance／deposit_contracts／deposit_terms／deposit_events／
-│   │                   templates／schedules／occurrences ＋ base（共用）
-│   │                   ＋ drafts（模板與定期收支共用的草稿驗證，不是 store）
+│   │                   templates ＋ base（共用）
 │   ├── maintenance.py  備份、驗證、還原、重製、CSV 匯出
 │   └── clock.py        台北時區的「今天」
 ├── ui/
