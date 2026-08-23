@@ -2,6 +2,16 @@
 
 **只產生待確認項目，不入帳。** 成為交易一定要經過使用者按下確認，
 見套件 docstring 的第一條。
+
+## 兩個界線
+
+- **上界**：到期日在 `MATURITY_LEAD_DAYS` 天內。給「不自動轉存」留反應時間。
+- **下界**：`contract.recorded_on`（把這份合約記進帳本的那一天）。**建檔之前就到期的
+  事件不產生** —— 那段歷史已經含在帳戶的期初餘額裡，再產生一次草稿就是邀請使用者
+  把同一筆錢記第二次。見 [ADR-0012](../../../../docs/decisions/ADR-0012-deposit-events-start-at-record-date.md)。
+
+沒有下界時的實際後果（v0.24.0 之前）：一份 2025-02-15 起存的存本取息在 2026-08
+記進來，會一次倒 **13 筆**日期全在過去的項目進待確認。
 """
 
 from __future__ import annotations
@@ -15,7 +25,7 @@ from tagcor_ledger.domain.deposits import (
     DepositEventType,
     DepositTerm,
     InterestMethod,
-    suggest_interest_minor,
+    suggest_maturity_interest_minor,
     suggest_monthly_interest_minor,
 )
 from tagcor_ledger.domain.dates import monthly_dates, shift_days
@@ -53,13 +63,16 @@ class EventSection(DepositServiceBase):
     ) -> int:
         generated = 0
         method = InterestMethod(contract.interest_method)
+        # 建檔日之前到期的一律不產生，見模組說明。空字串（不知道何時建檔的舊資料）
+        # 比任何 ISO 日期都小，所以那種情形下這個下界自然不生效。
+        floor = contract.recorded_on
 
         if method is InterestMethod.MONTHLY_INTEREST:
             suggested = suggest_monthly_interest_minor(
                 principal_minor=term.principal_minor, annual_rate_ppm=term.annual_rate_ppm
             )
             for due in monthly_dates(term.start_date, term.maturity_date, today):
-                if self.store.add_event(
+                if due >= floor and self.store.add_event(
                     term_id=term.term_id,
                     event_type=str(DepositEventType.INTEREST_PAYOUT),
                     due_date=due,
@@ -70,7 +83,7 @@ class EventSection(DepositServiceBase):
 
         if method is InterestMethod.INSTALLMENT_SAVINGS:
             for due in monthly_dates(term.start_date, term.maturity_date, today):
-                if self.store.add_event(
+                if due >= floor and self.store.add_event(
                     term_id=term.term_id,
                     event_type=str(DepositEventType.INSTALLMENT),
                     due_date=due,
@@ -80,8 +93,10 @@ class EventSection(DepositServiceBase):
                     generated += 1
 
         # 到期提前 MATURITY_LEAD_DAYS 天出現，「不自動轉存」才來得及處理。
-        if term.maturity_date <= horizon:
-            interest = suggest_interest_minor(
+        if floor <= term.maturity_date <= horizon:
+            # **用 `suggest_maturity_interest_minor()`，不是 `suggest_interest_minor()`。**
+            # 後者算的是整期總額，而存本取息那筆錢每個月都已經領走了。
+            interest = suggest_maturity_interest_minor(
                 interest_method=contract.interest_method,
                 principal_minor=term.principal_minor,
                 annual_rate_ppm=term.annual_rate_ppm,

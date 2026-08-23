@@ -35,7 +35,6 @@ from typing import Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -53,6 +52,7 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
+from tagcor_ledger.ui.widgets.simple_form import DateField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
     bind_selection,
@@ -167,34 +167,48 @@ class InboxPage(QWidget):
     # --- 動作 -------------------------------------------------------------------
 
     def confirm_selected(self) -> None:
-        """只問一個實際金額。
+        """只問日期與實際金額。
 
         **不開一張可以改帳戶與類別的表單。** 定存事件的帳戶、流向與類別都是合約
-        當初就決定好的（三種計息方式 × 四種到期轉存方式），在確認的當下改它們等於
+        當初就決定好的（三種計息方式 × 四種到期及轉存方式），在確認的當下改它們等於
         改一份已經生效的合約 —— 那件事要去「操作設定 → 定存」做。
-        這裡唯一會與試算值不同的就是金額，因為權威值在存摺上。
+
+        **日期欄預設到期日，不是今天。** 到期項目提前七天出現（`MATURITY_LEAD_DAYS`），
+        所以「按確認的那一天」跟錢真的動的那一天差得出來 —— v0.24.0 之前交易日期
+        寫死成今天，照著提示馬上確認就會早七天。銀行晚一兩天入帳時可以自己改。
         """
         item: dict[str, Any] | None = self.model.selected_item(self.table)
         if item is None:
             return
         suggested = item.get("suggested_amount_minor")
-        text, accepted = QInputDialog.getText(
+        values = ask_form(
             self,
             "確認定存項目",
-            "實際金額（TWD）—— 以存摺為準，建議值只是試算：",
-            text=minor_text(suggested) if suggested is not None else "",
+            [
+                DateField("occurred_on", "入帳日期", default=str(item["due_date"])),
+                TextField(
+                    "amount",
+                    "實際金額（TWD）",
+                    default=minor_text(suggested) if suggested is not None else "",
+                    placeholder="以存摺為準，建議值只是試算",
+                ),
+            ],
         )
-        if not accepted:
+        if values is None:
             return
         try:
-            amount = Money.from_decimal_string(text.strip(), allow_zero=True).amount_minor
+            amount = Money.from_decimal_string(
+                str(values["amount"]), allow_zero=True
+            ).amount_minor
         except MoneyError as exc:
             QMessageBox.warning(
                 self, "金額無效", error_text(exc, fallback=BAD_AMOUNT_TEXT)
             )
             return
         result = self.controller.confirm_deposit_event(
-            str(item["event_id"]), actual_amount_minor=amount
+            str(item["event_id"]),
+            actual_amount_minor=amount,
+            occurred_on=str(values["occurred_on"]),
         )
         if not result.success:
             QMessageBox.warning(self, "無法確認", result_message(result))
@@ -202,6 +216,7 @@ class InboxPage(QWidget):
         self.refresh()
 
     def skip_selected(self) -> None:
+        """略過 =「我看過，這一期不記」。**到期項目會被擋下來**（見 `deposits/postings.py`）。"""
         item: dict[str, Any] | None = self.model.selected_item(self.table)
         if item is None:
             return

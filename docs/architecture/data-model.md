@@ -17,7 +17,11 @@
 - `schema_migrations`：migration registry。
 - `transaction_templates`：交易模板。
 - `balance_snapshots`：餘額盤點。
-- `deposit_contracts`：定存的持續關係 —— 哪個帳戶、怎麼計息、到期怎麼處理、利率是固定還是機動。
+- `deposit_contracts`：定存的持續關係 —— 哪個帳戶、怎麼計息、到期怎麼處理、利率是固定還是機動，
+  以及兩個日期：`opened_on`（**存單上首次存入那一天**，使用者填的就是它）與
+  `recorded_on`（建檔那天，**產生待確認項目的下界**，也是算滾到第幾期的那個當下）。
+  見 [ADR-0012](../decisions/ADR-0012-deposit-events-start-at-record-date.md)。
+  **`deposit_terms.start_date` 是第三個日期**：這一期的起存日，由 `current_term()` 算。
 - `deposit_terms`：定存的**每一期**。續存產生新的一期，舊的不改寫，所以歷次利率留得下來。
 - `deposit_events`：定存的到期與領息，等待使用者確認。**這是「待確認」頁唯一的來源**
   —— v0.23.0 移除定期收支之後（[ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)），
@@ -105,6 +109,14 @@ Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snap
 
 - v8：**砍掉** `scheduled_occurrences` 與 `recurring_schedules`（順序不可反 —— 前者有
   外鍵指向後者）。理由見 [ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)。
+- v9：`deposit_contracts.recorded_on`（把這份合約記進帳本的那一天），既有列用
+  `created_at` 的日期部分回填。**它是產生待確認項目的下界** ——
+  見 [ADR-0012](../decisions/ADR-0012-deposit-events-start-at-record-date.md)。
+  回填不可省：留空的話它比任何 ISO 日期都小，等於沒有下界。
+- v10：`deposit_contracts.opened_on`（**存單上首次存入那一天**），既有列用第一期的
+  起存日回填。使用者填的是這一欄，該建立哪一期與期序由
+  `domain.deposits.current_term()` 算 —— 見
+  [ADR-0012](../decisions/ADR-0012-deposit-events-start-at-record-date.md) 的「第二次修正」。
 
 **每一版都是新的一版，不改舊的那一版**，因為使用者的資料庫已經跑過了 —— migration
 記錄下來就不會再跑第二次，改舊版的內容對既有資料庫毫無效果。所以 v3 建的兩張表由

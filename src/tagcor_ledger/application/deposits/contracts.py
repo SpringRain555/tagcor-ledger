@@ -11,11 +11,13 @@ from tagcor_ledger.domain.deposits import (
     InterestMethod,
     MaturityAction,
     RateType,
-    suggest_interest_minor,
+    current_term,
+    suggest_maturity_interest_minor,
     suggest_monthly_interest_minor,
 )
 from tagcor_ledger.domain.dates import add_months
 from tagcor_ledger.domain.money import Money
+from tagcor_ledger.infrastructure.clock import today_taipei
 
 
 class ContractSection(DepositServiceBase):
@@ -30,24 +32,37 @@ class ContractSection(DepositServiceBase):
         maturity_action: str,
         interest_destination_account_id: str | None,
         term_months: int,
-        start_date: str,
+        opened_on: str,
         principal: str,
         annual_rate_ppm: int | None = None,
         monthly_deposit: str | None = None,
         rate_type: str = "fixed",
         note: str = "",
+        recorded_on: str | None = None,
     ) -> Result:
-        """建立合約並開出第一期。
+        """建立合約，並開出**目前存續中的那一期**。
 
-        `start_date` **允許早於帳本的第一筆交易** —— 既有的定存本來就比開始記帳早，
-        逼使用者補完所有歷史才記得下來是本末倒置的。
+        `opened_on` 是**存單上首次存入的那一天**，允許早於帳本的第一筆交易 ——
+        既有的定存本來就比開始記帳早，逼使用者補完所有歷史才記得下來是本末倒置的。
+
+        **開出來的不一定是第 1 期。** 勾了「無限次數自動轉期續存」的合約，記進來時
+        通常已經滾過好幾輪：112/11/15 存入的，2026-08-23 記進來時存續中的是
+        114/11/15 那一期，而它是**第 3 期**。`current_term()` 同時算出起存日與期序；
+        中間那幾期不建立資料列（它們的實際利息與當時的牌告利率都不在帳本裡，
+        憑空生出空紀錄就是捏造事實）。
+
+        **`recorded_on` 一個參數兩個用途，而且兩者同義**：它是產生待確認項目的下界
+        （[ADR-0012](../../../../docs/decisions/ADR-0012-deposit-events-start-at-record-date.md)），
+        也是「算滾到第幾期」的那個當下 —— 問的都是「你把它記進帳本的那一天」。
+        預設今天；參數留著是給測試控制用的，理由同 ADR-0012：
+        `generate_due(today=...)` 能控制今天，這兩件事就不能黏在真實時鐘上。
         """
         try:
             InterestMethod(interest_method)
             MaturityAction(maturity_action)
             RateType(rate_type)
         except ValueError:
-            return Result.fail("DEPOSIT_METHOD_INVALID", "計息方式、到期轉存方式或利率類型不正確。")
+            return Result.fail("DEPOSIT_METHOD_INVALID", "計息方式、到期及轉存方式或利率類型不正確。")
 
         # 機動利率不預先填數字：存的當下填的值到期時多半已經不是那個值了。
         if RateType(rate_type) is RateType.FLOATING:
@@ -76,6 +91,13 @@ class ContractSection(DepositServiceBase):
         if InterestMethod(interest_method) is InterestMethod.INSTALLMENT_SAVINGS and not monthly_minor:
             return Result.fail("DEPOSIT_MONTHLY_DEPOSIT_REQUIRED", "零存整付需要每月存入金額。")
 
+        record_date = recorded_on or today_taipei().isoformat()
+        start_date, sequence = current_term(
+            opened_on=opened_on,
+            term_months=term_months,
+            maturity_action=maturity_action,
+            today=record_date,
+        )
         correlation_id = new_correlation_id()
         try:
             contract = self.store.create_contract(
@@ -87,10 +109,12 @@ class ContractSection(DepositServiceBase):
                 term_months=term_months,
                 rate_type=rate_type,
                 note=note,
+                recorded_on=record_date,
+                opened_on=opened_on,
             )
             term = self.store.create_term(
                 contract_id=contract.contract_id,
-                sequence=1,
+                sequence=sequence,
                 start_date=start_date,
                 maturity_date=add_months(start_date, term_months),
                 principal_minor=principal_minor,
@@ -106,7 +130,11 @@ class ContractSection(DepositServiceBase):
             )
         return Result.ok(
             "定存合約已建立。",
-            details={"contract_id": contract.contract_id, "term_id": term.term_id},
+            details={
+                "contract_id": contract.contract_id,
+                "term_id": term.term_id,
+                "sequence": sequence,
+            },
             correlation_id=correlation_id,
         )
 
@@ -123,7 +151,7 @@ class ContractSection(DepositServiceBase):
         try:
             MaturityAction(maturity_action)
         except ValueError:
-            return Result.fail("DEPOSIT_METHOD_INVALID", "到期轉存方式不正確。")
+            return Result.fail("DEPOSIT_METHOD_INVALID", "到期及轉存方式不正確。")
         if maturity_action != MaturityAction.RENEW_PRINCIPAL_AND_INTEREST and (
             interest_destination_account_id is None
         ):
@@ -145,6 +173,23 @@ class ContractSection(DepositServiceBase):
                 fallback_message="定存合約無法修改。請匯出診斷資訊回報。",
             )
         return Result.ok("定存合約已更新。")
+
+    def close_contract(self, contract_id: str) -> Result:
+        """結束一份定存關係。**不產生任何交易。**
+
+        `DEPOSIT_CONTRACT_IN_USE` 與刪除確認框從 v0.9.0 就寫著「請改用結束合約」，
+        而在 v0.24.0 之前這條路只存在於 store 裡 —— 沒有 application、沒有 controller、
+        沒有按鈕。使用者被指去做一件做不到的事。
+        """
+        try:
+            self.store.close_contract(contract_id)
+        except STORE_FAILURES as exc:
+            return failure(
+                exc,
+                fallback_code="DEPOSIT_CONTRACT_CLOSE_FAILED",
+                fallback_message="定存合約無法結束。請匯出診斷資訊回報。",
+            )
+        return Result.ok("定存合約已結束。它不會再產生待確認項目。")
 
     def delete_contract(self, contract_id: str) -> Result:
         """刪除合約。
@@ -224,7 +269,7 @@ class ContractSection(DepositServiceBase):
             elif event_type is DepositEventType.INSTALLMENT:
                 amount = term.monthly_deposit_minor
             else:
-                amount = suggest_interest_minor(
+                amount = suggest_maturity_interest_minor(
                     interest_method=contract.interest_method,
                     principal_minor=term.principal_minor,
                     annual_rate_ppm=term.annual_rate_ppm,

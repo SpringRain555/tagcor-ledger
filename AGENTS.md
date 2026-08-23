@@ -177,6 +177,11 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - **欄位少的表格用 `fit_content=True` 收寬**；操作設定裡的表格另外用 `fit_rows=SETTINGS_TABLE_ROWS` 收高度，而且該分頁最後要有 `addStretch()`，否則 layout 會把多餘高度平均塞進元件之間。
 - **UI 用詞與資料表名稱可以不同**（例如使用者看到「項目」，schema 是 `categories` 的第二層）。已淘汰的 UI 用詞列在 `tests/unit/test_architecture.py` 的 `RETIRED_UI_WORDS`，該測試掃 `ui/` 與 `application/` 的字串常數（docstring 與註解不算）。**已移除的功能名稱也在那份名單上** —— 一顆通往不存在功能的按鈕比錯的用詞更糟。
 - 主要操作按鈕用 `primaryButton`；刪除、作廢、重製、還原等高風險操作用 `dangerButton`。
+- **有些字串照抄程式外面的正本，不得縮短。** `domain/deposits.py` 的
+  `MATURITY_ACTION_NAMES` 四個名字逐字照郵局定期儲金存單（`REQ-0007` §列舉 是文件側的
+  正本）—— 使用者在那個下拉選單前面做的事就是把實體單據上的打勾抄過來，
+  文字不逐字相同他每次都要自己重新推導對應關係。縮短一個 UI 字串之前先問：
+  **它在程式外面有沒有一個正本？**
 - **表格不得在 QSS 設 `color` 或 `selection-color`。** 那會蓋掉 model 的 `ForegroundRole`，金額的紅綠會被壓成同一個白。顏色由 `widgets/table.py` 的 `amount_color` 決定。
 - **選取列靠底色 ＋ 上下橫線，不是只靠底色。** `SELECTED` 對一般列底 `SURFACE` 的對比只有 1.34，
   而那是上限 —— 再亮一階，支出紅對選取列的對比就掉到 4.5 以下（`test_resources.py` 會紅）。

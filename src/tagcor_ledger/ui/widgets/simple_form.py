@@ -30,8 +30,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -39,6 +41,16 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from tagcor_ledger.ui.widgets.forms import date_field
+
+
+MIN_DIALOG_WIDTH = 420
+"""這種對話框的最小寬度。
+
+比 `FORM_WIDTH`（720）小很多是刻意的 —— 它只裝兩三格，撐到整頁表單的寬度會讓
+標籤與輸入格隔著半個螢幕。420 剛好讓最長的中文標籤加一格金額並排得下。
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +77,21 @@ class ChoiceField:
     options: Sequence[tuple[str, Any]] = field(default_factory=tuple)
 
 
-Field = TextField | ChoiceField
+@dataclass(frozen=True, slots=True)
+class DateField:
+    """一格日期。`default` 是 ISO 日期字串，回傳的也是 ISO 日期字串。
+
+    **走 `widgets/forms.py` 的 `date_field()`**，不要自己 `QDateEdit(...)` ——
+    那個工廠處理了一個 Qt 與 QSS 交互作用造成的誤觸問題（點欄位任何一處都會改年份），
+    繞過它的欄位完全沒有被保護到。`test_architecture.py` 有一條守著。
+    """
+
+    key: str
+    label: str
+    default: str = ""
+
+
+Field = TextField | ChoiceField | DateField
 
 
 class SimpleFormDialog(QDialog):
@@ -75,7 +101,7 @@ class SimpleFormDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self._fields = list(fields)
-        self._widgets: dict[str, QLineEdit | QComboBox] = {}
+        self._widgets: dict[str, QLineEdit | QComboBox | QDateEdit] = {}
         self._build()
 
     def _build(self) -> None:
@@ -88,6 +114,12 @@ class SimpleFormDialog(QDialog):
                     combo.addItem(label, value)
                 self._widgets[spec.key] = combo
                 form.addRow(spec.label, combo)
+                continue
+            if isinstance(spec, DateField):
+                stamp = QDate.fromString(spec.default, "yyyy-MM-dd")
+                picker = date_field(stamp if stamp.isValid() else None)
+                self._widgets[spec.key] = picker
+                form.addRow(spec.label, picker)
                 continue
             line = QLineEdit(spec.default)
             if spec.placeholder:
@@ -109,6 +141,10 @@ class SimpleFormDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(self.buttons)
+        # **輸入格要有可用的寬度。** 沒有這一行時對話框會縮到標籤與內容的自然寬度，
+        # 而中文標籤（「實際金額（TWD）」七個全形字）比輸入格寬得多 —— 實機截圖上
+        # 那一格只有四個字元寬，而使用者要在裡面打的是存摺上的權威金額。
+        self.setMinimumWidth(MIN_DIALOG_WIDTH)
 
         # 第一格拿焦點，開起來就能打字。
         first = next(iter(self._widgets.values()), None)
@@ -137,12 +173,15 @@ class SimpleFormDialog(QDialog):
         return True
 
     def values(self) -> dict[str, Any]:
-        """`{key: 值}`。文字欄已經 `strip()` 過，下拉回傳的是 `userData`。"""
+        """`{key: 值}`。文字欄已經 `strip()` 過，下拉回傳的是 `userData`，
+        日期欄回傳 ISO 日期字串。"""
         result: dict[str, Any] = {}
         for spec in self._fields:
             widget = self._widgets[spec.key]
             if isinstance(widget, QComboBox):
                 result[spec.key] = widget.currentData()
+            elif isinstance(widget, QDateEdit):
+                result[spec.key] = widget.date().toString("yyyy-MM-dd")
             elif isinstance(widget, QLineEdit):
                 result[spec.key] = widget.text().strip()
         return result

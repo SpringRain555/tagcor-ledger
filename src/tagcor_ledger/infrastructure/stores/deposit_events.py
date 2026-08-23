@@ -123,6 +123,25 @@ class DepositEventStore(StoreBase):
                 (suggested_amount_minor, now_iso(), event_id),
             )
 
+    def sum_confirmed_amount(self, term_id: str, event_type: str) -> int:
+        """這一期已經確認入帳的某一種事件合計多少。
+
+        存本取息到期時 `actual_interest_minor` 該填的是**整期實際領到的利息**，而那筆
+        錢是一個月一個月領走的 —— 到期事件本身的金額是 0。沒有這個查詢的話，
+        `deposit_terms.actual_interest_minor` 會被寫成 0，反推出來的實際年利率也是 0，
+        而那一期明明有利息。
+        """
+        with connect_database(self.paths.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT COALESCE(SUM(actual_amount_minor), 0) AS total
+                FROM deposit_events
+                WHERE term_id = ? AND event_type = ? AND status = 'confirmed'
+                """,
+                (term_id, event_type),
+            ).fetchone()
+        return int(row["total"]) if row is not None else 0
+
     def list_pending_events_for_term(self, term_id: str) -> list[DepositEvent]:
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(

@@ -29,6 +29,9 @@ def _contract_view(contract: DepositContract) -> dict[str, object]:
         "status": contract.status,
         "note": contract.note,
         "rate_type": contract.rate_type,
+        "account_name": contract.account_name,
+        "opened_on": contract.opened_on,
+        "recorded_on": contract.recorded_on,
     }
 
 

@@ -58,7 +58,7 @@ src/tagcor_ledger/
 │   ├── result.py       Result：成功／失敗與錯誤碼
 │   └── failures.py     錯誤碼 → 中文說法。**一個碼的句子只寫在這裡**
 ├── infrastructure/
-│   ├── migrations.py   v1 → v8 的 schema
+│   ├── migrations.py   v1 → v10 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
 │   ├── stores/         一個聚合一個檔：accounts／categories／transactions／
@@ -69,7 +69,7 @@ src/tagcor_ledger/
 ├── ui/
 │   ├── navigation.py   PageId、側邊欄順序、顯示文字（改 LABELS 不影響任何查表）
 │   ├── controller/     LedgerController：UI 唯一的入口。用繼承把 wiring／ledger／
-│   │                   automation／deposits／balance／maintenance／data_paths／
+│   │                   templates／deposits／balance／maintenance／data_paths／
 │   │                   overview 幾段組起來，`__init__.py` 只放組裝不放方法
 │   ├── formatting/     dict → 顯示字串（唯一決定畫面中文長相的地方）。
 │   │                   primitives（金額／日期／名稱表）、rows（每一列）、messages
@@ -77,15 +77,16 @@ src/tagcor_ledger/
 │   ├── theme.py        apply_dark_theme：Fusion style、字體、palette、QSS
 │   ├── colors.py       色票的正本
 │   ├── pages/          一個檔案一個畫面
-│   └── widgets/        sidebar、layout、table、forms、filters、
-│                       simple_form、draft_dialog、reorder_dialog、sort_editor
+│   └── widgets/        sidebar、layout、table、forms、filters、simple_form、
+│                       asset_share、template_dialog、deposit_dialog、
+│                       reorder_dialog、sort_editor
 └── app/                bootstrap、paths、path_settings、window_state、
                         logging_setup、single_instance、startup、resources
 ```
 
 ### 交易只有一個寫入點
 
-**`LedgerStore` 用繼承把 `stores/` 底下十個聚合組起來，不是委派。**
+**`LedgerStore` 用繼承把 `stores/` 底下八個聚合組起來，不是委派。**
 理由寫在 `sqlite_store.py` 的 module docstring：這些 store 共用同一份 `AppPaths` 與
 同一套「每次呼叫自己開連線」的模型，對外一直是單一物件；用繼承組裝時拆檔只是
 「這個 `def` 放在哪個檔案」，換成委派要手寫幾十個轉發方法。

@@ -12,7 +12,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 8
+LATEST_SCHEMA_VERSION = 10
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -422,6 +422,77 @@ def migrate_v8(connection: sqlite3.Connection) -> None:
     )
 
 
+def migrate_v9(connection: sqlite3.Connection) -> None:
+    """`deposit_contracts.recorded_on`：把這份合約記進帳本的那一天。
+
+    **這是產生待確認項目的下界**，見
+    [ADR-0012](../../../docs/decisions/ADR-0012-deposit-events-start-at-record-date.md)。
+    既有定存本來就比開始記帳早，而那段期間的利息已經含在帳戶的期初餘額裡 ——
+    v0.24.0 之前一份 2025-02-15 起存的存本取息在 2026-08 記進來，會一次倒 13 筆
+    日期全在過去的項目進待確認。
+
+    **為什麼不直接讀 `created_at`。** 讀得到，第一版也真的是這樣寫的 —— 但那是一個
+    技術性的稽核時間戳，而這裡要的是一條**業務規則**。兩件事綁在同一欄的代價立刻
+    就出現了：`generate_due(today=...)` 特意讓測試控制「今天」，而下界卻黏在真實
+    的牆上時鐘，於是十幾條原本有意義的測試同時變成「什麼都沒產生也算通過」。
+    分成兩欄之後兩者都能各自被設定。
+
+    既有的合約用 `created_at` 的日期部分回填 —— 那是當時唯一存在的事實，
+    而且對這位使用者來說兩者本來就相同（他的合約都是在同一台機器上建的）。
+    """
+    _add_column_if_missing(
+        connection,
+        "deposit_contracts",
+        "recorded_on",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    connection.execute(
+        "UPDATE deposit_contracts SET recorded_on = substr(created_at, 1, 10) "
+        "WHERE recorded_on = ''"
+    )
+
+
+def migrate_v10(connection: sqlite3.Connection) -> None:
+    """`deposit_contracts.opened_on`：存單上首次存入的那一天。
+
+    v9 的 `recorded_on` 解決了「不要替我補歷史」，但沒有解決「我想記錄的那個日期
+    放哪裡」。使用者手上的存單印的是 112/11/15，而目前存續中的是 114/11/15 那一期
+    —— 在這一欄出現之前，對話框那個「起存日」的正確值**不是他手上那張紙印的數字**，
+    旁邊還得放一段字解釋為什麼。那是設計沒對齊。
+
+    現在填的就是紙上那個數字，該滾到哪一期由 `domain.deposits.current_term()` 算，
+    而它同時算出**期序** —— 上面那個例子是第 3 期，不是第 1 期。
+
+    既有合約用它**第一期的起存日**回填：那是當時唯一存在的事實，而且對於在這一版
+    之前建檔的合約，兩者本來就相同（沒有滾期這回事，因為那時候填進去的就是一期）。
+
+    **不合併進 v9。** v9 已經寫好，而 migration 是一條照順序重演的歷史 ——
+    只要有任何一個資料庫跑過 v9，回頭改它就是無效的，而「有沒有跑過」不該靠記憶判斷。
+    多一次 `ALTER TABLE ADD COLUMN` 在 SQLite 是常數時間，代價遠低於猜錯。
+    """
+    _add_column_if_missing(
+        connection,
+        "deposit_contracts",
+        "opened_on",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    connection.execute(
+        """
+        UPDATE deposit_contracts
+        SET opened_on = COALESCE(
+            (
+                SELECT start_date FROM deposit_terms
+                WHERE deposit_terms.contract_id = deposit_contracts.contract_id
+                ORDER BY sequence
+                LIMIT 1
+            ),
+            ''
+        )
+        WHERE opened_on = ''
+        """
+    )
+
+
 def _add_column_if_missing(
     connection: sqlite3.Connection, table: str, column: str, definition: str
 ) -> None:
@@ -441,6 +512,8 @@ MIGRATIONS: dict[int, Migration] = {
     6: migrate_v6,
     7: migrate_v7,
     8: migrate_v8,
+    9: migrate_v9,
+    10: migrate_v10,
 }
 
 

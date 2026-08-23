@@ -67,7 +67,7 @@ def test_overview_recomputes_when_you_come_back_to_it(window) -> None:
     assert window.overview.total.text() == "-85"
 
 
-def test_the_inbox_number_is_the_same_everywhere(window) -> None:
+def test_the_inbox_number_is_the_same_everywhere(window, make_deposit) -> None:
     """側邊欄的數字與總覽的數字走同一個來源。
 
     兩邊各自算就會出現「側邊欄說 2、總覽說 3」，使用者沒有辦法知道哪一個才對。
@@ -75,19 +75,7 @@ def test_the_inbox_number_is_the_same_everywhere(window) -> None:
     """
     controller = window.controller
 
-    account_id = str(controller.account_options()[0]["account_id"])
-    assert controller.create_deposit_contract(
-        account_id=account_id,
-        name="郵局定存",
-        interest_method="lump_sum",
-        maturity_action="renew_principal_only",
-        interest_destination_account_id=account_id,
-        term_months=12,
-        start_date="2020-01-15",
-        principal="100000",
-        annual_rate_ppm=16_000,
-    ).success
-    assert controller.generate_deposit_events().success
+    make_deposit(controller)
     window.refresh_pending_badge()
     window.show_page(PageId.OVERVIEW)
 

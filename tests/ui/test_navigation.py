@@ -198,7 +198,7 @@ def test_settings_group_sits_at_the_bottom_of_the_rail(window, qtbot, tmp_path: 
     assert rail.settings.geometry().top() - rail.daily.geometry().bottom() > 80
 
 
-def test_pending_badge_is_drawn_beside_the_label_not_inside_it(window) -> None:
+def test_pending_badge_is_drawn_beside_the_label_not_inside_it(window, make_deposit) -> None:
     """數字放在項目資料裡，**不寫進標籤文字**。
 
     舊做法是把文字改寫成「待確認（2）」，標籤長度會隨數字跳動 —— 而側邊欄的項目
@@ -211,19 +211,7 @@ def test_pending_badge_is_drawn_beside_the_label_not_inside_it(window) -> None:
     assert item.data(BADGE_ROLE) is None
 
     controller = window.controller
-    account_id = str(controller.account_options()[0]["account_id"])
-    assert controller.create_deposit_contract(
-        account_id=account_id,
-        name="郵局定存",
-        interest_method="lump_sum",
-        maturity_action="renew_principal_only",
-        interest_destination_account_id=account_id,
-        term_months=12,
-        start_date="2020-01-15",
-        principal="100000",
-        annual_rate_ppm=16_000,
-    ).success
-    assert controller.generate_deposit_events().success
+    make_deposit(controller)
     window.refresh_pending_badge()
     assert item.text() == "待確認"  # 文字不動
     assert item.data(BADGE_ROLE) == len(controller.list_inbox())

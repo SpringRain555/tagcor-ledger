@@ -184,7 +184,7 @@
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
 |---|---|---|
 | `DEPOSIT_NAME_REQUIRED` | 合約沒有名稱 | 填名稱 |
-| `DEPOSIT_METHOD_INVALID` | 計息方式或到期轉存方式不是允許的值 | UI 正常操作不會發生 |
+| `DEPOSIT_METHOD_INVALID` | 計息方式或到期及轉存方式不是允許的值 | UI 正常操作不會發生 |
 | `DEPOSIT_TERM_MONTHS_INVALID` | 期長不是正整數 | 填月數，例如一年是 12 |
 | `DEPOSIT_PRINCIPAL_INVALID` | 本金是負數 | 本金不能是負的 |
 | `DEPOSIT_AMOUNT_INVALID` | 本金或每月存入金額格式不對 | 只接受整數元，不要加逗號或單位 |
@@ -196,7 +196,10 @@
 | `DEPOSIT_AMOUNT_REQUIRED` | 確認時沒有金額，而且利率空白算不出建議值 | **照存摺填實際金額。** 或先回定存頁補上年利率 |
 | `DEPOSIT_CONTRACT_IN_USE` | 想刪掉已經有入帳紀錄的定存 | **改用「結束合約」。** 刪除只允許從未入帳過的，否則帳本裡的交易會失去來歷 |
 | `DEPOSIT_TERM_NOT_EDITABLE` | 想修改已續約或已結清的期 | 只有「存續中」的期能改。已經產生過交易的改了會對不起帳 |
-| `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` / `DEPOSIT_SKIP_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
+| `DEPOSIT_TERM_NOT_ACTIVE` | 想中途解約一期已經結清／續約／解約過的期 | 只有「存續中」的期能解約 |
+| `DEPOSIT_CONTRACT_HAS_ACTIVE_TERM` | 想結束一份還有存續中期數的合約 | **那筆本金會從清單上消失而帳上不動。** 提前結束用「中途解約」；要等它到期就在待確認確認到期 |
+| `DEPOSIT_MATURITY_CANNOT_BE_SKIPPED` | 在待確認按了「略過」，而選的是到期項目 | **略過會讓那一期永遠停在「存續中」**（事件不會再生出來）。利息不想記就確認、金額填 0；不再追蹤就結束合約或中途解約 |
+| `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` / `DEPOSIT_SKIP_FAILED` / `DEPOSIT_CONTRACT_CLOSE_FAILED` / `DEPOSIT_TERMINATE_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
 
 ## 備份
 

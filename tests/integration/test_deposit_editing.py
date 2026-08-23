@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -53,10 +54,13 @@ def _make_contract(
         maturity_action=maturity_action,
         interest_destination_account_id=savings_id,
         term_months=12,
-        start_date="2026-02-15",
+        opened_on="2026-02-15",
         principal="100000",
         annual_rate_ppm=rate,
         rate_type=rate_type,
+        # 建檔日 = 起存日。`recorded_on` 是產生待確認項目的下界（ADR-0012），
+        # 留成預設的今天會讓這個檔案的假日期在真實時鐘走過去之後開始漏測。
+        recorded_on="2026-02-15",
     )
     assert result.success, result.message
     return str(result.details["contract_id"])
@@ -237,7 +241,7 @@ def test_settled_terms_cannot_be_edited(service: DepositService) -> None:
 
 
 def test_contract_edit_only_touches_the_allowed_fields(service: DepositService) -> None:
-    """只能改名稱、到期轉存方式、利息轉入帳戶。"""
+    """只能改名稱、到期及轉存方式、利息轉入帳戶。"""
     contract_id = _make_contract(service)
     _deposit_id, savings_id = _accounts(service)
 
@@ -343,3 +347,246 @@ def test_a_v6_database_upgrades_to_v7(tmp_path: Path) -> None:
     assert version == LATEST_SCHEMA_VERSION
     assert "rate_type" in contract_columns
     assert "effective_rate_ppm" in term_columns
+
+
+# --- 結束合約與中途解約（v0.24.0）-------------------------------------------
+
+
+def test_closing_a_contract_takes_it_off_the_list_but_keeps_the_history(
+    service: DepositService,
+) -> None:
+    """**這條是「訊息指向一件做不到的事」的收尾。**
+
+    `DEPOSIT_CONTRACT_IN_USE` 與刪除確認框從 v0.9.0 就寫著「請改用結束合約」，而
+    `close_contract()` 只存在於 store 裡 —— application、controller、UI 三層都沒有接它。
+    使用者照著訊息去找那顆按鈕，找不到。
+    """
+    contract_id = _make_contract(service)
+    service.generate_due(today="2027-02-15")
+    event = service.store.list_pending_events()[0]
+    assert service.confirm(event.event_id, actual_amount_minor=1_600).success
+
+    result = service.close_contract(contract_id)
+
+    assert result.success, result.message
+    assert service.store.list_contracts() == [], "結束之後預設清單上不該還有它"
+    kept = service.store.list_contracts(include_closed=True)
+    assert [item.contract_id for item in kept] == [contract_id], "紀錄本身要留著"
+    assert kept[0].status == "closed"
+    assert service.store.list_terms(contract_id=contract_id), "每一期的紀錄也要留著"
+
+
+def test_a_contract_with_a_live_term_cannot_be_closed(service: DepositService) -> None:
+    """還有錢在裡面就不准關 —— 那筆本金會從清單上消失而帳上不動。"""
+    contract_id = _make_contract(service)
+
+    result = service.close_contract(contract_id)
+
+    assert not result.success
+    assert result.error_code == "DEPOSIT_CONTRACT_HAS_ACTIVE_TERM"
+    assert "中途解約" in result.message, result.message
+    assert "DEPOSIT_" not in result.message, f"錯誤碼漏到畫面上了：{result.message}"
+
+
+def test_terminating_a_term_moves_the_money_and_ends_the_contract(
+    service: DepositService,
+) -> None:
+    """中途解約：本金與利息回到指定帳戶，這一期已解約，合約一起結束。
+
+    **這是定存頁唯一會產生交易的動作。** 到期一律走待確認 —— 但提前解約沒有到期
+    事件可以確認（那一期根本還沒到期），所以那條路只能從定存頁走。
+    """
+    contract_id = _make_contract(service)
+    deposit_id, savings_id = _accounts(service)
+    term = service.store.list_terms(contract_id=contract_id)[0]
+
+    result = service.terminate_term(
+        term.term_id,
+        occurred_on="2026-08-20",
+        principal_minor=100_000,
+        interest_minor=420,
+    )
+
+    assert result.success, result.message
+    assert service.store.get_term(term.term_id).status == "terminated"
+    assert service.store.get_term(term.term_id).actual_interest_minor == 420
+    assert service.store.get_contract(contract_id).status == "closed"
+
+    with sqlite3.connect(service.paths.database_path) as connection:
+        rows = [
+            (str(row[0])[:10], str(row[1]), int(row[2]))
+            for row in connection.execute(
+                """
+                SELECT t.occurred_at, t.description, p.amount_minor
+                FROM transactions t
+                JOIN account_postings p ON p.transaction_id = t.transaction_id
+                WHERE p.account_id = ?
+                """,
+                (savings_id,),
+            )
+        ]
+    assert ("2026-08-20", "郵局定存 解約本金", 100_000) in rows, rows
+    assert ("2026-08-20", "郵局定存 解約利息", 420) in rows, rows
+    assert deposit_id  # 本金那一筆是從定存帳戶轉出去的，上面已經在對面看到了
+
+
+def test_terminating_without_interest_writes_only_the_principal(
+    service: DepositService,
+) -> None:
+    """存不到一個月就解約可能是真的沒有利息。**0 元的收入不該被記成一筆交易。**"""
+    contract_id = _make_contract(service)
+    term = service.store.list_terms(contract_id=contract_id)[0]
+
+    assert service.terminate_term(
+        term.term_id, occurred_on="2026-03-01", principal_minor=100_000, interest_minor=0
+    ).success
+
+    with sqlite3.connect(service.paths.database_path) as connection:
+        descriptions = [
+            str(row[0]) for row in connection.execute("SELECT description FROM transactions")
+        ]
+    assert descriptions == ["郵局定存 解約本金"], descriptions
+
+
+def test_a_term_that_is_no_longer_active_cannot_be_terminated(
+    service: DepositService,
+) -> None:
+    """已結清／已續約／已解約的期都不能再解約一次。"""
+    contract_id = _make_contract(service)
+    term = service.store.list_terms(contract_id=contract_id)[0]
+    assert service.terminate_term(
+        term.term_id, occurred_on="2026-03-01", principal_minor=100_000, interest_minor=0
+    ).success
+
+    result = service.terminate_term(
+        term.term_id, occurred_on="2026-04-01", principal_minor=100_000, interest_minor=0
+    )
+
+    assert not result.success
+    assert result.error_code == "DEPOSIT_TERM_NOT_ACTIVE"
+    assert "DEPOSIT_" not in result.message, f"錯誤碼漏到畫面上了：{result.message}"
+
+
+def test_terminating_refuses_negative_amounts(service: DepositService) -> None:
+    contract_id = _make_contract(service)
+    term = service.store.list_terms(contract_id=contract_id)[0]
+
+    result = service.terminate_term(
+        term.term_id, occurred_on="2026-03-01", principal_minor=-1, interest_minor=0
+    )
+
+    assert not result.success
+    assert result.error_code == "DEPOSIT_AMOUNT_INVALID"
+
+
+# --- v8 → v9 升級 -----------------------------------------------------------
+
+
+def test_a_v8_database_upgrades_to_v9_and_backfills_the_record_date(tmp_path: Path) -> None:
+    """`recorded_on` 是新的一欄，既有合約用 `created_at` 的日期部分回填。
+
+    回填得對很重要：留空的話那份合約的下界會是空字串（比任何日期都小），
+    等於**沒有下界** —— 使用者升級之後第一次開程式就會被灌一堆歷史項目。
+    """
+    import sqlite3
+
+    from tagcor_ledger.infrastructure.database import initialize_database
+    from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION
+
+    paths = resolve_app_paths(tmp_path / "data")
+    initialize_database(paths)
+    store = LedgerStore(paths)
+    store.create_account(name="郵局活儲")
+    store.create_account(name="郵局定存")
+    accounts = {item.name: item.account_id for item in store.list_accounts()}
+    contract = store.create_contract(
+        account_id=accounts["郵局定存"],
+        name="郵局定存",
+        interest_method=str(InterestMethod.LUMP_SUM),
+        maturity_action=str(MaturityAction.NONE),
+        interest_destination_account_id=accounts["郵局活儲"],
+        term_months=12,
+    )
+
+    # 假裝這是一個只跑到 v8 的舊資料庫：沒有 recorded_on，只有 created_at。
+    with sqlite3.connect(paths.database_path) as connection:
+        connection.execute("DELETE FROM schema_migrations WHERE version = 9")
+        connection.execute("ALTER TABLE deposit_contracts DROP COLUMN recorded_on")
+        connection.execute(
+            "UPDATE deposit_contracts SET created_at = '2024-03-09T10:00:00+08:00'"
+        )
+        connection.commit()
+
+    initialize_database(paths)
+
+    with sqlite3.connect(paths.database_path) as connection:
+        version = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+    assert version == LATEST_SCHEMA_VERSION
+    assert LedgerStore(paths).get_contract(contract.contract_id).recorded_on == "2024-03-09"
+
+
+def test_the_contract_list_knows_which_account_it_is(service: DepositService) -> None:
+    """定存頁的「帳戶」欄要有東西。
+
+    **它從 v0.9.0 空到 v0.23.0。** `_contract_view()` 沒有 `account_name` 這個 key，
+    而 `deposit_contract_values()` 寫的是 `item.get("account_name", "")` —— 那個預設值
+    把「漏了一個欄位」變成了合法輸出，於是一整欄的空白一路活著沒有人發現，
+    直到 2026-08-23 看實機截圖。
+
+    現在名字由 store 的 LEFT JOIN 帶進來（比照 `DepositEvent.contract_name`），
+    而 formatter 改用下標 —— 再漏就是 `KeyError`，不是一欄空白。
+    """
+    contract_id = _make_contract(service)
+
+    listed = service.store.list_contracts()
+    assert [item.account_name for item in listed] == ["郵局定存"]
+    assert service.store.get_contract(contract_id).account_name == "郵局定存"
+
+    view = service.list_contracts().details["contracts"][0]
+    assert view["account_name"] == "郵局定存"
+
+
+def test_a_v9_database_upgrades_to_v10_and_backfills_the_passbook_date(tmp_path: Path) -> None:
+    """`opened_on` 是新的一欄，既有合約用**第一期的起存日**回填。
+
+    那是當時唯一存在的事實 —— 在這一欄出現之前填進去的就是一期，沒有滾期這回事。
+    """
+    from tagcor_ledger.infrastructure.database import initialize_database
+    from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION
+
+    paths = resolve_app_paths(tmp_path / "data")
+    initialize_database(paths)
+    store = LedgerStore(paths)
+    store.create_account(name="郵局活儲")
+    store.create_account(name="郵局定存")
+    accounts = {item.name: item.account_id for item in store.list_accounts()}
+    contract = store.create_contract(
+        account_id=accounts["郵局定存"],
+        name="郵局定存",
+        interest_method=str(InterestMethod.LUMP_SUM),
+        maturity_action=str(MaturityAction.NONE),
+        interest_destination_account_id=accounts["郵局活儲"],
+        term_months=12,
+        opened_on="2026-02-15",
+    )
+    store.create_term(
+        contract_id=contract.contract_id,
+        sequence=1,
+        start_date="2026-02-15",
+        maturity_date="2027-02-15",
+        principal_minor=100_000,
+        annual_rate_ppm=RATE_1_60_PERCENT,
+    )
+
+    # 假裝這是一個只跑到 v9 的舊資料庫：沒有 opened_on，只有第一期的起存日。
+    with sqlite3.connect(paths.database_path) as connection:
+        connection.execute("DELETE FROM schema_migrations WHERE version = 10")
+        connection.execute("ALTER TABLE deposit_contracts DROP COLUMN opened_on")
+        connection.commit()
+
+    initialize_database(paths)
+
+    with sqlite3.connect(paths.database_path) as connection:
+        version = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+    assert version == LATEST_SCHEMA_VERSION
+    assert LedgerStore(paths).get_contract(contract.contract_id).opened_on == "2026-02-15"

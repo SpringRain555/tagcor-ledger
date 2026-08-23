@@ -87,25 +87,37 @@ class DepositTermStore(StoreBase):
 
     def get_term(self, term_id: str) -> DepositTerm:
         with connect_database(self.paths.database_path) as connection:
-            row = connection.execute(_TERM_SELECT + " WHERE term_id = ?", (term_id,)).fetchone()
+            row = connection.execute(
+                _TERM_SELECT + " WHERE t.term_id = ?", (term_id,)
+            ).fetchone()
         if row is None:
             raise NotFoundError("DEPOSIT_TERM_NOT_FOUND")
         return _row_to_term(row)
 
     def list_terms(self, *, contract_id: str | None = None) -> list[DepositTerm]:
-        clause = "WHERE contract_id = ?" if contract_id else ""
+        clause = "WHERE t.contract_id = ?" if contract_id else ""
         parameters: tuple[Any, ...] = (contract_id,) if contract_id else ()
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
-                f"{_TERM_SELECT} {clause} ORDER BY maturity_date DESC, sequence DESC",
+                f"{_TERM_SELECT} {clause} ORDER BY t.maturity_date DESC, t.sequence DESC",
                 parameters,
             ).fetchall()
         return [_row_to_term(row) for row in rows]
 
     def list_active_terms(self) -> list[DepositTerm]:
+        """存續中、而且合約還沒結束的期。
+
+        **合約那一側也要濾。** 產生待確認項目走的是這個清單，少了那個條件，
+        一份已結束的合約仍然會生出到期項目 —— 而它在畫面上預設是看不見的。
+        """
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
-                _TERM_SELECT + " WHERE status = 'active' ORDER BY maturity_date"
+                _TERM_SELECT
+                + """
+                JOIN deposit_contracts c ON c.contract_id = t.contract_id
+                WHERE t.status = 'active' AND c.status = 'active'
+                ORDER BY t.maturity_date
+                """
             ).fetchall()
         return [_row_to_term(row) for row in rows]
 
@@ -215,11 +227,14 @@ class DepositTermStore(StoreBase):
 
 
 _TERM_SELECT = """
-SELECT term_id, contract_id, sequence, start_date, maturity_date, principal_minor,
-       annual_rate_ppm, monthly_deposit_minor, actual_interest_minor, status, note,
-       effective_rate_ppm
-FROM deposit_terms
+SELECT t.term_id, t.contract_id, t.sequence, t.start_date, t.maturity_date, t.principal_minor,
+       t.annual_rate_ppm, t.monthly_deposit_minor, t.actual_interest_minor, t.status, t.note,
+       t.effective_rate_ppm
+FROM deposit_terms t
 """
+"""**欄位一律加 `t.` 前綴。** `list_active_terms()` 要 join `deposit_contracts`，
+而兩張表都有 `contract_id` 與 `status` —— 不加前綴的 SELECT 一 join 就是
+`ambiguous column name`。"""
 
 
 def _row_to_term(row: sqlite3.Row) -> DepositTerm:

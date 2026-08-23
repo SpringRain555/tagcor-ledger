@@ -35,7 +35,7 @@
                          "document":  "state-machines.md",
                          "index":  3,
                          "svg":  "state-machines-3.svg",
-                         "sha256":  "1671ee42afb3cc14dd01bda83f183ca1dee310a8f666021d2d0f4ea0ad5a3c09"
+                         "sha256":  "0462f63366eb3f7f1314c11d19adfc1eb14a9ad4423c1c52af720e31d2f12fd2"
                      },
                      {
                          "document":  "state-machines.md",
@@ -47,7 +47,7 @@
                          "document":  "state-machines.md",
                          "index":  5,
                          "svg":  "state-machines-5.svg",
-                         "sha256":  "266ab76b66c12d45ca04c3e4b5968a0447915c3312285693bd6c3617ffb4284c"
+                         "sha256":  "a648f0c07196bb6039b11649dfd8448c52e1d7c83757f62fd0aeb9225a748707"
                      },
                      {
                          "document":  "ui-workflows.md",

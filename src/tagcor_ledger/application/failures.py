@@ -194,6 +194,13 @@ ERROR_MESSAGES: dict[str, str] = {
     "DEPOSIT_TERM_NOT_EDITABLE": (
         "只有「存續中」的期可以修改。已續約或已結清的期已經產生過交易，改了會對不起帳。"
     ),
+    # `DEPOSIT_TERM_NOT_ACTIVE` 與 `DEPOSIT_MATURITY_CANNOT_BE_SKIPPED` **不在這裡** ——
+    # 它們是服務自己 `Result.fail()` 當場回的，訊息就寫在那兩個呼叫處（見本檔開頭
+    # 「`ERROR_MESSAGES` 的範圍」）。收進來會變成同一個碼有兩個講法。
+    "DEPOSIT_CONTRACT_HAS_ACTIVE_TERM": (
+        "這份定存還有存續中的一期，不能直接結束 —— 那筆本金會從清單上消失而帳上不動。"
+        "要提前結束請用「中途解約」；要等它到期就在「待確認」確認到期。"
+    ),
     # ---- 備份（infrastructure/maintenance.py）----
     # 這一組是 `validate_backup()` **回傳**的，不是 raise 的（見測試裡的
     # RAISED_INDIRECTLY），只有 `BACKUP_INTEGRITY_FAILED` 兩種形式都有。

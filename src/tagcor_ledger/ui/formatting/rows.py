@@ -157,11 +157,17 @@ def deposit_contract_values(item: dict[str, Any]) -> list[str]:
     kind = RateType(str(item.get("rate_type", "fixed")))
     return [
         str(item["name"]),
-        str(item.get("account_name", "")),
+        # **不要寫成 `item.get("account_name", "")`。** 那個預設值讓「帳戶」欄從
+        # v0.9.0 一路空白到 v0.23.0 都沒有人發現 —— `_contract_view()` 根本沒有
+        # 這個 key，而 `.get()` 把「漏了」變成了合法輸出。同 `account_values` 用下標。
+        str(item["account_name"]),
         INTEREST_METHOD_NAMES[method],
         MATURITY_ACTION_NAMES[action],
         RATE_TYPE_NAMES[kind],
         f"{item['term_months']} 個月",
+        # 存單上首次存入那一天 —— 這一欄是使用者對得回那張紙的東西。
+        # 目前存續中那一期的起存日在下面「每一期」那張表，兩者刻意不混。
+        display_date(str(item["opened_on"])) if item.get("opened_on") else "—",
         "使用中" if item["status"] == "active" else "已結束",
     ]
 

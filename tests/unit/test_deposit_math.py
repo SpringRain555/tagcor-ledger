@@ -20,11 +20,15 @@ from tagcor_ledger.domain.deposits import (
     InterestMethod,
     MaturityAction,
     derive_annual_rate_ppm,
+    current_term,
     interest_goes_to_deposit_account,
+    matured_principal_minor,
     maturity_returns_principal,
     monthly_rate,
     renewed_principal_minor,
+    renews_forever,
     suggest_interest_minor,
+    suggest_maturity_interest_minor,
     suggest_monthly_interest_minor,
 )
 
@@ -52,7 +56,7 @@ MATURITY_MATRIX = {
 
 
 def test_the_matrix_covers_every_maturity_action() -> None:
-    """陽性對照：新增一種到期轉存方式而沒補矩陣時，這裡先失敗。
+    """陽性對照：新增一種到期及轉存方式而沒補矩陣時，這裡先失敗。
 
     少了它，底下三條會安靜地只驗現有的四種，而新加的那一種一條都沒測到。
     """
@@ -364,3 +368,187 @@ def test_installment_savings_can_be_derived_without_any_principal() -> None:
         )
         is not None
     )
+
+
+# --- 到期那天還剩多少利息沒領 ---------------------------------------------------
+
+
+@pytest.mark.parametrize("method", [InterestMethod.LUMP_SUM, InterestMethod.INSTALLMENT_SAVINGS])
+def test_maturity_interest_equals_the_whole_term_when_nothing_was_paid_out(
+    method: InterestMethod,
+) -> None:
+    """整存整付與零存整付期間內都沒領過息，所以到期就是整期的量。"""
+    assert suggest_maturity_interest_minor(
+        interest_method=str(method),
+        principal_minor=PRINCIPAL,
+        annual_rate_ppm=RATE_PPM,
+        term_months=MONTHS,
+        monthly_deposit_minor=MONTHLY_DEPOSIT,
+    ) == suggest_interest_minor(
+        interest_method=str(method),
+        principal_minor=PRINCIPAL,
+        annual_rate_ppm=RATE_PPM,
+        term_months=MONTHS,
+        monthly_deposit_minor=MONTHLY_DEPOSIT,
+    )
+
+
+def test_monthly_interest_has_nothing_left_at_maturity() -> None:
+    """**這一條是 v0.24.0 修掉的重複計算。**
+
+    存本取息每個月都領息，到期日當天那一期也由 `INTEREST_PAYOUT` 事件發過了 ——
+    到期只剩本金轉回。v0.24.0 之前到期事件的建議金額是 `suggest_interest_minor()`
+    算出來的**整期總額**，於是照建議值確認下去，帳上的利息剛好是實際的兩倍
+    （100,000 @ 1.56% 一年：12 × 130 ＝ 1,560，加上到期又一筆 1,560）。
+    """
+    whole_term = suggest_interest_minor(
+        interest_method=str(InterestMethod.MONTHLY_INTEREST),
+        principal_minor=PRINCIPAL,
+        annual_rate_ppm=RATE_PPM,
+        term_months=MONTHS,
+    )
+    assert whole_term, "整期總額是 0 的話這條測試沒有在檢查東西"
+    assert (
+        suggest_maturity_interest_minor(
+            interest_method=str(InterestMethod.MONTHLY_INTEREST),
+            principal_minor=PRINCIPAL,
+            annual_rate_ppm=RATE_PPM,
+            term_months=MONTHS,
+        )
+        == 0
+    )
+
+
+# --- 到期時定存帳戶裡的本金 -----------------------------------------------------
+
+
+@pytest.mark.parametrize("method", [InterestMethod.LUMP_SUM, InterestMethod.MONTHLY_INTEREST])
+def test_matured_principal_is_just_the_principal_for_one_shot_deposits(
+    method: InterestMethod,
+) -> None:
+    assert (
+        matured_principal_minor(
+            interest_method=str(method),
+            principal_minor=PRINCIPAL,
+            monthly_deposit_minor=None,
+            term_months=MONTHS,
+        )
+        == PRINCIPAL
+    )
+
+
+def test_installment_savings_accumulates_its_principal_from_the_monthly_deposits() -> None:
+    """**這一條是 v0.24.0 修掉的另一個計算錯誤。**
+
+    零存整付的 `principal_minor` 一開始就是 0（見
+    `test_installment_savings_ignores_the_principal_entirely`），本金是每月存入
+    累積出來的。v0.24.0 之前到期直接轉 `term.principal_minor` —— 於是「本金轉回」
+    是一筆 **0 元**的轉帳，續存的下一期本金也是 0。
+    """
+    assert (
+        matured_principal_minor(
+            interest_method=str(InterestMethod.INSTALLMENT_SAVINGS),
+            principal_minor=0,
+            monthly_deposit_minor=MONTHLY_DEPOSIT,
+            term_months=MONTHS,
+        )
+        == MONTHLY_DEPOSIT * MONTHS
+    )
+
+
+def test_a_principal_the_user_filled_in_beats_the_estimate() -> None:
+    """中間漏存過一期時使用者可以在「修改所選期」填實際累積的本金。
+
+    沒有這條退路的話那個估算值就是不可修正的 —— 而確認到期時只問利息，不問本金。
+    """
+    assert (
+        matured_principal_minor(
+            interest_method=str(InterestMethod.INSTALLMENT_SAVINGS),
+            principal_minor=999,
+            monthly_deposit_minor=MONTHLY_DEPOSIT,
+            term_months=MONTHS,
+        )
+        == 999
+    )
+
+
+# --- 目前存續中的是哪一期 -------------------------------------------------------
+
+
+RENEWING = str(MaturityAction.RENEW_PRINCIPAL_ONLY)
+
+
+def test_current_term_rolls_forward_past_every_matured_term() -> None:
+    """存單印的是**最初**那一期，而自動轉期續存的定存早就滾過好幾輪了。
+
+    使用者的存單：112/11/15 存入、113/11/15 到期、勾「本金無限次數自動轉期續存」。
+    2026-08-23 當下真正存續中的是 2026-02-15 起的那一期，**而它是第 3 期**。
+
+    期序不是裝飾 —— 它是使用者對得回存單的東西（「這份定存滾過兩輪了」）。
+    """
+    assert current_term(
+        opened_on="2023-11-15", term_months=12, maturity_action=RENEWING, today="2026-08-23"
+    ) == ("2026-02-15", 3)
+
+
+def test_current_term_leaves_a_term_that_has_not_matured_alone() -> None:
+    assert current_term(
+        opened_on="2026-02-15", term_months=12, maturity_action=RENEWING, today="2026-08-23"
+    ) == ("2026-02-15", 1)
+
+
+def test_current_term_stops_the_moment_the_maturity_is_in_the_future() -> None:
+    """到期日剛好是今天算**已經到期**，跟 `generate_due()` 的界線一致。"""
+    assert current_term(
+        opened_on="2025-02-15", term_months=12, maturity_action=RENEWING, today="2026-02-15"
+    ) == ("2026-02-15", 2)
+
+
+@pytest.mark.parametrize(
+    "action", [MaturityAction.NONE, MaturityAction.PRINCIPAL_INTEREST_TO_ACCOUNT]
+)
+def test_a_deposit_that_does_not_renew_has_no_current_term_to_roll_to(
+    action: MaturityAction,
+) -> None:
+    """不續存的兩種到期就結束了，**沒有下一期可以滾過去**。
+
+    替它們算一個「目前這一期」等於捏造一份不存在的定存 —— 對話框也因此不給那顆
+    「改成 ⋯」的按鈕，只說「這份定存已經結束」。
+    """
+    assert current_term(
+        opened_on="2023-11-15", term_months=12, maturity_action=str(action), today="2026-08-23"
+    ) == ("2023-11-15", 1)
+
+
+def test_current_term_refuses_to_loop_forever_on_a_zero_term() -> None:
+    """期長 0 會讓 `add_months()` 永遠回同一天 —— 那是一個無窮迴圈。
+
+    UI 的 spinbox 下限是 1，所以走不到；但這個函式在 domain，不能靠畫面保護。
+    """
+    assert current_term(
+        opened_on="2020-01-01", term_months=0, maturity_action=RENEWING, today="2026-08-23"
+    ) == ("2020-01-01", 1)
+
+
+def test_the_month_end_clamp_does_not_creep_across_renewals() -> None:
+    """1/31 起存的定存滾過幾輪之後**還是 1/31**，不會一路退到 28 號回不去。
+
+    `add_months()` 每次都從來源日期本身算，而這裡是拿上一次的結果再加 —— 所以
+    夾取有機會累積。實際上不會：一年期的每一次加法都落在同一個月日。
+    """
+    start, sequence = current_term(
+        opened_on="2020-01-31", term_months=12, maturity_action=RENEWING, today="2026-08-23"
+    )
+    assert (start, sequence) == ("2026-01-31", 7)
+
+
+@pytest.mark.parametrize("action", ALL_ACTIONS)
+def test_renewing_forever_is_exactly_the_two_that_do_not_return_the_principal(
+    action: MaturityAction,
+) -> None:
+    """兩個問題不同（「本金走不走」與「還會不會有下一期」），今天的答案互補。
+
+    **這是巧合而不是定義**，所以兩個述詞都留著 —— 但互補這件事本身值得盯著：
+    哪天多一種到期方式讓兩者不再互補，這條會先失敗，提醒去看每一個呼叫端。
+    """
+    assert renews_forever(str(action)) is not maturity_returns_principal(str(action))

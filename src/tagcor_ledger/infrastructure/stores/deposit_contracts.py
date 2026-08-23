@@ -11,7 +11,7 @@ import sqlite3
 from uuid import uuid4
 
 from tagcor_ledger.domain.deposits import DepositContract
-from tagcor_ledger.infrastructure.clock import now_iso
+from tagcor_ledger.infrastructure.clock import now_iso, today_taipei
 from tagcor_ledger.infrastructure.database import connect_database, database_transaction
 from tagcor_ledger.infrastructure.stores.base import (
     NotFoundError,
@@ -32,7 +32,15 @@ class DepositContractStore(StoreBase):
         term_months: int,
         rate_type: str = "fixed",
         note: str = "",
+        recorded_on: str | None = None,
+        opened_on: str = "",
     ) -> DepositContract:
+        """`recorded_on` 預設今天，它是產生待確認項目的下界（ADR-0012）。
+
+        `opened_on` 是**存單上首次存入的那一天**，與這份合約第一期的起存日不一定相同
+        —— 續存類的合約記進來時通常已經滾過好幾輪。**這裡不算那件事**：
+        該建立哪一期由 application 用 `current_term()` 決定，store 只負責存下來。
+        """
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("DEPOSIT_NAME_REQUIRED")
@@ -49,6 +57,8 @@ class DepositContractStore(StoreBase):
             status="active",
             note=note.strip(),
             rate_type=rate_type,
+            recorded_on=recorded_on or today_taipei().isoformat(),
+            opened_on=opened_on,
         )
         timestamp = now_iso()
         with database_transaction(self.paths.database_path) as connection:
@@ -58,8 +68,8 @@ class DepositContractStore(StoreBase):
                 INSERT INTO deposit_contracts(
                     contract_id, account_id, name, interest_method, maturity_action,
                     interest_destination_account_id, term_months, status, note,
-                    rate_type, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    rate_type, recorded_on, opened_on, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     contract.contract_id,
@@ -72,6 +82,8 @@ class DepositContractStore(StoreBase):
                     contract.status,
                     contract.note,
                     contract.rate_type,
+                    contract.recorded_on,
+                    contract.opened_on,
                     timestamp,
                     timestamp,
                 ),
@@ -87,15 +99,18 @@ class DepositContractStore(StoreBase):
         return contract
 
     def list_contracts(self, *, include_closed: bool = False) -> list[DepositContract]:
-        where = "" if include_closed else "WHERE status = 'active'"
+        where = "" if include_closed else "WHERE c.status = 'active'"
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
                 f"""
-                SELECT contract_id, account_id, name, interest_method, maturity_action,
-                       interest_destination_account_id, term_months, status, note, rate_type
-                FROM deposit_contracts
+                SELECT c.contract_id, c.account_id, c.name, c.interest_method,
+                       c.maturity_action, c.interest_destination_account_id, c.term_months,
+                       c.status, c.note, c.rate_type, c.recorded_on, c.opened_on,
+                       COALESCE(a.name, '') AS account_name
+                FROM deposit_contracts c
+                LEFT JOIN accounts a ON a.account_id = c.account_id
                 {where}
-                ORDER BY name COLLATE NOCASE
+                ORDER BY c.status, c.name COLLATE NOCASE
                 """
             ).fetchall()
         return [_row_to_contract(row) for row in rows]
@@ -104,9 +119,13 @@ class DepositContractStore(StoreBase):
         with connect_database(self.paths.database_path) as connection:
             row = connection.execute(
                 """
-                SELECT contract_id, account_id, name, interest_method, maturity_action,
-                       interest_destination_account_id, term_months, status, note, rate_type
-                FROM deposit_contracts WHERE contract_id = ?
+                SELECT c.contract_id, c.account_id, c.name, c.interest_method,
+                       c.maturity_action, c.interest_destination_account_id, c.term_months,
+                       c.status, c.note, c.rate_type, c.recorded_on, c.opened_on,
+                       COALESCE(a.name, '') AS account_name
+                FROM deposit_contracts c
+                LEFT JOIN accounts a ON a.account_id = c.account_id
+                WHERE c.contract_id = ?
                 """,
                 (contract_id,),
             ).fetchone()
@@ -115,7 +134,26 @@ class DepositContractStore(StoreBase):
         return _row_to_contract(row)
 
     def close_contract(self, contract_id: str) -> None:
+        """結束一份定存關係。**不產生任何交易** —— 錢已經在到期那一刻處理掉了。
+
+        用在「不自動轉存」到期結清之後：那一期已經是 `settled`，但合約還掛在清單上，
+        而它已經不會再有下一期。也用在「這個帳戶我不用了」。
+
+        **還有存續中的期就不准結束。** 那一期還有錢在裡面，直接關掉合約等於讓一筆
+        本金從清單上消失而帳上不動 —— 要提前結束請走中途解約，要等它到期就在
+        待確認確認到期。
+
+        v0.24.0 之前這個方法**沒有任何呼叫端**：`DEPOSIT_CONTRACT_IN_USE` 的訊息與
+        刪除確認框都寫著「請改用結束合約」，而 application／controller／UI 三層都沒有
+        接它 —— 使用者被指去做一件做不到的事。
+        """
         with database_transaction(self.paths.database_path) as connection:
+            active = connection.execute(
+                "SELECT 1 FROM deposit_terms WHERE contract_id = ? AND status = 'active' LIMIT 1",
+                (contract_id,),
+            ).fetchone()
+            if active is not None:
+                raise ValueError("DEPOSIT_CONTRACT_HAS_ACTIVE_TERM")
             changed = connection.execute(
                 """
                 UPDATE deposit_contracts SET status = 'closed', updated_at = ?
@@ -143,7 +181,7 @@ class DepositContractStore(StoreBase):
         interest_destination_account_id: str | None,
         note: str | None = None,
     ) -> None:
-        """只改名稱、到期轉存方式、利息轉入帳戶。
+        """只改名稱、到期及轉存方式、利息轉入帳戶。
 
         **計息方式與期長刻意不能改。** 它們決定了已經產生出來的事件長什麼樣子，
         事後改會讓歷史難以解讀 —— 要換就結束這個合約、開一個新的。
@@ -254,4 +292,7 @@ def _row_to_contract(row: sqlite3.Row) -> DepositContract:
         status=str(row["status"]),
         note=str(row["note"]),
         rate_type=str(row["rate_type"]),
+        account_name=str(row["account_name"]),
+        opened_on=str(row["opened_on"] or ""),
+        recorded_on=str(row["recorded_on"] or ""),
     )

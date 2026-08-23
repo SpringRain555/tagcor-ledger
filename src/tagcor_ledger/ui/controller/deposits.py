@@ -26,8 +26,14 @@ class DepositSection(ControllerBase):
     def update_deposit_contract(self, contract_id: str, **values: Any) -> Result:
         return self.deposits.update_contract(contract_id, **values)
 
+    def close_deposit_contract(self, contract_id: str) -> Result:
+        return self.deposits.close_contract(contract_id)
+
     def delete_deposit_contract(self, contract_id: str) -> Result:
         return self.deposits.delete_contract(contract_id)
+
+    def terminate_deposit_term(self, term_id: str, **values: Any) -> Result:
+        return self.deposits.terminate_term(term_id, **values)
 
     def update_deposit_term(self, term_id: str, **values: Any) -> Result:
         return self.deposits.update_term(term_id, **values)
@@ -49,9 +55,16 @@ class DepositSection(ControllerBase):
         return self._rows(self.deposits.list_pending(), "events")
 
     def confirm_deposit_event(
-        self, event_id: str, *, actual_amount_minor: int | None = None
+        self,
+        event_id: str,
+        *,
+        actual_amount_minor: int | None = None,
+        occurred_on: str | None = None,
     ) -> Result:
-        return self.deposits.confirm(event_id, actual_amount_minor=actual_amount_minor)
+        """`occurred_on` 是交易日期（ISO 日期），不傳就用事件的到期日。"""
+        return self.deposits.confirm(
+            event_id, actual_amount_minor=actual_amount_minor, occurred_on=occurred_on
+        )
 
     def skip_deposit_event(self, event_id: str) -> Result:
         return self.deposits.skip(event_id)
