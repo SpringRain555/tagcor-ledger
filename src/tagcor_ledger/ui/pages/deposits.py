@@ -131,7 +131,15 @@ class DepositsPage(QWidget):
         term_row.addWidget(self.terminate_button)
         term_row.addStretch()
 
-        setup_table(self.contracts, self.contract_model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
+        # 合約表的「名稱」（第 0 欄）是自由文字，寬度不夠時由它讓路；其餘七欄是列舉、
+        # 期長、日期與狀態，寬度本來就有界。期別表整張都沒有自由文字欄，不需要讓路欄。
+        setup_table(
+            self.contracts,
+            self.contract_model,
+            stretch_column=0,
+            fit_content=True,
+            fit_rows=SETTINGS_TABLE_ROWS,
+        )
         setup_table(self.terms, self.term_model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
         bind_selection(self.contracts, edit_button, self.close_button, delete_button)
         bind_selection(self.terms, edit_term_button, self.terminate_button)

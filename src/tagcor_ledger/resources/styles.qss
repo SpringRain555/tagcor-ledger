@@ -122,12 +122,13 @@ QLineEdit {
     placeholder-text-color: #7A7A85;
 }
 
-/* 金額輸入框：記帳那一頁真正的主角，比其他欄位大一階 */
+/* 金額輸入框：記帳那一頁真正的主角，但**只靠字重**。
+   以前它同時放大三個維度（15pt、600、40px 高），那是金額還排在第三列、
+   緊貼著「流向」的年代訂的 —— 在最上面當標題看剛好。v0.24.1 把它移到日期與備註
+   之間之後，上下都是 30px 的一般欄位，同樣的對比就從「標題」變成「中間凸一塊」。
+   字級與高度跟其他欄位統一，粗體留著就足夠說明「這一格每次都要動手」。 */
 QLineEdit#amountInput {
-    font-size: 15pt;
     font-weight: 600;
-    min-height: 40px;
-    padding: 6px 12px;
 }
 
 QLineEdit:hover,
@@ -374,9 +375,23 @@ QCheckBox::indicator:hover {
     border-color: #B4B4BE;
 }
 
+/* 已勾選＝白底 ＋ 一個**勾號**。
+   實心白與空心黑的對比有 14:1，兩個狀態絕不會看成一樣 —— 但「哪一個代表開」
+   仍然要靠慣例。五個勾選框裡有兩個守著不可逆的操作（還原前／重製前先建立備份），
+   那兩個不該要求使用者知道慣例，所以第二個線索用**形狀**，與「選取列靠底色 ＋
+   上下橫線」「金額同時有正負號與右對齊」是同一條原則。
+
+   底下那個佔位字串由 `theme.py` 在載入時代換成 `check.png` 的實際路徑
+   （`CHECK_ICON_PLACEHOLDER`）。**不要把它改成寫死的路徑** —— 資源位置隨安裝方式
+   而變。取不到檔案時 `theme.py` 會把整行拿掉，退回沒有勾號的實心白方框；留著一個
+   壞掉的 url() 更糟，Qt 會連 background-color 都不畫。
+
+   這段說明**刻意不寫出那個佔位字串本身** —— 代換是整份字串替換，寫在這裡的話
+   註解也會被換成一條路徑。 */
 QCheckBox::indicator:checked {
     background-color: #E8E8EA;
     border-color: #E8E8EA;
+    image: url(%CHECK_ICON%);
 }
 
 QTabWidget::pane {

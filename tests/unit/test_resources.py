@@ -1,9 +1,15 @@
 import re
+from pathlib import Path
+from unittest import mock
 
 import pytest
 
-from tagcor_ledger.app.resources import read_text_resource, resource_exists
-from tagcor_ledger.ui import colors
+from tagcor_ledger.app.resources import (
+    read_text_resource,
+    resource_exists,
+    resource_filesystem_path,
+)
+from tagcor_ledger.ui import colors, theme
 
 HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}\b")
 
@@ -11,6 +17,76 @@ HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}\b")
 def test_styles_resource_is_packaged() -> None:
     assert resource_exists("styles.qss")
     assert "QLineEdit:focus" in read_text_resource("styles.qss")
+
+
+def test_the_check_icon_is_packaged_at_both_sizes() -> None:
+    """勾號兩個尺寸都要在，而且 `@2x` 真的是兩倍。
+
+    只給標準版的話高 DPI 螢幕上會糊 —— Qt 的 stylesheet 會照 devicePixelRatio
+    自己去找 `@2x` 那一張，找不到就把 18px 那張放大。
+    """
+    from PySide6.QtGui import QImage
+
+    for name, expected in (("check.png", 18), ("check@2x.png", 36)):
+        assert resource_exists(name), f"{name} 不見了，跑 tools/icons/make_check_icon.py"
+        path = resource_filesystem_path(name)
+        assert path is not None, name
+        image = QImage(str(path))
+        assert not image.isNull(), f"{name} 讀不出來"
+        assert image.size().width() == expected, (name, image.size().width())
+        assert image.size().height() == expected, (name, image.size().height())
+        # 陽性對照：真的有畫到東西，不是一張全透明的圖。
+        opaque = sum(
+            1
+            for y in range(image.height())
+            for x in range(image.width())
+            if image.pixelColor(x, y).alpha() > 0
+        )
+        assert opaque > 0, f"{name} 是全透明的 —— 產生腳本沒畫到東西"
+
+
+def test_the_check_icon_placeholder_is_resolved_to_a_real_file() -> None:
+    """QSS 裡的佔位字串要被換成真的檔案路徑，而且是正斜線。
+
+    反斜線的 Windows 路徑在 `url()` 裡會解析失敗，而失敗的樣子不是報錯，是那一格
+    靜靜地不畫圖 —— 跟這個勾號當初消失的方式一模一樣。
+    """
+    styles = read_text_resource("styles.qss")
+    assert theme.CHECK_ICON_PLACEHOLDER in styles, "QSS 裡的佔位字串不見了"
+
+    resolved = theme.resolve_stylesheet(styles)
+    assert theme.CHECK_ICON_PLACEHOLDER not in resolved
+    match = re.search(r"image:\s*url\(([^)]+)\)", resolved)
+    assert match is not None, "代換之後找不到 image: url(...)"
+    path = Path(match.group(1))
+    assert path.is_file(), path
+    assert "\\" not in match.group(1), f"路徑裡有反斜線：{match.group(1)}"
+
+
+def test_a_missing_check_icon_drops_the_line_instead_of_leaving_it_broken() -> None:
+    """取不到圖檔時整行拿掉，不要留一個壞掉的 `url()`。
+
+    留著的話 Qt 會把 `image` 當成有指定，於是連 `background-color` 都不畫 ——
+    方框會整個消失，比沒有勾號糟得多。
+    """
+    styles = read_text_resource("styles.qss")
+    with mock.patch.object(theme, "resource_filesystem_path", return_value=None):
+        resolved = theme.resolve_stylesheet(styles)
+
+    assert theme.CHECK_ICON_PLACEHOLDER not in resolved
+    # `image: none`（日曆那條）是別人的規則，不該被掃到 —— 這裡找的是有 url() 的那種。
+    assert re.search(r"image:\s*url\(", resolved) is None, "壞掉的 image: url() 還留著"
+    # 方框本身必須還在，否則退回的樣子比原本更糟。
+    assert "QCheckBox::indicator:checked" in resolved
+    assert f"background-color: {colors.PRIMARY_BG};" in resolved
+
+
+def test_the_check_icon_is_drawn_in_the_background_colour() -> None:
+    """勾號畫在白色方框上，顏色必須是 `colors.BG` —— 產生腳本裡那個常數不能漂掉。"""
+    source = (
+        Path(__file__).resolve().parents[2] / "tools" / "icons" / "make_check_icon.py"
+    ).read_text(encoding="utf-8")
+    assert f'COLOUR = "{colors.BG}"' in source, "產生腳本的勾號顏色與 colors.BG 不一致"
 
 
 def test_styles_define_dark_theme_colors_and_scoped_widgets() -> None:

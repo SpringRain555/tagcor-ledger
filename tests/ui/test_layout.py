@@ -225,6 +225,46 @@ def test_tables_are_not_clipped_on_a_brand_new_ledger(qtbot, tmp_path: Path) -> 
     assert checked >= tabs.count(), f"只檢查了 {checked} 張表"
 
 
+def test_a_long_item_name_never_makes_the_table_scroll_sideways(qtbot, tmp_path: Path) -> None:
+    """一個很長的項目名稱不可以讓表格長出橫向捲軸。
+
+    上面那兩條掃描全分頁的守門用的是**短名稱**（「郵局活儲」「交通」），所以它們
+    證明不了這件事：`fit_to_contents` 設的是 `setMaximumWidth`，那是上限不是保證 ——
+    名稱長到 `ResizeToContents` 算出來的欄寬總和超過分頁能給的寬度時，欄位照樣溢出。
+
+    而這些表是**固定高度**（`fit_rows`），橫向捲軸會從那個高度裡扣掉自己的厚度，
+    最後一列因此被切掉，看起來像資料沒載完。所以那條捲軸不只是難看。
+
+    名稱用 ASCII 是刻意的（同 `test_fit_content_measures_the_data_not_the_empty_table`）：
+    測試跑在 offscreen，中文走 fallback 字型，寬度跟實機對不起來。
+    """
+    window = _open(qtbot, tmp_path, size=(1600, 900))
+    controller = window.controller
+    assert controller.create_category("交通").success
+    parent_id = str(controller.category_options()[0]["category_id"])
+    assert controller.create_category("X" * 300, parent_id).success
+    window.operation_settings.refresh()
+
+    window.show_page(PageId.OPERATION_SETTINGS)
+    tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
+    assert tabs is not None
+    items_tab = [tabs.tabText(i) for i in range(tabs.count())].index("項目")
+    tabs.setCurrentIndex(items_tab)
+    QApplication.processEvents()
+    QApplication.processEvents()
+
+    table = window.operation_settings.items.table
+    header = table.horizontalHeader()
+    # 陽性對照：這個名字確實比整張表能給的還寬，否則這條測試等於沒作用。
+    assert table.sizeHintForColumn(1) > table.width(), (
+        f"「項目」欄的內容只要 {table.sizeHintForColumn(1)} px，表格有 {table.width()} px"
+        " —— 名字不夠長，撐不破可用寬度"
+    )
+    columns = sum(header.sectionSize(i) for i in range(header.count()))
+    assert columns <= table.viewport().width(), (columns, table.viewport().width())
+    assert not table.horizontalScrollBar().isVisible(), "長項目名稱又讓表格長出橫向捲軸"
+
+
 def test_long_tables_still_fill_the_width(qtbot, tmp_path: Path) -> None:
     """交易紀錄有七欄，寬度是真的有用 —— 它**不該**被收窄。"""
     window = _open(qtbot, tmp_path, size=(1600, 900))

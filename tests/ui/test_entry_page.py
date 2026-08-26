@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.infrastructure.clock import TAIPEI
+from tagcor_ledger.ui.navigation import PageId
 from tagcor_ledger.ui.theme import apply_dark_theme
 from tagcor_ledger.ui.widgets import forms
 from tagcor_ledger.ui.widgets.forms import date_field, iso_from_date
@@ -54,6 +55,49 @@ def test_entry_page_hides_the_label_together_with_the_field(window) -> None:
     assert page.form.labelForField(page.destination).isHidden() is False
     assert page.form.labelForField(page.category).isHidden() is True
     assert page.form.labelForField(page.detail).isHidden() is True
+
+
+def test_the_entry_form_asks_in_the_order_the_user_fills_it(window) -> None:
+    """欄位由上到下＝使用者實際填寫的順序：先決定這筆錢的身分，最後才打金額。
+
+    **量的是 y 座標，不是 `addRow` 的呼叫順序。** 只在轉帳時出現的那兩列各自要貼著
+    自己的第一層（轉帳對象接在流向後面、轉入帳戶接在帳戶後面），而那件事只有排出來
+    的版面看得出來。金額靠**字重**當主角（`amountInput` 只留 `font-weight`），
+    字級與高度與其他欄位一致 —— 強調的手段與位置是綁在一起的。
+    """
+    page = window.entry
+    # **要先切到這一頁。** 落地頁是資產總覽，而 `QStackedWidget` 底下沒被選到的那幾頁
+    # 在 offscreen 平台上版面根本不會跑 —— 每個欄位的 y 都是 0，斷言等於沒作用。
+    window.show_page(PageId.ENTRY)
+
+    page.select_entry_type("expense")
+    QApplication.processEvents()
+    fields = (
+        page.account,
+        page.category,
+        page.detail,
+        page.occurred_at,
+        page.amount,
+        page.description,
+    )
+    tops = [field.y() for field in fields]
+    assert tops == sorted(tops), tops
+    assert len(set(tops)) == len(tops), "有兩個欄位落在同一列，這條測試等於沒作用"
+
+    # 轉帳時多出來的兩列插在對的位置：轉帳對象在帳戶之前、轉入帳戶在帳戶之後。
+    page.select_entry_type("transfer")
+    page.select_transfer_scope("internal")
+    QApplication.processEvents()
+    transfer_fields = (
+        page.scope_row,
+        page.account,
+        page.destination,
+        page.occurred_at,
+        page.amount,
+    )
+    transfer_tops = [field.y() for field in transfer_fields]
+    assert transfer_tops == sorted(transfer_tops), transfer_tops
+    assert len(set(transfer_tops)) == len(transfer_tops)
 
 
 def test_entry_page_reports_success_without_the_error_colour(window) -> None:

@@ -61,6 +61,12 @@ class CatalogPage(QWidget):
 
     HEADERS: tuple[str, ...] = ()
     AMOUNT_COLUMN: int | None = None
+    STRETCH_COLUMN = 0
+    """名稱那一欄 —— 寬度不夠時由它讓路（見 `setup_table`）。
+
+    帳戶與類別的名稱在第 0 欄，項目的在第 1 欄（第 0 欄是所屬類別）。
+    另外兩欄是「項目數／餘額」與四個字的狀態，寬度本來就有界，壓縮它們沒有意義。"""
+
     ADD_LABEL = "新增"
     ID_FIELD = ""
     NAME_LABEL = "名稱"
@@ -167,7 +173,13 @@ class CatalogPage(QWidget):
             row.addWidget(self.order_button)
         row.addStretch()
 
-        setup_table(self.table, self.model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
+        setup_table(
+            self.table,
+            self.model,
+            stretch_column=self.STRETCH_COLUMN,
+            fit_content=True,
+            fit_rows=SETTINGS_TABLE_ROWS,
+        )
         # 「新增」與「排序設定」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
         bind_selection(self.table, rename, toggle, delete_button)
         layout = QVBoxLayout(self)
@@ -452,6 +464,10 @@ class ItemsPage(CategoryPageBase):
     """項目（第二層）。上方有搜尋、所屬類別與狀態 —— 項目一多就找不到自己要的那一個。"""
 
     HEADERS = ("所屬類別", "項目", "狀態")
+    STRETCH_COLUMN = 1
+    """讓路的是「項目」，不是第 0 欄 —— 這一頁的第 0 欄是類別名稱（伙食、交通），
+    真正會長的是使用者自己取的項目名。"""
+
     ADD_LABEL = "新增項目"
     NAME_LABEL = "項目名稱"
     LEVEL = 2

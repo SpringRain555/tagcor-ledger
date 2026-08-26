@@ -144,6 +144,20 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
   兩個替代方案寫在 [`ADR-0010`](docs/decisions/ADR-0010-external-transfers.md)；
   要改變這個取捨就新增一份 ADR 推翻它，不要順手加一個列舉值。
 
+### 提款也是轉帳
+
+從郵局領現金＝錢在自己的兩個帳戶之間移動，**總資產不變** —— 同一條判準，所以它就是
+**轉帳・我的帳戶之間**（轉出帳戶＝郵局、轉入帳戶＝現金），一筆交易兩筆 posting。
+
+- **不要記成「郵局一筆支出 ＋ 現金一筆收入」。** 總資產碰巧會對，但支出總額與收入
+  總額各被灌水一次，類別統計也跟著髒掉 —— 而那兩個數字才是記帳想看的東西。
+- **不新增「提款」流向。** 按下「轉帳」之後「轉帳對象」預設就停在「我的帳戶之間」
+  （`ui/pages/entry.py` 的 `scope_buttons`），第四顆按鈕**省不到任何一次點擊**，
+  代價卻與 ADR-0010 否決的「方案甲」一模一樣。
+- 嫌每次選兩個帳戶麻煩的話，去「操作設定 → 模板」建一個「郵局提款」模板
+  （轉帳型、金額留空），之後按「填入記帳頁」只要打金額。**這是使用者自己建的資料，
+  程式不預先建立任何模板。**
+
 ## 不做的事（非目標，不是待辦）
 
 - 不做銀行同步、不串接電子發票載具、不做任何自動匯入。
@@ -175,6 +189,7 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - **導覽用 `PageId`，不得拿顯示文字當 key。** 頁面身分在 `ui/navigation.py` 的 `PageId`，顯示文字在 `LABELS`；改 `LABELS` 不影響任何查表。側邊欄順序的唯一正本是 `DAILY_PAGES` / `SETTINGS_PAGES`，改了要同步 `docs/architecture/ui-workflows.md`（`tests/unit/test_docs_drift.py` 會逐字比對）。
 - **版面走 `widgets/layout.py` 的 `page_layout(self, width=...)`**，不要各頁自己 `QVBoxLayout(self)`。寬度上限：表單 `FORM_WIDTH`、摘要 `SUMMARY_WIDTH`、有資料表的 `TABLE_WIDTH`。
 - **欄位少的表格用 `fit_content=True` 收寬**；操作設定裡的表格另外用 `fit_rows=SETTINGS_TABLE_ROWS` 收高度，而且該分頁最後要有 `addStretch()`，否則 layout 會把多餘高度平均塞進元件之間。
+- **有自由文字欄（名稱、備註）的表要同時指定 `stretch_column`，讓那一欄讓路。** 收寬設的是 `setMaximumWidth`，那是**上限不是保證** —— 名稱一長，`ResizeToContents` 的欄寬總和就超過分頁能給的寬度，欄位照樣溢出、底下冒出橫向捲軸；而這些表是固定高度，捲軸會從那個高度裡扣掉自己的厚度，**最後一列被切掉**，看起來像資料沒載完。指定之後空間夠時 stretch 欄分到的剛好是自己的內容寬度（畫面不變），不夠時只有它被壓縮成 `…`。`setup_table` 另外關掉 `wordWrap` —— 列高釘死成單行，折行只會讓省略看起來像壞掉。
 - **UI 用詞與資料表名稱可以不同**（例如使用者看到「項目」，schema 是 `categories` 的第二層）。已淘汰的 UI 用詞列在 `tests/unit/test_architecture.py` 的 `RETIRED_UI_WORDS`，該測試掃 `ui/` 與 `application/` 的字串常數（docstring 與註解不算）。**已移除的功能名稱也在那份名單上** —— 一顆通往不存在功能的按鈕比錯的用詞更糟。
 - 主要操作按鈕用 `primaryButton`；刪除、作廢、重製、還原等高風險操作用 `dangerButton`。
 - **有些字串照抄程式外面的正本，不得縮短。** `domain/deposits.py` 的
@@ -183,6 +198,7 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
   文字不逐字相同他每次都要自己重新推導對應關係。縮短一個 UI 字串之前先問：
   **它在程式外面有沒有一個正本？**
 - **表格不得在 QSS 設 `color` 或 `selection-color`。** 那會蓋掉 model 的 `ForegroundRole`，金額的紅綠會被壓成同一個白。顏色由 `widgets/table.py` 的 `amount_color` 決定。
+- **勾選框的已勾選狀態要有勾號，不能只靠填色。** 實心白對空心黑的對比有 14:1，兩個狀態絕不會看成一樣 —— 但「**哪一個代表開**」仍然要靠慣例。五個勾選框裡有兩個守著不可逆的操作（`還原前先建立備份`、`重製前先建立備份`），那兩個不該要求使用者知道慣例。與下面兩條是同一個原則的三次套用：第二個線索要用**形狀**。
 - **選取列靠底色 ＋ 上下橫線，不是只靠底色。** `SELECTED` 對一般列底 `SURFACE` 的對比只有 1.34，
   而那是上限 —— 再亮一階，支出紅對選取列的對比就掉到 4.5 以下（`test_resources.py` 會紅）。
   深色主題的明度空間本來就窄，第二個線索要用**形狀**。
@@ -194,7 +210,10 @@ deny 優先於 allow，而且路徑 pattern **沒有否定語法**，所以做�
 - **`details["reason"]` 是廢除的 key，加回來 `tests/unit/test_failure_messages.py` 會紅。** 它曾經有 51 個出處，而 `result_message()` 會把它用括號接在畫面訊息後面 —— 於是英文碼與 SQLite 原文都被印給使用者看。預期外的原文放 `details["detail"]`，**那個 key 永遠不顯示**。
 - **例外的訊息就是錯誤碼，不要寫英文散文。** `domain/money.py` 以前丟 `MoneyError("Amount must be greater than zero.")`，那句英文因此出現在全中文的畫面上 —— 而且金額打錯是最常見的操作失誤。UI 自己 `except` 的地方用 `ui/formatting.error_text()`，不要直接印 `str(exc)`。
 - 分頁必須由 QSS 覆蓋 `QTabWidget/QTabBar` 的 selected、unselected、hover、disabled 狀態。
-- **不要覆寫 `QComboBox::drop-down`。** 一碰那個 subcontrol，Fusion 就不再畫箭頭，而本專案不打包圖檔，結果是一塊空白方格。
+- **QSS 一碰 subcontrol，Fusion 就不再畫它自己的圖形。** 這條踩到兩次：
+  - **不要覆寫 `QComboBox::drop-down`** —— 箭頭會消失，剩下一塊空白方格。那個很明顯是壞了，所以當場就發現。
+  - **`QCheckBox::indicator` 已經覆寫了**（為了方框：Fusion 的外框色是 `palette.window().darker(140)` 推導的，在 `#0D0D0F` 上完全看不見），所以勾號要**自己給圖**，`styles.qss` 的 `:checked` 有一行 `image: url(...)`，路徑由 `theme.py` 的 `resolve_stylesheet()` 在載入時代換。這一次的症狀是一塊**看起來很像設計**的實心白方塊 —— 沒有人發現它壞了。
+  - 要給圖只能給 **PNG，而且標準與 `@2x` 兩個尺寸都要**。SVG 需要 Qt SVG image plugin（PySide6 的選配元件，本機的 conda env 就沒有），QSS 的 `url()` 也不吃 `data:` URI —— 兩條都實測過，失敗的樣子都是「那一格靜靜地不畫圖」。圖檔由 `tools/icons/make_check_icon.py` 產生，不要用繪圖軟體改。
 - **主字體必須是中文字型**（`Microsoft JhengHei UI` 排第一），12pt、Medium 字重。理由是 `Segoe UI Variable` 沒有中文字形，中文全靠 fallback，而**字重套不到 fallback 字型上** —— 對它設 Medium 只有數字變粗，中文一點都沒變。字體不打包，順序是 `Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、`Segoe UI Variable`、`Segoe UI`、sans-serif。
 - **日期欄位一律用 `date_field()`，不要用 `QDateTimeEdit`。** 介面只問到「哪一天」；時分秒由 `iso_from_date()` 補上（新建補現在、編輯沿用原值），資料庫存的仍然是完整時間戳。顯示一律用 `display_date()`，**不要把補出來的時分印出來** —— 那不是使用者輸入的東西。
 - UI 變更至少跑 `tests/ui` smoke；樣式資源變更需同步更新 `tests/unit/test_resources.py`。

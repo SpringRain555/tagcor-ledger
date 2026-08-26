@@ -133,7 +133,11 @@ def fit_to_contents(table: QTableView) -> None:
 
     `sizeHintForColumn()` 是**現算**的：它直接問 model 與 delegate，不經過版面階段，
     所以資料一進去就是最終值。表頭文字的寬度另外由 `sectionSizeHint()` 補上 ——
-    「目前餘額（TWD）」比它底下的數字寬。
+    「目前餘額（TWD）」比它底下的數字寬。兩者都**與 resize mode 無關**，所以表上有
+    stretch 欄也照樣量得準（拿被拉伸後的 `sectionSize` 去算會直接把表撐死）。
+
+    **這裡設的是上限，不是保證。** 內容比分頁能給的寬度還寬時，這個上限攔不住溢出 ——
+    要靠 `setup_table` 的 `stretch_column` 讓某一欄讓路，見那邊的說明。
     """
     header = table.horizontalHeader()
     width = sum(
@@ -178,25 +182,41 @@ def setup_table(
 ) -> None:
     """套用共用外觀。
 
-    欄寬一律依內容決定，`stretch_column` 才指定哪一欄吃掉多餘寬度。
+    欄寬一律依內容決定，`stretch_column` 才指定哪一欄該有彈性。
     **不用 `setStretchLastSection`** —— 最後一欄通常是「狀態」這種兩個字的欄位，
     讓它獨吞剩下的寬度，而真正需要空間的「備註」反而被擠窄。
 
     `fit_content=True` 讓整張表收到欄寬總和（見 `fit_to_contents`）。
-    欄位少的設定用表格用它；欄位多的長表（交易紀錄、待確認）維持滿寬並指定
-    `stretch_column`。**兩者不會同時用** —— 收寬之後就沒有多餘寬度可以給誰吃。
+    欄位少的設定用表格用它；欄位多的長表（交易紀錄、待確認）維持滿寬。
+
+    ## 收寬的表**也**要指定 `stretch_column`
+
+    兩者以前是互斥的，理由是「收寬之後就沒有多餘寬度可以給誰吃」。那句話只看了
+    寬度**有剩**的那一半 —— 而 `fit_to_contents` 設的是 `setMaximumWidth`，
+    那是**上限，不是保證**。名稱一長，`ResizeToContents` 算出來的欄寬總和就超過
+    分頁真的能給的寬度，欄位照樣溢出、底下冒出一條橫向捲軸；更糟的是這些表同時是
+    `fit_rows` 的固定高度，捲軸會從那個高度裡扣掉自己的厚度，**最後一列被切掉**，
+    看起來像資料沒載完。
+
+    所以收寬的表指定 `stretch_column` 時，那一欄不是去吃多餘的寬度，而是
+    **寬度不夠時由它讓路**。兩件事在數學上接在同一點：`maximumWidth` 就是欄寬總和，
+    所以空間夠的時候 stretch 欄分到的**剛好是它自己的內容寬度**（畫面與收寬前一樣），
+    空間不夠的時候只有它被壓縮、文字省略成 `…`，其他欄位維持完整。
+    **有自由文字欄（名稱、備註）的表都要指定**，那一欄就是該讓路的那一欄。
 
     `fit_rows` 另外把**高度**也收到實際列數（見 `fit_to_rows`）。只有摘要用的小表
     需要它；一張表是某一頁的主角時，讓它長滿高度才對。
     """
-    if fit_content and stretch_column is not None:
-        raise ValueError("fit_content 與 stretch_column 不能同時指定")
     table.setModel(model)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setAlternatingRowColors(True)
     table.setShowGrid(False)
+    # **不折行。** 列高被底下那行釘死成單行，所以折行永遠幫不上忙 —— 欄位被壓窄時
+    # Qt 會先試著換行，第二行落在 34 px 之外被切掉，而不是乾淨地省略成 `…`。
+    # `QAbstractItemView.wordWrap` 預設是 True，不關掉就會看到「讓路」像壞掉。
+    table.setWordWrap(False)
     table.verticalHeader().setVisible(False)
     table.verticalHeader().setDefaultSectionSize(34)
 

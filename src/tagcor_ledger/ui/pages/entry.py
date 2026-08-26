@@ -2,8 +2,17 @@
 
 ## 這一頁的三個設計取捨
 
-1. **金額是主角。** 它是唯一每次都必須手打的欄位，所以字級與高度都比其他欄位大一階，
-   而且 `Ctrl+N` 直接聚焦到它。其他欄位多半沿用上次或用預設值。
+1. **金額是主角，但它排在最後面，而且只靠字重說話。** 它是唯一每次都必須手打的欄位，
+   所以是粗體、`Ctrl+N` 直接聚焦到它 —— **字級與高度與其他欄位一致**。
+   欄位由上到下照使用者實際填寫的順序：先決定這筆錢的身分（帳戶、類別、項目、哪一天），
+   最後才打金額。那些欄位多半沿用上次或用預設值，一路確認下來，游標最後落在唯一要
+   動手的那一格。（建立順序本來就是這個順序，所以 Qt 的預設 Tab 順序與眼睛看到的
+   順序也終於一致。）
+
+   **強調的手段與位置是綁在一起的。** 這個欄位曾經同時放大三個維度（15pt、600、
+   40px 高），那是它還排在第三列、緊貼著「流向」的年代訂的 —— 在最上面當標題看剛好。
+   搬到日期與備註之間之後，上下都是一般高度的欄位，同樣的對比就從「標題」變成
+   「中間凸一塊」。樣式一個字都沒動，是順序讓它換了個意思。
 2. **流向用三顆分段按鈕，不是下拉選單。** 下拉要「點開、找、再點」三個動作；
    三顆按鈕一下就好。選項永遠只有三個，不會長出第四個。
 3. **成功與失敗共用一個訊息位置，但顏色不同。** 以前成功訊息寫進紅色的 `errorLabel`，
@@ -138,14 +147,16 @@ class EntryPage(QWidget):
         self.form = QFormLayout()
         form = self.form
         form.setSpacing(10)
+        # **順序照使用者實際填寫的順序**，見模組說明的取捨 1。只在轉帳時出現的兩列
+        # 各自貼著自己的第一層：轉帳對象是流向的第二層，轉入帳戶是「帳戶」的另一半。
         form.addRow("流向", flow_row)
         form.addRow("轉帳對象", self.scope_row)
-        form.addRow("金額（TWD）", self.amount)
         form.addRow("帳戶", self.account)
         form.addRow("轉入帳戶", self.destination)
         form.addRow("類別", self.category)
         form.addRow("項目", self.detail)
         form.addRow("日期", self.occurred_at)
+        form.addRow("金額（TWD）", self.amount)
         form.addRow("備註", self.description)
         form.addRow("", self.status)
         form.addRow("", self.save_button)

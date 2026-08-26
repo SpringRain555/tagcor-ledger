@@ -107,7 +107,14 @@ class TemplatesPage(QWidget):
             row.addWidget(button)
         row.addStretch()
 
-        setup_table(self.table, self.model, fit_content=True, fit_rows=SETTINGS_TABLE_ROWS)
+        # 讓路的是「備註」（第 5 欄）：七欄裡它最會長，也是最不需要讀完整的一欄。
+        setup_table(
+            self.table,
+            self.model,
+            stretch_column=5,
+            fit_content=True,
+            fit_rows=SETTINGS_TABLE_ROWS,
+        )
         # 「新增」與「排序設定」以外四顆都是對所選模板動作 —— 沒選就停用。
         bind_selection(self.table, edit_button, apply_button, toggle_button, delete_button)
         layout = QVBoxLayout(self)

@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
+import re
+
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication
 
-from tagcor_ledger.app.resources import read_text_resource
+from tagcor_ledger.app.resources import read_text_resource, resource_filesystem_path
 from tagcor_ledger.ui import colors
 
 
@@ -53,10 +55,35 @@ def apply_dark_theme(app: QApplication, *, force: bool = False) -> None:
 
     app.setPalette(_build_palette())
     try:
-        app.setStyleSheet(read_text_resource("styles.qss"))
+        app.setStyleSheet(resolve_stylesheet(read_text_resource("styles.qss")))
     except FileNotFoundError:
         app.setStyleSheet("")
     app.setProperty(APPLIED_PROPERTY, True)
+
+
+CHECK_ICON_PLACEHOLDER = "%CHECK_ICON%"
+"""`styles.qss` 裡代表勾選框勾號路徑的佔位字串。"""
+
+_CHECK_ICON_LINE = re.compile(rf"^[^\S\n]*image:\s*url\({re.escape(CHECK_ICON_PLACEHOLDER)}\);\n", re.M)
+
+
+def resolve_stylesheet(styles: str) -> str:
+    """把 QSS 裡的資源佔位字串換成實際路徑。
+
+    Qt 的 `url()` 只認**檔案系統路徑**，所以樣式表沒辦法是完全靜態的 ——
+    圖檔位置隨安裝方式而變。這裡是唯一一處代換，`styles.qss` 本身維持可讀。
+
+    **路徑一律轉成正斜線。** QSS 的 `url()` 在 Windows 路徑的反斜線上會解析失敗，
+    而失敗的樣子不是報錯，是那一格靜靜地不畫圖。
+
+    取不到檔案時（理論上只有從 zip 匯入才會發生）**整行拿掉**，退回沒有勾號的
+    實心白方框。留著壞掉的 `url()` 更糟：Qt 會把 `image` 當成有指定，於是連
+    `background-color` 都不畫，方框會整個消失。
+    """
+    icon = resource_filesystem_path("check.png")
+    if icon is None:
+        return _CHECK_ICON_LINE.sub("", styles)
+    return styles.replace(CHECK_ICON_PLACEHOLDER, icon.as_posix())
 
 
 FONT_FAMILY = "Microsoft JhengHei UI"

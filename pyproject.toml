@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tagcor-ledger"
-version = "0.24.0"
+version = "0.24.1"
 description = "Windows-first local personal ledger with SQLite and PySide6."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -30,7 +30,7 @@ tagcor-ledger = "tagcor_ledger.main:main_gui"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"tagcor_ledger.resources" = ["*.qss"]
+"tagcor_ledger.resources" = ["*.qss", "*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
