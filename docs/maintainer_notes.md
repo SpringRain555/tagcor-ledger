@@ -10,7 +10,7 @@
 
 | 我想知道 | 去哪 |
 |---|---|
-| 動手前的硬規則、架構邊界、禁令 | [`AGENTS.md`](../AGENTS.md) —— **正本，先讀這份** |
+| 動手前的硬規則、架構邊界、禁令 | [`AGENTS.md`](../AGENTS.md) ＝ [`CLAUDE.md`](../CLAUDE.md) —— **先讀這份**（兩份平級、內容相同）|
 | 資料放哪、`data_root` 約束、備份格式、`window.json` | [storage-layout](architecture/storage-layout.md) |
 | 表、欄位、索引、migration 版本 | [data-model](architecture/data-model.md) |
 | 有哪些狀態、哪些轉移合法 | [state-machines](architecture/state-machines.md) |

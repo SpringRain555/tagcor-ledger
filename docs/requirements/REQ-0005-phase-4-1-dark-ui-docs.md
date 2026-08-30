@@ -8,7 +8,8 @@
 > | 第 3 條：背景使用深灰藍／墨藍 | **中性純灰、零色偏**（v0.12.0）。色票正本是 `ui/colors.py` |
 > | 第 8 條：字體 `Segoe UI Variable` 排第一 | **`Microsoft JhengHei UI` 排第一**（v0.13.0）—— `Segoe UI Variable` 沒有中文字形，字重套不到 fallback 上 |
 >
-> 第 9 條提到的 `CODEX` 也已於 2026-08 移除，agent 規則的正本是 `AGENTS.md`。
+> 第 9 條提到的 `CODEX` 也已於 2026-08 移除；agent 規則現在是 `AGENTS.md` 與 `CLAUDE.md`
+> **兩份平級**（2026-08-30，[ADR-0013](../decisions/ADR-0013-peer-agent-docs.md)）。
 > 其餘條文（固定深色不切換、`apply_dark_theme` 入口、按鈕角色、分頁四種狀態、
 > objectName 分層、不打包字型檔）**仍然有效**。
 >

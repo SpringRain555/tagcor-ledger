@@ -41,7 +41,7 @@
 
 ## 快速入口
 
-- [README](../README.md)｜[AGENTS](../AGENTS.md)（agent 規則正本，`CLAUDE.md` 指向它）
+- [README](../README.md)｜[AGENTS](../AGENTS.md)＝[CLAUDE](../CLAUDE.md)（agent 規則，**兩份平級、內容相同**）
 - [九月上線 runbook](operations/go-live-2026-09.md)
 - [Roadmap](roadmap.md)｜[Changelog](changelog.md)｜[Release checklist](release_checklist.md)
 - [失敗紀錄](lessons.md) —— 踩過的坑與「不要再做」清單
@@ -71,11 +71,12 @@
 - [ADR-0005 法規庫唯讀且離線](decisions/ADR-0005-reference-db-offline.md)
 - [ADR-0006 一律手動輸入](decisions/ADR-0006-manual-entry-only.md)
 - [ADR-0007 定存建模](decisions/ADR-0007-time-deposit-modelling.md)
-- [ADR-0008 AGENTS.md 是唯一正本](decisions/ADR-0008-agents-md-canonical.md)
+- [ADR-0008 AGENTS.md 是唯一正本](decisions/ADR-0008-agents-md-canonical.md) —— **已被 ADR-0013 取代**
 - [ADR-0009 UI 維持 PySide6](decisions/ADR-0009-keep-pyside6.md)
 - [ADR-0010 對外轉帳記成收入／支出](decisions/ADR-0010-external-transfers.md)
 - [ADR-0011 移除定期收支](decisions/ADR-0011-drop-recurring-schedules.md)
 - [ADR-0012 定存的待確認項目從建檔那天開始](decisions/ADR-0012-deposit-events-start-at-record-date.md)
+- [ADR-0013 AGENTS.md 與 CLAUDE.md 平級](decisions/ADR-0013-peer-agent-docs.md)
 
 ## Architecture
 
