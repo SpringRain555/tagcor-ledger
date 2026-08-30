@@ -1,6 +1,27 @@
 # AGENTS — TagCor Ledger
 
-**這份是給所有 agent（Codex、Claude Code 等）的唯一正本。** `CLAUDE.md` 只是指向這裡的一行。
+> **這份與 `CLAUDE.md` 是平級的兩份完整規則**（Codex 只自動載入 `AGENTS.md`，
+> Claude Code 只自動載入 `CLAUDE.md`）。**改任何一份就要同步改另一份。**
+> 唯一該有的差異是「工具專屬」那一節。
+>
+> 產生器會比對兩份最後被改的 commit，不一致就報 `agent-doc-drift`。
+>
+> 2026-08-30 之前 `CLAUDE.md` 只是一份指向這裡的指路檔 —— 也就是說 Claude Code
+> 自動載入到的只有那幾行，底下這一整份規則要靠它自己去跟。
+
+## 工具專屬
+
+**Codex**（讀這一份）：沒有額外規則，往下讀就好。
+
+**Claude Code**（讀 `CLAUDE.md`）：
+
+- **用專案的 conda 直譯器**，不要用 PATH 上的 python：
+  `<conda-root>\envs\tagcor-ledger\python.exe`。
+  工具 shell 不載入 profile，`conda activate` 會回報成功卻什麼都沒換。
+- `.claude\settings.json` 的 deny **攔不住 Bash 與 PowerShell**（`Get-Content`、
+  `cat`、`Select-String` 都能讀檔）。用 shell 時靠的是下面「資料位置與讀取邊界」
+  的成文規則，不是設定檔。
+- 主要 shell 是 PowerShell 5.1，沒有 `&&`／`||`／三元運算子。
 
 ## 專案定位
 

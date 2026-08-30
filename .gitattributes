@@ -1,0 +1,52 @@
+# D:\Projects 共用 .gitattributes 範本
+#
+# **這份的存在理由是 .githooks/**：那些 hook 是 POSIX shell 腳本。全域
+# core.autocrlf = true 的意思是「入庫存 LF、簽出轉 CRLF」，所以一旦 repo 被
+# clone，pre-commit 會以 CRLF 出來，`#!/bin/sh\r` 直接失效 —— 守門會在最需要
+# 它的那一刻靜默失去作用。目前無 remote 所以還沒踩到，但 remote 欄位存在的
+# 理由就是記錄「打算推到哪」。
+#
+# 加上這份不會產生重新正規化的大 diff：實測 `git ls-files --eol`，31 個 repo
+# 的 index 已經全是 LF（其餘只有 i/none 空檔與 i/-text 二進位，零個 i/crlf）。
+# 屬性寫的就是索引現況。
+#
+# **它只管行尾，不管 BOM。** CONVENTIONS §8 的 BOM 規則（.md 不要、.ps1 必須有）
+# 是另一回事，兩者不互相解決，也不互相干擾。
+#
+# 各專案可依實際堆疊往下加，但上面這段共用部分不要改。
+
+# 預設：由 git 判斷是不是文字，是的話入庫一律存 LF
+* text=auto
+
+# ── 必須是 LF，否則直接壞掉 ─────────────────────────────
+.githooks/** text eol=lf
+*.sh        text eol=lf
+
+# ── 必須是 CRLF，否則 Windows 的直譯器會有意見 ──────────
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+
+# ── 二進位：不要做行尾轉換，也不要嘗試 diff ─────────────
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.zip  binary
+*.7z   binary
+*.rar  binary
+*.gz   binary
+*.mp4  binary
+*.mov  binary
+*.avi  binary
+*.mkv  binary
+*.webm binary
+*.mp3  binary
+*.wav  binary

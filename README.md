@@ -2,7 +2,7 @@
 
 TagCor Ledger 是 Windows-first、本機優先的個人記帳工具。核心資料使用 SQLite，介面使用 PySide6，目標是快速記錄收支、轉帳、餘額盤點與待確認項目，同時保持資料可備份、可還原、可長期維護。
 
-目前版本：0.16.2（備份可以在畫面上刪掉了；錯誤訊息一律中文，而且指出真正發生的那件事）。0.15.0 修掉三個「畫面停在舊數字」的跨頁缺口、日期欄不再誤改年份、類別與項目可搜尋排序、轉帳分三種對象、文件加上 mermaid 圖。
+目前版本：**0.24.1**（記帳頁照填寫順序問、表格欄寬會讓路、勾選框補回勾號）。0.24.0 讓定存照存單填就好並修掉三處計算錯誤；0.22.0–0.23.0 加了資產占比圓環、修好模板封存、移除定期收支；0.20.0–0.21.1 是一輪體質工作（controller／stores／formatting 依功能拆檔、例外收斂、補測試、pre-commit 加閘門）；0.17.0–0.19.0 讓類別與項目可以排成自己想要的順序，排序搬進獨立視窗、支援多層且記得住。
 
 **帳務資料不在專案資料夾裡。** 程式在 `D:\Projects\tagcor-ledger`，資料在 `<資料根目錄>`，兩者分開，資料永遠不進版控。完整說明見 [Storage layout](docs/architecture/storage-layout.md)。
 
@@ -252,3 +252,8 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 ## 文件入口
 
 完整文件請從 [docs/index.md](docs/index.md) 開始閱讀。歷史 Phase 0–2 文件保留於 `docs/archive/phase-0-2/`，僅供追溯，不再作為目前規格來源。
+
+要動手改東西的 agent 讀 `AGENTS.md` 或 `CLAUDE.md`（兩份平級、內容相同）。
+
+跨專案的脈絡（狀態、來源）在 `D:\Projects\_meta\cards\tagcor-ledger.md` ——
+那是權威來源，本檔不重複它。
