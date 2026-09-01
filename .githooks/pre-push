@@ -1,0 +1,76 @@
+#!/bin/sh
+#
+# 推之前跑完整測試。**這是三層閘門的中間那一層。**
+#
+#   pre-commit  每次 commit，2 秒（ruff + mypy）
+#   pre-push    每次 push，約 70 秒（ruff + mypy + 全部測試）   ← 這一份
+#   CI          push 之後，約 60 秒（同上，但少了量像素的那 21 條）
+#
+# 為什麼 pytest 可以進 pre-push，卻不能進 pre-commit：**差別在頻率。**
+# pre-commit 一天觸發十幾次，66 秒會讓人習慣性打 --no-verify，而一個被習慣性
+# 繞過的閘門比沒有閘門更糟。pre-push 通常一個工作段落才一次，70 秒可以接受。
+#
+# 為什麼不是「反正有 CI 就好」：CI 跑在 push **之後**，main 會短暫變紅；而且
+# **CI 跑不了量像素的那 21 條**（Linux 的字體與 Qt 平台外掛都不同，這個專案是
+# Windows-first）。這一份跑在 Windows 上，所以它跑得比 CI 完整 —— 它是那 21 條
+# 唯一會被自動執行的地方。
+#
+# 啟用：git config core.hooksPath .githooks
+# 例外：git push --no-verify
+
+. "$(dirname "$0")/resolve-python.sh"
+PYTHON="$(resolve_tagcor_python)"
+
+# 找不到直譯器就放行 —— 在別台機器 clone 下來時不該連 push 都不能做。
+if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+	echo "  提示：找不到專案的 conda 直譯器，略過推送前的測試閘門。"
+	exit 0
+fi
+
+# 只是刪除遠端分支的話沒有東西要驗。git 從 stdin 餵進
+# `<local ref> <local sha> <remote ref> <remote sha>`，刪除時 local sha 全是 0。
+ONLY_DELETIONS=1
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	[ -n "$local_sha" ] || continue
+	case "$local_sha" in
+		*[!0]*) ONLY_DELETIONS=0 ;;
+	esac
+done
+if [ "$ONLY_DELETIONS" -eq 1 ]; then
+	exit 0
+fi
+
+echo ""
+echo "推送前驗證（約 70 秒）。要跳過用 git push --no-verify。"
+echo ""
+
+if ! "$PYTHON" -m ruff check --no-cache . ; then
+	echo ""
+	echo "✗ ruff 沒過。"
+	exit 1
+fi
+echo "  OK    ruff"
+
+if ! "$PYTHON" -m mypy src ; then
+	echo ""
+	echo "✗ mypy --strict 沒過。"
+	exit 1
+fi
+echo "  OK    mypy --strict"
+
+# offscreen 才跑得動 UI 測試（沒有真的視窗）。**這裡不排除 geometry** ——
+# 那 21 條只有在 Windows 上量才有意義，而這裡就是 Windows。
+QT_QPA_PLATFORM=offscreen
+export QT_QPA_PLATFORM
+
+if ! "$PYTHON" -m pytest -q ; then
+	echo ""
+	echo "✗ 測試沒過。修好再推，或 git push --no-verify。"
+	echo "  想看完整輸出：.\\Verify.ps1 -Ui"
+	exit 1
+fi
+echo "  OK    pytest"
+
+echo ""
+echo "推送前驗證通過。"
+exit 0
