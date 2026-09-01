@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import re
 
 import pytest
 
+from tagcor_ledger import __version__
 from tagcor_ledger.ui.navigation import ALL_PAGES, LABELS
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -114,3 +116,47 @@ def test_the_doc_does_not_still_name_pages_that_are_gone() -> None:
     retired = ["快速記帳", "模板與週期排程", "重製與還原"]
     offenders = [name for name in retired if name in document]
     assert not offenders, f"ui-workflows.md 裡還有已經不存在的頁面名：{offenders}"
+
+
+def _declared_versions() -> dict[str, str]:
+    """版本號寫在三個地方，把三個都讀出來。
+
+    **不 import `tomllib` 之外的東西，也不靠 `importlib.metadata`** —— 後者讀的是
+    「安裝時」的中繼資料，改了 `pyproject.toml` 但沒重裝的話它還是舊值，那會讓這條
+    守門在最該紅的時候是綠的。
+    """
+    import tomllib
+
+    pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    match = re.search(r"目前版本：\*\*([0-9]+\.[0-9]+\.[0-9]+)\*\*", readme)
+
+    return {
+        "pyproject.toml": pyproject["project"]["version"],
+        "src/tagcor_ledger/__init__.py": __version__,
+        "README.md": match.group(1) if match else "（找不到「目前版本：**X.Y.Z**」）",
+    }
+
+
+def test_the_version_is_the_same_in_all_three_places() -> None:
+    """版本號有三個出處，而在這條守門之前沒有任何東西比對它們。
+
+    專案對文件漂移已經有四條守門（頁面名、圖、連結、錯誤碼），版本號卻是漏的 ——
+    而它正是每發一版都要動、最容易漏掉一處的東西。漏掉的那一份會繼續用權威的
+    語氣講一個已經不成立的版本。
+    """
+    versions = _declared_versions()
+    if len(set(versions.values())) != 1:
+        pytest.fail(
+            "版本號不一致：\n"
+            + "\n".join(f"  {where:<32} {value}" for where, value in versions.items())
+            + "\n發版時三個地方要一起改。"
+        )
+
+
+def test_the_version_reader_actually_finds_all_three() -> None:
+    """避免 README 的正規表示式改壞之後靜默跳過 —— 那會讓上面那條永遠是綠的。"""
+    versions = _declared_versions()
+    assert len(versions) == 3
+    for where, value in versions.items():
+        assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value), f"{where} 讀出來的是 {value!r}"
