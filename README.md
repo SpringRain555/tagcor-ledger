@@ -84,7 +84,7 @@ python -m pip install -e ".[dev]"
 
 ### 一鍵啟動（建議）
 
-**雙擊專案根目錄的 `啟動 TagCor Ledger.cmd`。** 不用先開終端機、不用 `conda activate`。
+**雙擊專案根目錄的 `Start TagCor Ledger.cmd`。** 不用先開終端機、不用 `conda activate`。
 
 它會自己找到 conda 環境的直譯器（絕對路徑）、清掉繼承來的 `VIRTUAL_ENV`／`PYTHONPATH`、
 跑一次前置檢查確認套件與資料路徑可用，然後開視窗。出問題時會停在畫面上說明原因與修法，

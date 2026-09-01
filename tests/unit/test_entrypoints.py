@@ -77,7 +77,7 @@ def test_version_is_the_same_number_everywhere() -> None:
 
 
 def test_one_click_launcher_files_exist_and_are_encoded_correctly() -> None:
-    launcher = PROJECT_ROOT / "啟動 TagCor Ledger.cmd"
+    launcher = PROJECT_ROOT / "Start TagCor Ledger.cmd"
     script = PROJECT_ROOT / "Launch.ps1"
     assert launcher.exists() and script.exists()
 

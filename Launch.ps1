@@ -158,7 +158,7 @@ Write-Ok "資料庫 $($info.database_path)"
 
 if ($CreateShortcut) {
     Write-Step '建立桌面捷徑'
-    $launcher = Join-Path $ProjectRoot '啟動 TagCor Ledger.cmd'
+    $launcher = Join-Path $ProjectRoot 'Start TagCor Ledger.cmd'
     $linkPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'TagCor Ledger.lnk'
     $shell = New-Object -ComObject WScript.Shell
     $link = $shell.CreateShortcut($linkPath)
