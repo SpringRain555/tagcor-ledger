@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -155,10 +156,17 @@ def test_an_unrecognised_backup_error_still_says_something(code: str | None, sho
 
 
 def test_a_backup_row_falls_back_to_the_folder_name_for_its_time() -> None:
-    """`created_at` 空白的那幾列正是壞掉的那幾列，而它們最需要時間。"""
+    """`created_at` 空白的那幾列正是壞掉的那幾列，而它們最需要時間。
+
+    **路徑用 `Path` 組，不要寫死 `r"D:\\data\\..."` 這種字面值。** 反斜線只有在
+    Windows 上才是分隔字元，Linux 的 `Path` 會把整串當成一個檔名，於是
+    `path.name` 取不出資料夾名、時間也就解析不出來。這條測試因此在 CI 上紅過一次。
+    保留磁碟機代號是刻意的 —— 最後那句斷言要驗「完整路徑沒有漏進畫面」。
+    """
+    folder = Path("D:/data/backups") / "backup_20260821_204129_147229"
     row = backup_row_text(
         {
-            "path": r"D:\data\backups\backup_20260821_204129_147229",
+            "path": str(folder),
             "created_at": "",
             "valid": False,
             "error_code": "BACKUP_MANIFEST_INVALID",
