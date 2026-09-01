@@ -185,8 +185,10 @@ class DepositContractDialog(QDialog):
             #   存單的那個數字 —— 該給他看。但改它會讓期序與實際滾過的輪數對不上，
             #   所以只給看不給改。
             self.opened_on.setEnabled(False)
-            for widget in (self.principal, self.resolved_note):
-                self.form.setRowVisible(widget, False)
+            # 用不同的迴圈變數名：上面那個 `widget` 綁的是另一組型別（輸入元件），
+            # 這裡是 QLineEdit 與 QLabel，重用同一個名字會讓兩邊的型別互相衝突。
+            for row_widget in (self.principal, self.resolved_note):
+                self.form.setRowVisible(row_widget, False)
             self.term_hint.setText(
                 "本金與年利率屬於「期」而不是合約，要改請關掉這個視窗，"
                 "在下面的「每一期」選一列按「修改所選期」。\n"

@@ -259,7 +259,11 @@ class ShareLegend(QWidget):
         重建的成本遠低於維護那個狀態。
         """
         while self._grid.count():
+            # `takeAt()` 宣告回傳 `QLayoutItem | None`。這個迴圈的條件保證拿得到東西，
+            # 但別靠那個推論 —— 條件與取值是兩次獨立呼叫。
             item = self._grid.takeAt(0)
+            if item is None:
+                break
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()

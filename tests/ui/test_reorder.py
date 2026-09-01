@@ -193,7 +193,7 @@ def test_the_lists_are_tall_enough_that_nothing_is_cut_off(
         dialog.show()
         parents = _texts(dialog.parents)
         dialog.parents.list.setCurrentRow(parents.index("交通"))
-        for label, order_list in (("左欄", dialog.parents), ("右欄", dialog.children)):
+        for label, order_list in (("左欄", dialog.parents), ("右欄", dialog.child_list)):
             count = order_list.list.count()
             assert 0 < count <= reorder_module.VISIBLE_ROWS, (
                 f"{label}的列數 {count} 超過 {reorder_module.VISIBLE_ROWS}，這條測不到東西"
@@ -236,12 +236,12 @@ def test_the_items_dialog_has_two_panes_and_orders_within_one_category(
     page.refresh()
 
     def act(dialog: Any) -> bool:
-        assert dialog.children is not None, "項目的排序視窗沒有第二欄"
+        assert dialog.child_list is not None, "項目的排序視窗沒有第二欄"
         parents = _texts(dialog.parents)
         dialog.parents.list.setCurrentRow(parents.index("交通"))
-        inside = _texts(dialog.children)
+        inside = _texts(dialog.child_list)
         assert set(inside) == {"捷運", "公車", "計程車"}, f"右欄不是交通的項目：{inside}"
-        _move_last_to_top(dialog.children)
+        _move_last_to_top(dialog.child_list)
         return True
 
     assert _open(monkeypatch, page, act), "對話框沒開"
@@ -270,12 +270,12 @@ def test_switching_categories_keeps_what_you_already_moved(
         assert len(parents) >= 2, f"至少要兩個類別才切得動：{parents}"
         home = parents.index("交通")
         dialog.parents.list.setCurrentRow(home)
-        _move_last_to_top(dialog.children)
-        moved = _texts(dialog.children)
+        _move_last_to_top(dialog.child_list)
+        moved = _texts(dialog.child_list)
 
         dialog.parents.list.setCurrentRow(0 if home else 1)
         dialog.parents.list.setCurrentRow(home)
-        assert _texts(dialog.children) == moved, "切走再切回來，剛才的順序沒了"
+        assert _texts(dialog.child_list) == moved, "切走再切回來，剛才的順序沒了"
         return False
 
     assert _open(monkeypatch, page, act), "對話框沒開"

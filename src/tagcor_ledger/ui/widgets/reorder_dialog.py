@@ -175,11 +175,16 @@ class ReorderDialog(QDialog):
         self._entries = entries
         self._child_caption = child_caption
         self.parents = OrderList(caption, entries)
-        self.children: OrderList | None = None
+        # **不要叫 `self.children`。** `QObject.children()` 是 Qt 自己的方法，
+        # 指派同名的實例屬性會把它蓋掉 —— 之後任何呼叫 `dialog.children()` 的地方
+        # （Qt 的 Python 側輔助函式、除錯工具）拿到的是一個不可呼叫的 OrderList。
+        # 本機的 mypy 抓不到這種遮蔽（conda 的 PySide6 沒有 `py.typed`，Qt 全是
+        # `Any`），是 CI 上帶 stub 的版本報出來的。
+        self.child_list: OrderList | None = None
         self._child_orders: dict[str, list[str]] = {}
         self._current_parent: str | None = None
         if any(entry.children for entry in entries):
-            self.children = OrderList(child_caption or "底下的項目", [])
+            self.child_list = OrderList(child_caption or "底下的項目", [])
         # **排序方式與自訂順序並排在同一個視窗裡。** 它們是同一件事的兩半：
         # 左邊決定「照什麼排」，右邊決定「自訂那一層長什麼樣」。分成兩個入口的話，
         # 使用者得先猜哪一個才是他要的。
@@ -196,8 +201,8 @@ class ReorderDialog(QDialog):
             side.addStretch()
             lists.addLayout(side)
         lists.addWidget(self.parents)
-        if self.children is not None:
-            lists.addWidget(self.children)
+        if self.child_list is not None:
+            lists.addWidget(self.child_list)
 
         self.hint = QLabel()
         self.hint.setObjectName("hintLabel")
@@ -222,7 +227,7 @@ class ReorderDialog(QDialog):
             self.sort_editor.changed.connect(self._sync_hint)
         self._sync_hint()
 
-        if self.children is not None:
+        if self.child_list is not None:
             self.parents.list.currentRowChanged.connect(lambda *_: self._show_children())
             self._show_children()
 
@@ -250,25 +255,25 @@ class ReorderDialog(QDialog):
 
         不記的話，切走再切回來就會看到拖曳前的順序 —— 使用者會以為剛才白拖了。
         """
-        if self.children is None:
+        if self.child_list is None:
             return
         if self._current_parent is not None:
-            self._child_orders[self._current_parent] = self.children.ordered_ids()
+            self._child_orders[self._current_parent] = self.child_list.ordered_ids()
         parent_id = self.parents.current_id()
         self._current_parent = parent_id
         entry = next(
             (item for item in self._entries if item.identifier == parent_id), None
         )
         if entry is None:
-            self.children.set_entries([])
+            self.child_list.set_entries([])
             return
-        self.children.caption.setText(f"「{entry.name}」底下的項目")
+        self.child_list.caption.setText(f"「{entry.name}」底下的項目")
         remembered = self._child_orders.get(entry.identifier)
         children = list(entry.children)
         if remembered is not None:
             by_id = {child.identifier: child for child in children}
             children = [by_id[i] for i in remembered if i in by_id]
-        self.children.set_entries(children)
+        self.child_list.set_entries(children)
 
     def parent_order(self) -> list[str]:
         return self.parents.ordered_ids()
@@ -279,11 +284,11 @@ class ReorderDialog(QDialog):
         沒點開過的組別不送出去 —— 送出去等於用一份沒人確認過的順序去覆寫，
         而且會白白撞上 `REORDER_LIST_STALE` 的檢查。
         """
-        if self.children is None:
+        if self.child_list is None:
             return {}
         orders = dict(self._child_orders)
         if self._current_parent is not None:
-            orders[self._current_parent] = self.children.ordered_ids()
+            orders[self._current_parent] = self.child_list.ordered_ids()
         return orders
 
 

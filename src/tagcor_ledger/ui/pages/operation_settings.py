@@ -33,6 +33,13 @@ from tagcor_ledger.ui.pages.deposits import DepositsPage
 from tagcor_ledger.ui.pages.templates import TemplatesPage
 from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 
+# `_tabs()` 以前宣告回傳 `QWidget`，而 `QWidget` 上沒有 `.changed` 與 `.refresh()`。
+# 本機的 mypy 看不出來 —— conda 的 PySide6 有 `.pyi` 但**沒有 `py.typed`**，依
+# PEP 561 那些 stub 會被忽略，於是整個 Qt 都是 `Any`。CI 裝的是帶 stub 的版本，
+# 一跑就報出來。列具體的五頁而不是用 Protocol：`addTab()` 要的是真的 `QWidget`，
+# 而 Protocol 表達不出「同時也是 QWidget」。
+SettingsTabPage = AccountsPage | CategoriesPage | ItemsPage | TemplatesPage | DepositsPage
+
 
 class OperationSettingsPage(QWidget):
     apply_requested = Signal(dict)
@@ -47,7 +54,7 @@ class OperationSettingsPage(QWidget):
         self.deposits = DepositsPage(controller)
         self._build()
 
-    def _tabs(self) -> tuple[tuple[QWidget, str], ...]:
+    def _tabs(self) -> tuple[tuple[SettingsTabPage, str], ...]:
         """分頁順序的唯一正本。`refresh()` 與漂移守門都讀它。"""
         return (
             (self.accounts, "帳戶"),
