@@ -69,8 +69,7 @@
 排定 2026-10 月底依實際使用經驗重新評估）。
 
 下一個里程碑是**實際用兩個月**，然後在 2026-10 月底回答 REQ-0010 與
-`docs/research/open-questions.md` 的問題（清單在
-[go-live runbook](operations/go-live-2026-09.md)）。在那之前的兩批 UI 工作
+`docs/research/open-questions.md` 的問題。在那之前的兩批 UI 工作
 （2026-08-18 提出的兩項、以及六個 Stage 的 UI 結構重整）都已於 2026-08-20 收工。
 
 ## 使用者提出的 UI 項目（兩項都已完成）

@@ -809,7 +809,7 @@ def test_recording_a_passbook_date_creates_the_term_that_is_live_today(
 
     terms = service.store.list_terms(contract_id=contract_id)
     assert len(terms) == 1, "中間那兩期不補紀錄 —— 當時的利率與實際利息都不在帳本裡"
-    assert (terms[0].start_date, terms[0].maturity_date) == ("2026-02-15", "2027-02-15")
+    assert (terms[0].start_date, terms[0].maturity_date) == ("2025-11-15", "2026-11-15")
     assert terms[0].sequence == 3, "跳號是誠實的，補號不是"
 
     # 而且它什麼都不會多生：到期日還在未來。

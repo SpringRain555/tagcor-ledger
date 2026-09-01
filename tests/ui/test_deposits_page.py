@@ -200,15 +200,15 @@ def test_the_dialog_resolves_the_passbook_date_to_the_current_term(window, qtbot
     qtbot.addWidget(dialog)
     select_data(dialog.maturity_action, "renew_principal_only")
     dialog.term_months.setValue(12)
-    dialog.opened_on.setDate(QDate(2024, 2, 15))
+    dialog.opened_on.setDate(QDate(2023, 11, 15))
 
-    assert dialog.resolved_term() == ("2026-02-15", 3)
+    assert dialog.resolved_term() == ("2025-11-15", 3)
     assert dialog.values.get("opened_on") is None, "還沒按建立就不該有值"
 
     text = dialog.resolved_note.text()
     assert dialog.resolved_note.isVisibleTo(dialog)
     assert "第 3 期" in text, f"期序要講出來：{text!r}"
-    assert "2026/02/15" in text and "2027/02/15" in text, text
+    assert "2025/11/15" in text and "2026/11/15" in text, text
     assert "不會補紀錄" in text, "要說清楚中間那幾期為什麼不存在"
 
     # 存進去的是**紙上那個數字**，不是算出來的那一期。
@@ -225,7 +225,7 @@ def test_full_renewal_is_told_to_use_the_passbook_balance(window, qtbot) -> None
     qtbot.addWidget(dialog)
     select_data(dialog.maturity_action, "renew_principal_and_interest")
     dialog.term_months.setValue(12)
-    dialog.opened_on.setDate(QDate(2024, 2, 15))
+    dialog.opened_on.setDate(QDate(2023, 11, 15))
 
     assert "目前存摺上" in dialog.resolved_note.text(), dialog.resolved_note.text()
 
@@ -239,7 +239,7 @@ def test_a_non_renewing_deposit_is_simply_over(window, qtbot) -> None:
     qtbot.addWidget(dialog)
     select_data(dialog.maturity_action, "none")
     dialog.term_months.setValue(12)
-    dialog.opened_on.setDate(QDate(2024, 2, 15))
+    dialog.opened_on.setDate(QDate(2023, 11, 15))
 
     assert dialog.resolved_term() == ("2023-11-15", 1)
     text = dialog.resolved_note.text()

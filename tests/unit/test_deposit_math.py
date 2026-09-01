@@ -482,13 +482,13 @@ def test_current_term_rolls_forward_past_every_matured_term() -> None:
     """存單印的是**最初**那一期，而自動轉期續存的定存早就滾過好幾輪了。
 
     使用者的存單：112/11/15 存入、113/11/15 到期、勾「本金無限次數自動轉期續存」。
-    2026-08-23 當下真正存續中的是 2026-02-15 起的那一期，**而它是第 3 期**。
+    2026-08-23 當下真正存續中的是 2025-11-15 起的那一期，**而它是第 3 期**。
 
     期序不是裝飾 —— 它是使用者對得回存單的東西（「這份定存滾過兩輪了」）。
     """
     assert current_term(
         opened_on="2023-11-15", term_months=12, maturity_action=RENEWING, today="2026-08-23"
-    ) == ("2026-02-15", 3)
+    ) == ("2025-11-15", 3)
 
 
 def test_current_term_leaves_a_term_that_has_not_matured_alone() -> None:

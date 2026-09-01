@@ -4,8 +4,7 @@
 
 ## 兩條閱讀路線
 
-**人類第一次接觸**：README → 這份索引 → [go-live runbook](operations/go-live-2026-09.md) → 開始用。
-規格文件在需要時再查。
+**人類第一次接觸**：README → 這份索引 → 開始用。規格文件在需要時再查。
 
 **LLM 或新的維護者要動程式**，照這個順序，**不要跳**：
 
@@ -42,7 +41,6 @@
 ## 快速入口
 
 - [README](../README.md)｜[AGENTS](../AGENTS.md)＝[CLAUDE](../CLAUDE.md)（agent 規則，**兩份平級、內容相同**）
-- [九月上線 runbook](operations/go-live-2026-09.md)
 - [Roadmap](roadmap.md)｜[Changelog](changelog.md)｜[Release checklist](release_checklist.md)
 - [失敗紀錄](lessons.md) —— 踩過的坑與「不要再做」清單
 - [維護者筆記](maintainer_notes.md)（規則在哪的查詢表）｜[環境](environment.md)
