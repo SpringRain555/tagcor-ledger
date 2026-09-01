@@ -23,3 +23,7 @@ dependencies:
   - "mypy>=2.1,<3"
   - "filelock>=3.13"
   - "platformdirs>=4.2"
+  # 時區資料庫。conda 的 Python 一向會帶進來，所以這裡以前沒寫 —— 但**隱形的
+  # 相依就是還沒爆炸的相依**：純 pip venv 上少了它，29 個測試直接 collection
+  # error。明白宣告，兩邊的相依清單才對得起來。
+  - "tzdata>=2024.1"

@@ -168,9 +168,15 @@ def test_the_version_reader_actually_finds_all_three() -> None:
         assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value), f"{where} 讀出來的是 {value!r}"
 
 
-# 兩份都宣告的檢查工具。PySide6 刻意不在裡面 —— 它只能由 conda 裝，
-# 本來就不該出現在 pyproject 的 dependencies 裡。
-SHARED_TOOLS = ("pytest", "pytest-qt", "ruff", "mypy")
+# 兩份都該宣告的套件：執行期相依 ＋ 檢查工具。
+#
+# **PySide6 刻意不在裡面** —— 它只能由 conda 裝，本來就不該出現在 pyproject 的
+# dependencies 裡（Windows 下混用 conda/pip 的 PySide6 會讓 Qt DLL 載入失敗）。
+#
+# `tzdata` 是 2026-09-01 補進來的：conda 的 Python 一向會帶它，所以它在 pyproject
+# 裡缺席了很久都沒事 —— 直到在純 pip venv 上跑，29 個測試 collection error。
+# **隱形的相依就是還沒爆炸的相依**，這條守門要涵蓋執行期而不只是工具。
+SHARED_TOOLS = ("filelock", "platformdirs", "tzdata", "pytest", "pytest-qt", "ruff", "mypy")
 
 
 def _conda_tool_specs() -> dict[str, str]:
@@ -190,11 +196,15 @@ def _conda_tool_specs() -> dict[str, str]:
 
 
 def _pyproject_tool_specs() -> dict[str, str]:
+    """執行期相依與 dev 相依都要讀 —— 兩塊都有該與 conda 對齊的套件。"""
     import tomllib
 
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    entries = list(pyproject["project"]["dependencies"])
+    entries += list(pyproject["project"]["optional-dependencies"]["dev"])
+
     specs: dict[str, str] = {}
-    for entry in pyproject["project"]["optional-dependencies"]["dev"]:
+    for entry in entries:
         match = re.match(r"([A-Za-z0-9_.-]+)(.*)", entry)
         if match and match.group(1) in SHARED_TOOLS:
             specs[match.group(1)] = match.group(2).strip()
