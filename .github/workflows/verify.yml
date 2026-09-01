@@ -27,9 +27,11 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      # v4／v5 跑在 Node.js 20 上，而 runner 已經在警告它被淘汰並強制改用 Node 24。
+      # v7 是原生 Node 24。用法沒變，這兩個是 drop-in。
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip

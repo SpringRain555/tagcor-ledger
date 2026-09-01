@@ -74,6 +74,50 @@ function ConvertTo-RulePath {
     return ($Path -replace '\\', '/').TrimEnd('/')
 }
 
+function Test-QtTypeStubs {
+    <#
+        conda-forge 的 pyside6 **有 49 個 .pyi 但沒有 py.typed**，而依 PEP 561
+        少了那個標記檔，整包 stub 就會被忽略 —— 於是 `mypy --strict` 把所有 Qt
+        互動都當成 `Any`，等於這一層對整個 ui/ 幾乎沒有在檢查。
+
+        這不是假設。2026-09-01 加上 CI（裝的是有 py.typed 的 pip 版）之後，第一次
+        跑就報出五個本機從來沒看過的錯誤，其中 `reorder_dialog` 的 `self.children`
+        **蓋掉了 `QObject.children()` 這個 Qt 方法**。
+
+        標記檔補上去就好：stub 本身是上游 PySide6 就有的，conda-forge 只是沒把
+        標記一起打包。補完之後本機會抓到與 CI 一模一樣的錯誤（實測過）。
+
+        pip 版本來就有這個檔，所以這段對 pip/uv 裝的環境是 no-op。
+    #>
+    Write-Section 'Qt 型別 stub'
+
+    # python.exe 的父目錄就是環境根目錄（Windows 的 conda 佈局；不要再往上一層）。
+    $pySide = Join-Path (Split-Path -Parent $Python) 'Lib\site-packages\PySide6'
+    if (-not (Test-Path -LiteralPath $pySide)) {
+        Write-Note "略過：找不到 PySide6（$pySide）。"
+        return
+    }
+
+    $marker = Join-Path $pySide 'py.typed'
+    if (Test-Path -LiteralPath $marker) {
+        Write-Pass 'PySide6 有 py.typed，mypy 看得到 Qt 的型別'
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $pySide 'QtWidgets.pyi'))) {
+        Add-Failure 'PySide6 既沒有 py.typed 也沒有 .pyi —— mypy 完全檢查不到 Qt。'
+        return
+    }
+
+    New-Item -ItemType File -Path $marker -ErrorAction SilentlyContinue | Out-Null
+    if (Test-Path -LiteralPath $marker) {
+        Write-Pass '已補上 PySide6 的 py.typed（conda-forge 沒打包這個標記檔）'
+        Write-Note 'mypy 從這一次起才真的會檢查 Qt 的型別。'
+    } else {
+        Add-Failure "無法建立 $marker —— mypy 會把整個 Qt 當成 Any，ui/ 幾乎不受檢查。"
+    }
+}
+
 function Test-PathDrift {
     Write-Section '路徑漂移檢查'
 
@@ -188,6 +232,9 @@ try {
     }
 
     if (-not $SkipDrift) { Test-PathDrift }
+
+    # 要在 mypy 之前 —— 它決定了那一步到底有沒有在檢查 Qt。
+    Test-QtTypeStubs
 
     Invoke-Step -Name 'ruff' -Arguments @('-m', 'ruff', 'check', '--no-cache', '.')
     Invoke-Step -Name 'mypy --strict' -Arguments @('-m', 'mypy', '--no-incremental', 'src')

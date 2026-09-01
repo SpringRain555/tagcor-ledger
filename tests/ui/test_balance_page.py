@@ -4,6 +4,7 @@
 """
 
 
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QMessageBox,
 )
@@ -40,6 +41,12 @@ def test_voiding_a_transaction_recalculates_the_balance_gap(window, monkeypatch)
     未解釋差額 ＝ 盤點金額 － 期間內 posting 加總，所以任何一筆交易的增減都會改變它。
     以前 `TransactionsPage` 只重刷自己那張表、不對外發訊號，於是作廢一筆錯帳之後
     切到餘額盤點，差額還是舊的 —— 而那個數字正是那一頁存在的唯一理由。
+
+    **那筆帳要記在昨天，不要用預設的今天。** posting 的納入條件是
+    `occurred_at <= observed_at`（`stores/balance.py`），而兩個時間戳都由
+    `iso_from_date()` 補上牆上時鐘的時分秒、**只到秒**。兩者都用今天的話，
+    這筆帳算不算得進去取決於這幾行之間有沒有跨過一次秒界 —— 2026-09-01 實測
+    整套跑四次紅一次，就是這個。記昨天就與時鐘無關了。
     """
 
     window.balance.amount.setText("0")
@@ -48,6 +55,7 @@ def test_voiding_a_transaction_recalculates_the_balance_gap(window, monkeypatch)
 
     window.entry.select_entry_type("expense")
     window.entry.amount.setText("85")
+    window.entry.occurred_at.setDate(QDate.currentDate().addDays(-1))
     window.entry.submit()
     after_entry = _amount_in_summary(window.balance.summary.text())
     assert after_entry != before, "記帳之後差額就該變了"

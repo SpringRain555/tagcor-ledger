@@ -1,14 +1,25 @@
+# 這份是 conda 環境的唯一定義，`conda env create -f environment.yaml` 讀的就是它。
+#
+# **檢查工具的版本上界要與 pyproject.toml 的 [project.optional-dependencies].dev
+# 保持一致。** 兩邊都宣告同一批工具，而真正建出環境的是這一份 —— 只改 pyproject
+# 的話，新 clone 拿到的 ruff/mypy 可能落在宣告範圍之外，本機與 CI 的結果就會不同。
+# 2026-09-01 踩過一次：pyproject 加了上界而這裡沒有，兩份對不上。
+#
+# 上界的理由寫在 pyproject 那一段：一個會因為別人發新版而變紅的閘門，
+# 紅的時候不代表你改壞了什麼。
 name: tagcor-ledger
 channels:
   - conda-forge
 dependencies:
   - python=3.12
   - "pip>=24.0"
+  # PySide6 一定要由 conda 裝，不可以放進 pyproject 讓 pip 裝 ——
+  # Windows 下混用 conda/pip 的 PySide6 會造成 Qt DLL 載入失敗。
   - pyside6
-  - "setuptools>=69.0"
-  - "pytest>=8.0"
-  - "pytest-qt>=4.4"
-  - "ruff>=0.4"
-  - "mypy>=1.10"
+  - "setuptools>=77.0"
+  - "pytest>=8.0,<10"
+  - "pytest-qt>=4.4,<5"
+  - "ruff>=0.15,<0.16"
+  - "mypy>=2.1,<3"
   - "filelock>=3.13"
   - "platformdirs>=4.2"

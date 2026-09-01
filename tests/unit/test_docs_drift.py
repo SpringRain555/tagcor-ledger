@@ -1,13 +1,19 @@
-"""守門：文件裡的頁面名稱必須跟程式一致。
+"""守門：同一件事寫在兩個地方時，兩個地方要一致。
 
-`docs/architecture/ui-workflows.md` 是「側邊欄順序與各頁流程」的權威文件，而它在
-2026-08-20 之前已經漂到**整份都是錯的**：側邊欄順序是舊的、寫「時間」（v0.13.0 已改成
-日期）、字體寫 `Segoe UI Variable`（已改成 Microsoft JhengHei UI）、還留著「重製與還原」
-這個已經拆開的分頁名。沒有人做錯什麼 —— 只是改程式的時候沒有任何東西提醒要改文件。
+三組：
 
-**這裡做的是逐字比對，不做推論。** 名稱的正本是 `navigation.LABELS` 與
-`OperationSettingsPage._tabs()`；這份測試只問「這個字串有沒有出現在那份文件裡」。
-比對範圍刻意窄 —— 一個會誤報的守門比沒有守門更糟，因為你會學會忽略它。
+1. **頁面名稱 ↔ `docs/architecture/ui-workflows.md`** —— 那份文件在 2026-08-20 之前
+   已經漂到**整份都是錯的**：側邊欄順序是舊的、寫「時間」（v0.13.0 已改成日期）、
+   字體寫 `Segoe UI Variable`、還留著「重製與還原」這個已經拆開的分頁名。
+   沒有人做錯什麼 —— 只是改程式的時候沒有任何東西提醒要改文件。
+2. **版本號**（`pyproject.toml` ／ `__init__.py` ／ README）—— 每發一版都要動三處。
+3. **檢查工具的版本範圍**（`environment.yaml` ／ `pyproject.toml`）—— 2026-09-01
+   踩過：`pyproject` 加了上界而 `environment.yaml` 沒有，而後者才是真正建環境的那一份，
+   於是新 clone 的 ruff 可能落在宣告範圍外，本機與 CI 的結果不同。
+
+**這裡做的是逐字比對，不做推論。** 只問「這個字串有沒有出現在那份文件裡」、
+「這兩個值一不一樣」。比對範圍刻意窄 —— 一個會誤報的守門比沒有守門更糟，
+因為你會學會忽略它。
 """
 
 from __future__ import annotations
@@ -160,3 +166,69 @@ def test_the_version_reader_actually_finds_all_three() -> None:
     assert len(versions) == 3
     for where, value in versions.items():
         assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value), f"{where} 讀出來的是 {value!r}"
+
+
+# 兩份都宣告的檢查工具。PySide6 刻意不在裡面 —— 它只能由 conda 裝，
+# 本來就不該出現在 pyproject 的 dependencies 裡。
+SHARED_TOOLS = ("pytest", "pytest-qt", "ruff", "mypy")
+
+
+def _conda_tool_specs() -> dict[str, str]:
+    """從 environment.yaml 讀 `- "ruff>=0.15,<0.16"` 這種列。
+
+    **不 import pyyaml** —— 專案沒有這個相依，而為了讀四行設定多裝一個套件不划算
+    （同 `reference/sources.json` 選 JSON 而不選 YAML 的理由）。
+    格式固定且由這條測試自己守著，逐行比對就夠。
+    """
+    text = (PROJECT_ROOT / "environment.yaml").read_text(encoding="utf-8")
+    specs: dict[str, str] = {}
+    for line in text.splitlines():
+        match = re.match(r'\s*-\s*"?([A-Za-z0-9_.-]+)((?:[<>=!].*?)?)"?\s*$', line)
+        if match and match.group(1) in SHARED_TOOLS:
+            specs[match.group(1)] = match.group(2).strip()
+    return specs
+
+
+def _pyproject_tool_specs() -> dict[str, str]:
+    import tomllib
+
+    pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    specs: dict[str, str] = {}
+    for entry in pyproject["project"]["optional-dependencies"]["dev"]:
+        match = re.match(r"([A-Za-z0-9_.-]+)(.*)", entry)
+        if match and match.group(1) in SHARED_TOOLS:
+            specs[match.group(1)] = match.group(2).strip()
+    return specs
+
+
+def test_the_checker_versions_agree_between_conda_and_pyproject() -> None:
+    """`environment.yaml` 才是真正建環境的那一份，只改 `pyproject` 沒有用。
+
+    2026-09-01 實際發生過：pyproject 加了上界、environment.yaml 沒有，於是
+    `conda env create` 拿到的 ruff 可能落在宣告範圍外，本機與 CI 的規則集不同。
+    """
+    conda = _conda_tool_specs()
+    pyproject = _pyproject_tool_specs()
+
+    mismatched = [
+        f"  {tool:<10} environment.yaml={conda.get(tool, '（沒宣告）'):<16} "
+        f"pyproject={pyproject.get(tool, '（沒宣告）')}"
+        for tool in SHARED_TOOLS
+        if conda.get(tool) != pyproject.get(tool)
+    ]
+    if mismatched:
+        pytest.fail(
+            "檢查工具的版本範圍兩邊不一致：\n"
+            + "\n".join(mismatched)
+            + "\n改一份就要改另一份 —— environment.yaml 才是真正建環境的那一份。"
+        )
+
+
+def test_both_spec_readers_actually_find_every_tool() -> None:
+    """陽性對照：任何一邊解析失敗都會讓上面那條變成「兩個空 dict 相等」。"""
+    for label, specs in (("environment.yaml", _conda_tool_specs()),
+                         ("pyproject.toml", _pyproject_tool_specs())):
+        missing = [tool for tool in SHARED_TOOLS if tool not in specs]
+        assert not missing, f"{label} 裡沒讀到：{missing}"
+        for tool, spec in specs.items():
+            assert spec.startswith(">="), f"{label} 的 {tool} 讀出來是 {spec!r}"
