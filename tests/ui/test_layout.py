@@ -172,7 +172,9 @@ def test_shrink_wrapped_tables_are_never_clipped(qtbot, tmp_path: Path) -> None:
     """
     window = _open(qtbot, tmp_path, size=(1600, 900))
     controller = window.controller
-    controller.create_account("郵局活儲", "1102410")
+    # 期初餘額只需要「夠長」——欄寬才會被撐開。用一眼看得出是編造的值，
+    # 免得以後有人（或稽核）停下來確認這是不是誰的真實餘額。
+    controller.create_account("郵局活儲", "1234567")
     controller.create_category("交通")
     window.operation_settings.refresh()
 
