@@ -16,11 +16,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# **上界是必要的，不是保守。** 這裡原本是 `ruff>=0.4` 這種開放範圍，於是 CI 裝到
+# 最新版而本機是 0.15.x —— 兩邊的預設規則集不同，同一份程式碼本機綠、CI 紅
+# （2026-09-01 第一次跑 CI 就踩到：新版 ruff 預設開了 I001 import 排序）。
+# 一個會因為別人發新版而變紅的閘門，紅的時候不代表你改壞了什麼。
+# 升級要有意識地做：把上界往上抬，然後跑一次 .\Verify.ps1 -Ui 看要修什麼。
 dev = [
-    "pytest>=8.0",
-    "pytest-qt>=4.4",
-    "ruff>=0.4",
-    "mypy>=1.10",
+    "pytest>=8.0,<10",
+    "pytest-qt>=4.4,<5",
+    "ruff>=0.15,<0.16",
+    "mypy>=2.1,<3",
 ]
 
 [project.gui-scripts]
