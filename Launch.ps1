@@ -72,47 +72,12 @@ function Stop-WithMessage {
 }
 
 # --- 找到 conda 環境的直譯器 -------------------------------------------------
-# 不用 `conda activate`：它在沒有載入 PowerShell hook 的情境下會跑在子 process 裡，
-# 回報成功、退出碼 0，卻改不到目前這個 session 的環境變數。
-function Resolve-EnvironmentPython {
-    $candidates = New-Object System.Collections.Generic.List[string]
-
-    if ($env:TAGCOR_PYTHON) { $candidates.Add($env:TAGCOR_PYTHON) }
-
-    $bases = @(
-        "$env:USERPROFILE\miniconda3",
-        "$env:USERPROFILE\anaconda3",
-        "$env:LOCALAPPDATA\miniconda3",
-        "$env:LOCALAPPDATA\anaconda3",
-        "$env:ProgramData\miniconda3",
-        "$env:ProgramData\anaconda3",
-        'C:\miniconda3',
-        'C:\anaconda3'
-    )
-
-    # 也問一次 PATH 上的 conda，涵蓋裝在非標準位置的情形。
-    $conda = Get-Command conda -ErrorAction SilentlyContinue
-    if ($conda) {
-        try {
-            $base = (& $conda.Source info --base 2>$null | Select-Object -First 1)
-            if ($base) { $bases += $base.Trim() }
-        } catch {
-            # conda 壞掉不是這裡要處理的問題，繼續用固定候選路徑。
-        }
-    }
-
-    foreach ($base in $bases) {
-        if ($base) { $candidates.Add((Join-Path $base "envs\$EnvName\python.exe")) }
-    }
-
-    foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { return $candidate }
-    }
-    return $null
-}
+# 查找邏輯在 tools\Resolve-TagcorPython.ps1，與 Verify.ps1 共用同一份 ——
+# 兩邊各寫一份的話，改了一邊沒改另一邊會變成「啟動得起來但驗證跑不了」。
+. (Join-Path $ProjectRoot 'tools\Resolve-TagcorPython.ps1')
 
 Write-Step "尋找 conda 環境 $EnvName"
-$python = Resolve-EnvironmentPython
+$python = Resolve-TagcorPython -EnvName $EnvName
 if (-not $python) {
     Stop-WithMessage "找不到 conda 環境 $EnvName 的 python.exe" @(
         '請先建立環境：',

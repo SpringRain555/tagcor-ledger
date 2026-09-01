@@ -61,10 +61,23 @@ fi
 # 完整驗證仍然是 .\Verify.ps1 -Ui，那是發版前的事。
 # ============================================================================
 
-PYTHON='<conda-root>/envs/tagcor-ledger/python.exe'
+# 這裡是 POSIX shell，用不到 Verify.ps1 那套 PowerShell 查找。改成掃同一組候選位置，
+# 並讓 $TAGCOR_PYTHON 有最高優先權（與 Launch.ps1 / Verify.ps1 認的是同一個變數）。
+PYTHON="$TAGCOR_PYTHON"
+if [ -z "$PYTHON" ]; then
+	for base in "$USERPROFILE/miniconda3" "$USERPROFILE/anaconda3" \
+	            "$LOCALAPPDATA/miniconda3" "$LOCALAPPDATA/anaconda3" \
+	            "$HOME/miniconda3" "$HOME/anaconda3" \
+	            "/c/miniconda3" "/c/anaconda3"; do
+		if [ -x "$base/envs/tagcor-ledger/python.exe" ]; then
+			PYTHON="$base/envs/tagcor-ledger/python.exe"
+			break
+		fi
+	done
+fi
 
 # 找不到直譯器就放行 —— 在別台機器 clone 下來時不該連 commit 都不能做。
-if [ ! -x "$PYTHON" ]; then
+if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
 	echo "  提示：找不到專案的 conda 直譯器，略過 lint／型別閘門。"
 	exit 0
 fi

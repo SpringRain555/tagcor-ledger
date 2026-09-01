@@ -2,7 +2,9 @@
 
 ## 程式與資料是分開的
 
-**帳務資料不在專案資料夾裡。** 專案（`D:\Projects\tagcor-ledger`）是程式，將來若推上 remote 只會公開它；資料在 `<資料根目錄>`，永遠不進版控。
+**帳務資料不在專案資料夾裡。** 專案資料夾是程式，推上 remote 公開的只有它；資料放在專案外的另一個位置（由「系統設定 → 資料路徑」指定），永遠不進版控。
+
+下面的路徑都是**範例**，實際位置由使用者自己決定。
 
 指標檔 `system_paths.json` 存在使用者設定目錄（`%LOCALAPPDATA%\TagCor\TagCorLedger\`），不放在 ledger SQLite 內 —— 程式必須先找到指標，才知道資料庫在哪。
 
@@ -32,7 +34,7 @@
 ## 一般使用
 
 ```text
-data_root/                       ← <資料根目錄>
+data_root/                       ← 例：D:\Ledger\tagcor-ledger
 ├── ledger/
 │   ├── ledger.sqlite3
 │   ├── ledger.sqlite3-wal
@@ -51,9 +53,9 @@ data_root/                       ← <資料根目錄>
 ```json
 {
   "settings_version": 1,
-  "data_root": "<資料根目錄>",
-  "ledger_dir": "<資料根目錄>\\ledger",
-  "backup_dir": "<資料根目錄>\\backups"
+  "data_root": "D:\\Ledger\\tagcor-ledger",
+  "ledger_dir": "D:\\Ledger\\tagcor-ledger\\ledger",
+  "backup_dir": "D:\\Ledger\\tagcor-ledger\\backups"
 }
 ```
 

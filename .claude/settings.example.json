@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_readme": [
+    "複製成 .claude/settings.json 再改路徑。那一份不進版控 —— 它列的是本機私人",
+    "資料夾的實際名稱，而每次新增一個私人資料夾就要多列一條 deny，追蹤它等於把",
+    "那份清單一起公開。",
+    "",
+    "三層的理由：deny 優先於 allow，而且路徑 pattern 沒有否定語法，所以做不到",
+    "『deny 整棵樹但 allow 其中一個子樹』—— 那樣寫會連允許的資料夾一起擋掉。",
+    "  deny  寫入絕對禁止，無例外（資料只由 App 自己寫，agent 永遠不需要寫）",
+    "  ask   讀取一律先問過使用者",
+    "  allow 指定的資料夾免問",
+    "",
+    "新增 deny 條目一定要用 /** 結尾。單一 * 在 glob 裡只 match 一層，",
+    "Read(D:/Private/X/*) 會涵蓋 X 這個資料夾本身卻涵蓋不到 X\\secret.txt。",
+    "",
+    "三個極限，不要當成滴水不漏：",
+    "  1. 攔不住 shell。Get-Content、cat、Select-String 都能讀檔。成文規則才是依據。",
+    "  2. 改了要重啟 session 才生效。",
+    "  3. 新資料夾不會自動被擋，只會被 ask 攔下來問。Verify.ps1 的漂移檢查會列出它們。"
+  ],
+  "permissions": {
+    "allow": [
+      "Read(<your-data-root>/**)",
+      "Glob(<your-data-root>/**)",
+      "Grep(<your-data-root>/**)"
+    ],
+    "ask": [
+      "Read(<your-private-tree>/**)",
+      "Glob(<your-private-tree>/**)",
+      "Grep(<your-private-tree>/**)"
+    ],
+    "deny": [
+      "Edit(<your-private-tree>/**)",
+      "Write(<your-private-tree>/**)"
+    ]
+  }
+}

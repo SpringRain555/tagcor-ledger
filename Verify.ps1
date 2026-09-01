@@ -32,7 +32,18 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$Python = '<conda-root>\envs\tagcor-ledger\python.exe'
+
+# 查找邏輯與 Launch.ps1 共用同一份，見 tools\Resolve-TagcorPython.ps1。
+. (Join-Path $ProjectRoot 'tools\Resolve-TagcorPython.ps1')
+$Python = Resolve-TagcorPython
+if (-not $Python) {
+    Write-Host ''
+    Write-Host '  失敗  找不到 conda 環境 tagcor-ledger 的 python.exe' -ForegroundColor Red
+    Write-Host '        先建立環境：conda env create -f environment.yaml' -ForegroundColor Yellow
+    Write-Host '        或指定位置：$env:TAGCOR_PYTHON = "X:\...\envs\tagcor-ledger\python.exe"' -ForegroundColor Yellow
+    Write-Host ''
+    exit 1
+}
 
 $script:Failures = New-Object System.Collections.ArrayList
 
@@ -66,9 +77,12 @@ function ConvertTo-RulePath {
 function Test-PathDrift {
     Write-Section '路徑漂移檢查'
 
+    # 全新 clone 本來就沒有指標檔（那是 App 第一次設定路徑時才寫的），所以這是
+    # **跳過**不是失敗 —— 讓一個沒設定過的環境第一次跑就看到紅色，紅的是環境不是程式碼。
     $pointer = Join-Path $env:LOCALAPPDATA 'TagCor\TagCorLedger\system_paths.json'
     if (-not (Test-Path -LiteralPath $pointer)) {
-        Add-Failure "找不到指標檔 $pointer —— 先在 App 的『系統設定 → 記帳資料路徑』設定一次。"
+        Write-Note "略過：還沒有指標檔（$pointer）。"
+        Write-Note "在 App 的『系統設定 → 記帳資料路徑』設定一次之後，這項才有東西可以比對。"
         return
     }
 
@@ -90,9 +104,11 @@ function Test-PathDrift {
         Add-Failure "data_root 指向的資料夾不存在：$dataRoot"
     }
 
+    # `.claude\settings.json` 不進版控（裡面是本機的 <私人資料樹> 路徑規則），
+    # 所以新 clone 沒有它是正常的 —— 同上，跳過而不是失敗。
     $claudeSettings = Join-Path $ProjectRoot '.claude\settings.json'
     if (-not (Test-Path -LiteralPath $claudeSettings)) {
-        Add-Failure "找不到 $claudeSettings"
+        Write-Note "略過：沒有 .claude\settings.json。從 .claude\settings.example.json 複製一份即可。"
         return
     }
 

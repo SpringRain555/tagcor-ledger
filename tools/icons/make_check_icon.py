@@ -23,7 +23,7 @@ PNG 是唯一可行的。**兩個尺寸都要**：Qt 的 stylesheet 會照 devic
 對不起來，而那種差異只在高 DPI 螢幕上看得到。要改形狀就改這裡的座標再重跑。
 
 ```powershell
-<conda-root>/envs/tagcor-ledger/python.exe tools/icons/make_check_icon.py
+& $env:TAGCOR_PYTHON tools/icons/make_check_icon.py
 ```
 
 （正斜線是刻意的：docstring 不是 raw string，Windows 路徑裡的反斜線加大寫 U

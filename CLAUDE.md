@@ -35,11 +35,18 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 
 | | 位置 |
 |---|---|
-| 程式（可公開） | `D:\Projects\tagcor-ledger\` |
-| 資料（絕不公開） | `<資料根目錄>\` |
+| 程式（可公開） | 這個 repo 的資料夾 |
+| 資料（絕不公開） | `<資料根目錄>` |
 | 指標檔 | `%LOCALAPPDATA%\TagCor\TagCorLedger\system_paths.json` |
 
 資料根目錄底下固定五個平輩資料夾：`ledger\`、`backups\`、`exports\`、`logs\`、`tmp\`。
+
+> **`<資料根目錄>` 與 `<私人資料樹>` 是佔位符**，因為這個 repo 是公開的 ——
+> 把私人資料夾的實際名稱寫進版控，等於把那份清單一起發佈出去。
+> 實際路徑有兩個權威來源：指標檔 `system_paths.json` 的 `data_root`，
+> 以及本機那份 `.claude/settings.json`（**不進版控**，範本是
+> `.claude/settings.example.json`）。要知道現在指到哪，跑
+> `& $env:TAGCOR_PYTHON -m tagcor_ledger --json`。
 
 ### agent 的讀取規則
 
@@ -261,7 +268,7 @@ python -m tagcor_ledger --gui
 **agent 在工具 shell 裡：一律用完整路徑，不要用 `conda activate`。**
 
 ```powershell
-<conda-root>\envs\tagcor-ledger\python.exe -m tagcor_ledger --json
+& $env:TAGCOR_PYTHON -m tagcor_ledger --json
 ```
 
 理由是工具 shell 以 `-NonInteractive` 啟動、**不載入 `profile.ps1`**，所以 `conda init powershell` 裝的 hook 沒生效。此時 `conda activate` 會跑在子 process 裡改不到父層環境，**回報成功、退出碼 0、實際上什麼都沒換**（2026-08-18 實測）。接著跑到的會是 PATH 上碰巧排在前面的別的直譯器 —— 那個直譯器多半沒有 PySide6，於是失敗訊息會指向完全無關的方向。

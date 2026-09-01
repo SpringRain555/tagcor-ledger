@@ -44,6 +44,12 @@ dist/
 
 .agents/
 .claude/settings.local.json
+
+# 本機的路徑權限規則。**不進版控** —— 它列的是私人資料夾的實際名稱，而漂移檢查
+# 會要求每新增一個私人資料夾就多列一條 deny，追蹤它等於把那份清單一起公開。
+# 範本是 .claude/settings.example.json。
+.claude/settings.json
+
 .env
 .env.*
 !.env.example

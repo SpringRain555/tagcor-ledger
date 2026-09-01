@@ -4,7 +4,7 @@ TagCor Ledger 是 Windows-first、本機優先的個人記帳工具。核心資�
 
 目前版本：**0.24.1**（記帳頁照填寫順序問、表格欄寬會讓路、勾選框補回勾號）。0.24.0 讓定存照存單填就好並修掉三處計算錯誤；0.22.0–0.23.0 加了資產占比圓環、修好模板封存、移除定期收支；0.20.0–0.21.1 是一輪體質工作（controller／stores／formatting 依功能拆檔、例外收斂、補測試、pre-commit 加閘門）；0.17.0–0.19.0 讓類別與項目可以排成自己想要的順序，排序搬進獨立視窗、支援多層且記得住。
 
-**帳務資料不在專案資料夾裡。** 程式在 `D:\Projects\tagcor-ledger`，資料在 `<資料根目錄>`，兩者分開，資料永遠不進版控。完整說明見 [Storage layout](docs/architecture/storage-layout.md)。
+**帳務資料不在專案資料夾裡。** 程式一個位置、資料另一個位置，由「系統設定 → 資料路徑」指定，資料永遠不進版控 —— 所以這個 repo 公開的只有程式。完整說明見 [Storage layout](docs/architecture/storage-layout.md)。
 
 ## 目前功能
 
@@ -255,5 +255,18 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 
 要動手改東西的 agent 讀 `AGENTS.md` 或 `CLAUDE.md`（兩份平級、內容相同）。
 
-跨專案的脈絡（狀態、來源）在 `D:\Projects\_meta\cards\tagcor-ledger.md` ——
-那是權威來源，本檔不重複它。
+## 授權與第三方元件
+
+本專案的程式碼與文件採 **MIT** 授權，全文見 [LICENSE](LICENSE)。
+
+**PySide6 / Qt 依 LGPL-3.0 使用，而本 repo 不散布任何 Qt 二進位檔。** 介面用的
+Qt 由使用者自己的 conda 環境安裝（見上面「安裝」），所以取得原始碼這件事不涉及
+Qt 的散布義務。**若日後打包成內含 Qt DLL 的可執行檔就不一樣了** —— 屆時要依
+LGPLv3 §4 標示使用了 Qt、附上授權全文，並保留讓使用者換上自己編譯的 Qt 重新連結
+的能力（動態連結、DLL 不打進單一執行檔即可滿足）。寫在這裡是為了讓做那件事的
+時候看得到。
+
+`reference/corpus/` 的法規條文原文出自
+[全國法規資料庫](https://law.moj.gov.tw/)，依著作權法第 9 條，法律與命令不得為
+著作權之標的。各篇的白話摘要與「對這個帳本的意義」是本專案自撰，**不是法律或
+稅務意見**，以主管機關公告為準。
