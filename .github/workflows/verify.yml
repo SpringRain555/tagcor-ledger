@@ -1,0 +1,62 @@
+# 對應 Verify.ps1 的 ruff → mypy --strict → pytest 三段。
+#
+# **不呼叫 Verify.ps1 本身**：它是 Windows-only，而且會去讀 %LOCALAPPDATA% 的指標檔
+# 做路徑漂移檢查 —— 那一項在 CI 上沒有意義（沒有真實資料路徑可以比對）。步驟在這裡
+# 重列一次，兩邊要一起改。
+#
+# **PySide6 由 pip 安裝，這是刻意的例外。** 專案硬規則說 PySide6 不能給 pip 裝，
+# 理由寫得很明白：Windows 下 conda 與 pip 混裝會讓 Qt DLL 載入失敗。這裡是 Linux
+# runner 上的乾淨 venv，不存在混裝。所以只在這個 workflow 的 step 裡裝，
+# **絕不加進 pyproject.toml 的 dependencies** —— 那會讓開發者的 Windows 環境踩到雷。
+#
+# tests/ui 暫時不跑（它需要更多 Qt 平台相依）。tests/unit 需要 Qt：
+# test_resources.py 匯入 ui.theme。tests/integration 完全不碰 Qt。
+
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安裝 Qt 的執行期相依
+        # PySide6 的 wheel 自帶 Qt，但 Qt 本身還是要這幾個系統函式庫才載得起來。
+        # 少了它們的症狀是 import PySide6 直接 ImportError，訊息指向 libEGL。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0
+
+      - name: 安裝專案與開發相依
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install PySide6
+
+      - name: ruff
+        run: python -m ruff check --no-cache .
+
+      - name: mypy --strict
+        run: python -m mypy --no-incremental src
+
+      - name: pytest（unit + integration）
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest tests/unit tests/integration -q
