@@ -279,7 +279,25 @@ python -m tagcor_ledger --gui
 .\Verify.ps1 -Performance    # 加跑 20 萬筆效能測試
 ```
 
-**`git commit` 會自動跑 ruff ＋ mypy**（`.githooks/pre-commit`，約 2 秒）。這個 repo 沒有 remote，所以本機 hook 是唯一能自動化的閘門。**pytest 刻意不在 hook 裡** —— 整包 52 秒會讓人習慣性打 `--no-verify`，而一個被習慣性繞過的閘門比沒有閘門更糟。完整驗證仍然是 `.\Verify.ps1 -Ui`。
+**三層閘門，各擋不同的東西：**
+
+| 層 | 何時 | 跑什麼 | 耗時 |
+|---|---|---|---|
+| `.githooks/pre-commit` | 每次 `git commit` | ruff ＋ mypy | 約 2 秒 |
+| `.githooks/pre-push` | 每次 `git push` | ruff ＋ mypy ＋ **全部測試** | 約 70 秒 |
+| GitHub Actions | push **之後** | 同上，但少了量像素的 21 條 | 約 60 秒 |
+
+**pytest 進得了 pre-push 卻進不了 pre-commit，差別在頻率。** pre-commit 一天觸發
+十幾次，66 秒會讓人習慣性打 `--no-verify`，而一個被習慣性繞過的閘門比沒有閘門更糟；
+pre-push 通常一個工作段落才一次，70 秒可以接受。
+
+**pre-push 跑得比 CI 完整** —— 它在 Windows 上，所以那 21 條量像素的（`geometry`
+marker）只有這裡會自動跑到。CI 在 Linux，字體與 Qt 平台外掛都不同，量出來的不是
+使用者會看到的東西。
+
+兩個 hook 的直譯器查找共用 `.githooks/resolve-python.sh`，認的環境變數與
+`Launch.ps1`／`Verify.ps1` 相同（`$TAGCOR_PYTHON`）。要跳過用 `--no-verify`；
+完整輸出仍然是 `.\Verify.ps1 -Ui`。
 
 hook 沒生效的話跑一次 `git config core.hooksPath .githooks`。
 

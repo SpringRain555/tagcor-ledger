@@ -244,10 +244,22 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 ## 驗證
 
 ```powershell
-.\Verify.ps1                 # 路徑漂移檢查 + ruff + mypy --strict + pytest
+.\Verify.ps1                 # 路徑漂移檢查 + Qt stub + ruff + mypy --strict + pytest
 .\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
 .\Verify.ps1 -Performance    # 加跑 200,000 筆效能回歸
 ```
+
+三層自動閘門，各擋不同的東西（第一次 clone 要跑一次
+`git config core.hooksPath .githooks` 才會生效）：
+
+| 層 | 何時 | 跑什麼 | 耗時 |
+|---|---|---|---|
+| `pre-commit` | 每次 commit | ruff ＋ mypy | 約 2 秒 |
+| `pre-push` | 每次 push | ruff ＋ mypy ＋ **全部測試** | 約 70 秒 |
+| GitHub Actions | push 之後 | 同上，少了量像素的 21 條 | 約 60 秒 |
+
+`pre-push` 跑得比 CI 完整：量像素的測試（`geometry` marker）只在 Windows 上量才
+有意義，而 CI 跑 Linux。要跳過任一層用 `--no-verify`。
 
 ## 文件入口
 
