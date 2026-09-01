@@ -45,6 +45,11 @@ pythonpath = ["src"]
 qt_api = "pyside6"
 markers = [
     "performance: opt-in large-data performance benchmark",
+    # 量像素的測試。CI 跑在 Linux，字體與 Qt 平台外掛都與 Windows 不同，同一份
+    # 版面量出來的數字不會一樣 —— 而這個專案是 Windows-first，在 Linux 上驗版面
+    # 驗到的不是使用者會看到的東西。CI 用 `-m "not geometry"` 跳過，這幾條由
+    # 本機的 `.\Verify.ps1 -Ui` 負責。
+    "geometry: measures widget pixels; Windows-only, excluded from Linux CI",
 ]
 
 [tool.ruff]

@@ -6,6 +6,7 @@
 
 from datetime import date, datetime
 
+import pytest
 from PySide6.QtCore import QDate, QPoint, Qt
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -171,6 +172,7 @@ def test_lists_show_the_date_without_a_made_up_time(window) -> None:
     assert model.index(0, 0).data() == "2026/08/19"
 
 
+@pytest.mark.geometry
 def test_clicking_inside_the_date_field_never_changes_the_year(qtbot) -> None:
     """**點日期欄的任何一處都不該改到日期。**
 
@@ -236,6 +238,7 @@ def test_the_date_field_starts_on_the_day_section_and_has_a_range(qtbot) -> None
     assert field.maximumDate() >= QDate.currentDate().addYears(50)
 
 
+@pytest.mark.geometry
 def test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates(qtbot) -> None:
     """日期格要放得下兩位數，否則每一格都會顯示成「...」。
 

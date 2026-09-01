@@ -5,6 +5,7 @@
 """
 
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -40,6 +41,7 @@ def test_action_buttons_are_disabled_until_a_row_is_selected(window) -> None:
     assert all(button.isEnabled() for button in buttons)
 
 
+@pytest.mark.geometry
 def test_transaction_amounts_are_signed_right_aligned_and_coloured(window) -> None:
     """金額欄是整個帳本最常被掃的一欄。
 

@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -91,14 +93,30 @@ class ReferencePage(QWidget):
     def refresh(self) -> None:
         status = self.controller.reference_status()
         if not status.success:
+            # **完整路徑只放 tooltip，畫面上顯示最後兩層。** 比照備份清單
+            # （`maintenance.py` 的 `item.setToolTip(str(backup["path"]))`）。
+            #
+            # 理由不是版面美觀，是**絕對路徑會撐爆整個視窗的最小寬度**：
+            # Windows 路徑沒有空格，`setWordWrap(True)` 找不到斷點，於是 Qt 把整條
+            # 路徑當成一個不可斷的詞，`minimumSizeHint()` 就等於它的像素寬度。
+            # 專案放得越深，視窗的最小寬度就越寬 —— 這與內容無關，純粹看它裝在哪。
+            # 2026-09-01 實測：專案在 `D:\Projects\tagcor-ledger` 時最小寬度 1024
+            # （剛好卡在 SCREEN_BUDGET 上限），clone 到一個 140 字元的深層路徑就變成
+            # 1256。`test_the_whole_app_fits_a_small_screen` 抓到的就是這個。
+            full_path = str(status.details.get("path", ""))
+            parts = Path(full_path).parts
+            shown = str(Path(*parts[-2:])) if len(parts) > 2 else full_path
             self.status.setText(
                 f"{status.message}\n{status.details.get('how', '')}\n"
-                f"預期位置：{status.details.get('path', '')}"
+                f"預期位置：專案底下的 {shown}"
             )
+            self.status.setToolTip(full_path)
             self.topic.clear()
             self.model.replace_rows([])
             self.detail.setPlainText("")
             return
+
+        self.status.setToolTip("")
 
         meta = dict(status.details.get("meta", {}))
         self.status.setText(

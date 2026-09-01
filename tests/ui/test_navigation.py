@@ -6,6 +6,7 @@
 import ast
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -172,6 +173,7 @@ def test_clicking_the_current_page_again_still_works(window) -> None:
     assert window.sidebar.current_page() is PageId.OVERVIEW
 
 
+@pytest.mark.geometry
 def test_settings_group_sits_at_the_bottom_of_the_rail(window, qtbot, tmp_path: Path) -> None:
     """設定要**沉底**，中間的留白會隨視窗長高。
 

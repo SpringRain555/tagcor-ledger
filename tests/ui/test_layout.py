@@ -2,6 +2,10 @@
 
 **這裡量的是實際的 geometry，不是設定值。** 「有沒有設 maximumWidth」跟「畫出來到底
 多寬」是兩件事 —— 2026-08-20 就有一次靠讀設定值而漏掉版面沒生效的情況。
+
+**整份標成 `geometry`，所以不在 Linux CI 跑。** 量出來的像素取決於字體與 Qt 平台
+外掛，而這個專案是 Windows-first —— 在 Linux 上驗版面，驗到的不是使用者會看到的
+東西，而失敗訊息會指向錯的方向。這幾條由本機的 `.\\Verify.ps1 -Ui` 負責。
 """
 
 from __future__ import annotations
@@ -9,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from PySide6.QtWidgets import QApplication, QTableView, QTabWidget, QWidget
 
 from tagcor_ledger.app.paths import resolve_app_paths
@@ -37,6 +42,8 @@ from tagcor_ledger.ui.widgets.layout import (
 # 它攔不到純粹因為字變寬造成的增加：測試跑在 offscreen，中文是 fallback 字型，
 # 寬度比實機窄。所以餘裕看起來比實際多，不要拿它當「還可以再加東西」的依據。
 SCREEN_BUDGET = (1024, 880)
+
+pytestmark = pytest.mark.geometry
 
 
 # 這個檔案不用 `window` fixture：版面測試要在 `show()` **之前** `resize()`，
@@ -285,6 +292,32 @@ def test_sidebar_narrows_on_a_small_window(qtbot, tmp_path: Path) -> None:
 
     _relayout(window, 1440)
     assert window.sidebar.width() == sidebar_module.WIDTH
+
+
+def test_the_minimum_width_does_not_depend_on_where_the_project_lives(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    """法規庫不存在時，那一頁會顯示「預期位置」—— 而它**不可以**是完整絕對路徑。
+
+    Windows 路徑沒有空格，`setWordWrap(True)` 找不到斷點，Qt 就把整條路徑當成一個
+    不可斷的詞，於是視窗的 `minimumSizeHint()` 直接等於它的像素寬度。**專案裝得
+    越深，視窗最小寬度就越寬** —— 而法規庫是產生物、不進版控，所以每一份全新
+    clone 都走這條路徑。
+
+    2026-09-01 實測：專案在 `D:\\Projects\\tagcor-ledger` 時是 1024（剛好卡在
+    `SCREEN_BUDGET` 上限，所以作者自己看不到問題），clone 到 140 字元的深層路徑
+    就變成 1256。
+    """
+    deep = tmp_path / ("very-long-directory-name-" * 6) / "reference.sqlite3"
+    monkeypatch.setenv("TAGCOR_REFERENCE_DB", str(deep))
+    assert not deep.exists(), "這條測試要的正是「檔案不存在」那個分支"
+
+    window = _open(qtbot, tmp_path)
+    hint = window.minimumSizeHint()
+    assert (hint.width(), hint.height()) <= SCREEN_BUDGET, (
+        f"法規庫路徑長度洩漏到版面上了：最小尺寸 {hint.width()}×{hint.height()}，"
+        f"而那條路徑有 {len(str(deep))} 個字元。完整路徑要放 tooltip，不是標籤本文。"
+    )
 
 
 def test_the_whole_app_fits_a_small_screen(qtbot, tmp_path: Path) -> None:
