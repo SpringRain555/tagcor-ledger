@@ -53,6 +53,9 @@
 - 定存帳戶**不提供類別欄位** —— 本金進出與利息沒有「屬於哪個類別」的問題。
   這個概念借自 Actual Budget 的 off-budget account（"can't be categorized;
   they simply track balances over time"）。
-- 計息規則的查證變成 Stage 6 法規庫的相依項目。在取得之前，
+- 計息規則的查證變成法規庫的相依項目。在取得之前，
   `annual_rate_ppm` 可為 NULL，沒有利率就不顯示建議值。
+  （法規庫在 v0.10.0 建好，但這條相依**後來取消了** ——
+  見 `docs/research/open-questions.md` Q5：實際金額既然以存摺為準，
+  計息規則只影響建議值有多接近。這份 ADR 的決定本身沒有變。）
 - UI 必須清楚區分「程式算的」與「實際入帳的」金額，否則就等於在騙使用者。
