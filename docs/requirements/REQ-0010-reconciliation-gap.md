@@ -6,7 +6,7 @@
 
 **盤點只能對總額。有存摺的帳戶其實能逐筆核對，但目前沒有地方記錄「這一筆我對過存摺了」。**
 
-這個缺口是 Stage 1 的市場調查發現的。GnuCash 的文件把兩種帳戶分得很清楚
+這個缺口是市場調查發現的。GnuCash 的文件把兩種帳戶分得很清楚
 （[GnuCash Guide 5.4](https://www.gnucash.org/docs/v5/C/gnucash-guide/cbook-reconacct1.html)，
 抓取 2026-08-18）：
 

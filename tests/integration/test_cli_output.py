@@ -1,6 +1,6 @@
 """守門：`--json` 的 stdout 必須是可以直接餵給解析器的純 JSON。
 
-一句話的由來：Stage 4 加了日誌之後，`configure_logging` 會裝一個寫到 stderr 的 handler。
+一句話的由來：v0.8.0 加了日誌之後，`configure_logging` 會裝一個寫到 stderr 的 handler。
 程式本身沒問題（stdout 仍然只有 JSON），但**一鍵啟動器把兩個串流合在一起再解析**，
 於是啟動器壞了，症狀是「啟動資訊無法解析」。
 

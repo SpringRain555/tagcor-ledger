@@ -176,7 +176,8 @@ $guiArgs = @('-m', 'tagcor_ledger', '--gui')
 if ($DataDir) { $guiArgs = @('-m', 'tagcor_ledger', '--data-dir', $DataDir, '--gui') }
 
 # pythonw 沒有主控台，所以未攔截的例外會無聲消失。先把 stderr 導到檔案，
-# 這樣「視窗沒出現」至少留得下線索。（Stage 4 會補上正式的啟動失敗畫面與日誌。）
+# 這樣「視窗沒出現」至少留得下線索。（v0.8.0 起另有正式的啟動失敗畫面與日誌，
+# 但那要程式跑得起來才有用 —— 這一行守的是那之前就掛掉的情況。）
 $errorLog = Join-Path $info.log_dir 'launch-stderr.log'
 $startArgs = @{
     FilePath         = $pythonw

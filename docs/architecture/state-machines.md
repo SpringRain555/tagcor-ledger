@@ -305,7 +305,7 @@ schema 有 `idx_templates_active_name`（`UNIQUE(name) WHERE status = 'active'`�
 | **schema 太新** | 資料庫版本 > 程式支援版本（`DATABASE_SCHEMA_TOO_NEW`） | 繁中對話框：**不要繼續，去更新程式** |
 | 已有實例在跑 | 單一實例守門偵測到 | **把既有視窗叫到最前面**，第二個行程安靜結束（exit 0）。叫不動才退回繁中對話框 |
 
-**六種分支都已實作**（Stage 4，v0.8.0）。分類在 `app/startup.py::classify_startup_error`，
+**六種分支都已實作**（v0.8.0）。分類在 `app/startup.py::classify_startup_error`，
 訊息與錯誤碼在 `docs/architecture/error-codes.md` 的「啟動失敗」一節，
 驗收在 `tests/integration/test_startup_failures.py`。
 
@@ -316,7 +316,7 @@ schema 有 `idx_templates_active_name`（`UNIQUE(name) WHERE status = 'active'`�
 
 ## 7. 定存合約與期
 
-**已實作**（Stage 5，v0.9.0；v0.24.0 補完結束合約與中途解約）。規格見
+**已實作**（v0.9.0；v0.24.0 補完結束合約與中途解約）。規格見
 `docs/requirements/REQ-0007-time-deposits.md`，實作在 `domain/deposits.py` 與
 `application/deposits/`。
 
@@ -477,7 +477,7 @@ stateDiagram-v2
 
 | 狀態 | 定義 |
 |---|---|
-| `待抓取` | 在 `sources.yaml` 裡，還沒抓 |
+| `待抓取` | 在 `reference/sources.json` 裡，還沒抓 |
 | `已抓取` | 抓下來了，還沒人看過 |
 | `已審閱` | 人工確認過內容與條號正確 |
 | `需複查` | `reviewed_at` 超過 6 個月 |

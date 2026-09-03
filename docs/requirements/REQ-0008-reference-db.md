@@ -1,6 +1,6 @@
 # REQ-0008 稅務與金融法規參考庫
 
-狀態：**已實作**（Stage 6，v0.10.0）
+狀態：**已實作**（v0.10.0）
 
 實作位置：`reference/`（來源清單、手寫摘要、corpus、manifest）、`tools/law_sync/`（抓取與兩支建置腳本）、`application/reference.py`（唯讀查詢）、`ui/pages/reference.py`（法規參考頁）。
 
@@ -30,7 +30,7 @@ reference/
 ├── manifest.jsonl          抓取紀錄：URL／狀態／SHA-256／抓取時間
 └── reference.sqlite3       ← 產生物，gitignore
 tools/
-├── fetch.py                已存在（Stage 1 建立），沿用
+├── fetch.py                已存在（市場調查時建立），沿用
 └── build_reference_db.py   corpus → sqlite（純標準庫）
 ```
 

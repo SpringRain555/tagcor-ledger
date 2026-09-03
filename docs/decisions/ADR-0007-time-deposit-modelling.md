@@ -2,7 +2,7 @@
 
 ## 狀態
 
-已接受（2026-08-18）。實作在 Stage 5（schema v6）。
+已接受（2026-08-18）。實作在 v0.9.0（schema v6）。
 
 > **兩張表的欄位在 v0.24.0 各多了東西**，這份 ADR 的決策本身沒有變：
 > `deposit_contracts` 多了 `recorded_on`（帳本開始追蹤那天）與 `opened_on`

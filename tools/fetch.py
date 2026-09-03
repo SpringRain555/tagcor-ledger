@@ -4,7 +4,7 @@
 
     %USERPROFILE%\\.claude\\runtimes\\research\\Scripts\\python.exe tools/fetch.py ...
 
-App 本身永遠不發網路請求。Stage 6 的法規庫抓取也走這支。
+App 本身永遠不發網路請求。法規庫的抓取也走這支。
 
 規矩（違反會被擋、冷卻數十分鐘，比放慢昂貴得多）：
 

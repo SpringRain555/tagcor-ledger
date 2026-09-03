@@ -464,7 +464,7 @@ def test_the_sort_spec_survives_a_restart(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """記得住 —— 這是 Stage 2 的重點，關掉再開要還是那個排法。"""
+    """記得住 —— 這是 v0.19.0 的重點，關掉再開要還是那個排法。"""
     for name in ("交通", "居住", "娛樂"):
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
