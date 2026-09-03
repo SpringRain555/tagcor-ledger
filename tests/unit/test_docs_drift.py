@@ -242,3 +242,51 @@ def test_both_spec_readers_actually_find_every_tool() -> None:
         assert not missing, f"{label} 裡沒讀到：{missing}"
         for tool, spec in specs.items():
             assert spec.startswith(">="), f"{label} 的 {tool} 讀出來是 {spec!r}"
+
+
+# --- 第四組：散文裡的分頁數 ------------------------------------------------
+#
+# 上面那幾條逐字比對的是**名字**。這一組比對的是**數量** —— 它們是兩種漂移：
+# 改了分頁名，名字那組會紅；砍掉一個分頁，名字那組**不會紅**（剩下的名字仍然
+# 都在文件裡），只有散文裡的那個數字錯了。
+
+CHINESE_NUMERALS = {3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八"}
+TAB_COUNT_DOCS = ("README.md", "docs/architecture/ui-workflows.md", "docs/release_checklist.md")
+
+
+def test_the_prose_tab_count_matches_the_code() -> None:
+    """操作設定有幾個分頁，散文裡也要對。
+
+    v0.23.0 移除定期收支，操作設定從六個分頁變五個。`operation_settings.py`、
+    `ui-workflows.md`、`release_checklist.md` 都跟著改了，**README 沒有** ——
+    它一路寫著「有六個分頁，前四個是名冊，後兩個是會自己到期的東西」直到
+    2026-09-03，而底下列出來的一直只有五項。上面那三組逐字比對抓不到它，
+    因為五個名字一個不缺，錯的只有那個數字。
+    """
+    count = len(_settings_tab_labels())
+    expected = f"{CHINESE_NUMERALS[count]}個分頁"
+    stale = {f"{numeral}個分頁" for number, numeral in CHINESE_NUMERALS.items() if number != count}
+
+    wrong = []
+    for name in TAB_COUNT_DOCS:
+        document = (PROJECT_ROOT / name).read_text(encoding="utf-8")
+        found = sorted(phrase for phrase in stale if phrase in document)
+        if found:
+            wrong.append(f"  {name} 寫著 {'／'.join(found)}")
+        elif expected not in document:
+            wrong.append(f"  {name} 沒有「{expected}」這句話")
+    if wrong:
+        pytest.fail(
+            f"操作設定實際是{expected}（`_tabs()` 說了算），但：\n"
+            + "\n".join(wrong)
+            + "\n增減分頁時這幾份的數字要一起改。"
+        )
+
+
+def test_the_stale_count_phrases_would_actually_be_caught() -> None:
+    """陽性對照：`stale` 算錯（例如把正確的那個也放進去、或整組是空的）會讓上面那條失去意義。"""
+    count = len(_settings_tab_labels())
+    stale = {f"{numeral}個分頁" for number, numeral in CHINESE_NUMERALS.items() if number != count}
+    assert f"{CHINESE_NUMERALS[count]}個分頁" not in stale
+    assert "六個分頁" in stale, "五分頁時代最容易寫錯的就是舊的『六個分頁』"
+    assert len(stale) == len(CHINESE_NUMERALS) - 1

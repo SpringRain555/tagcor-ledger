@@ -69,7 +69,8 @@ flowchart LR
 - **側邊欄裡沒有分組標題。** 「日常」「設定」只是程式裡的常數名稱（`DAILY_PAGES`、
   `SETTINGS_PAGES`），畫面上不顯示。分組靠**位置**表達：日常在上、設定貼底，中間是
   會隨視窗長高的留白，中間隔一條 `QFrame#separator`。
-  **側邊欄裡的每一個字都可以點** —— `tests/ui/test_main_window.py` 有一條測試守著。
+  **側邊欄裡的每一個字都可以點** —— `tests/ui/test_navigation.py` 的
+  `test_every_sidebar_row_can_be_clicked` 守著。
 - 這條路用「程度差異」試過兩次都失敗（第一版只是顏色淡一點，第二版縮小加字距），
   兩次使用者的反應都是「這是什麼？為什麼點不動？」。理由寫在
   [失敗紀錄](../lessons.md)與 `ui/navigation.py` 的模組說明。

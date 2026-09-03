@@ -30,23 +30,21 @@
 
 | 症狀 | 主要檔案 | 守著它的測試 |
 |---|---|---|
-| 某一頁的數字沒跟著別頁更新 | `ui/main_window.py::_ledger_changed()` | `test_main_window.py` 的跨頁連動那三條 |
+| 某一頁的數字沒跟著別頁更新 | `ui/main_window.py::_ledger_changed()` | `tests/ui/test_inbox_page.py::test_confirming_an_inbox_item_refreshes_the_transaction_list` |
 | 側邊欄自己跳頁、焦點一碰就換頁 | `ui/widgets/sidebar.py` | `test_focus_landing_on_the_sidebar_does_not_navigate` |
 | 日期欄怪怪的、日曆跑版 | `ui/widgets/forms.py::date_field()` ＋ `styles.qss` 的日曆一節 | `test_clicking_inside_the_date_field_never_changes_the_year` 等五條 |
 | 表格被切掉、欄寬不對 | `ui/widgets/table.py` 的 `fit_to_contents` / `fit_to_rows` | `tests/ui/test_layout.py` |
 | 金額顏色不對、紅綠被壓成白 | `ui/widgets/table.py::amount_color` ＋ QSS**不得**設 `color` | `test_amount_colours_survive_the_stylesheet` |
 | 錯誤訊息看不懂、太籠統、印出英文碼或 SQLite 原文 | [`application/failures.py`](../src/tagcor_ledger/application/failures.py) 的 `ERROR_MESSAGES`（碼 → 中文，一個碼一個地方） | `tests/unit/test_failure_messages.py`、`tests/unit/test_error_codes.py` |
 | 例外沒被接住、跳出全域錯誤對話框而不是中文 | [`application/failures.py`](../src/tagcor_ledger/application/failures.py) 的 `STORE_FAILURES` / `DOMAIN_FAILURES`。`NotFoundError` 繼承 `RuntimeError`，自己拼的 tuple 接不到它 | `tests/integration/test_store_failures.py`、`test_the_application_layer_catches_store_failures_by_name` |
-| 到期日跳月、月底的日期算錯 | [`domain/dates.py`](../src/tagcor_ledger/domain/dates.py) | `tests/unit/test_dates.py` |
-| 模板存成空 id | [`stores/templates.py`](../src/tagcor_ledger/infrastructure/stores/templates.py)`::validate_template` | `test_templates.py` 的空主鍵那一條 |
+| 到期日跳月、月底算錯、每月領息少一期 | [`domain/dates.py`](../src/tagcor_ledger/domain/dates.py) —— `add_months()` 一律用來源日期自己的日當 anchor，`clamped_date()` 是**唯一**實作「那個月裝不下就退到月底」的地方 | `tests/unit/test_dates.py` |
+| 模板存成空 id、存下去卻不見了 | [`stores/templates.py`](../src/tagcor_ledger/infrastructure/stores/templates.py)`::validate_template` —— 空主鍵會 UPSERT 成一列空 id | `tests/integration/test_templates.py` 的空主鍵那一條 |
 | 按了按鈕，視窗直接消失 | [`ui/error_handler.py`](../src/tagcor_ledger/ui/error_handler.py) —— 它接管 `sys.excepthook`，讓 Qt slot 的例外變成一句中文而不是關掉程式 | `tests/ui/test_error_handler.py` |
 | 編輯模板之後多出一筆，舊的還在 | [`ui/widgets/template_dialog.py`](../src/tagcor_ledger/ui/widgets/template_dialog.py)`::save()` 沒保住 `template_id`（同一個 `replace()` 也要帶 `sort_order` 與 `status`）| `tests/ui/test_template_dialog.py` |
 | 利率顯示對不上、輸入框讀不回去 | `domain/deposits.py::rate_to_ppm()` 解析、`ui/formatting/primitives.py::ppm_digits()` 顯示 —— **只有這一份** | `tests/unit/test_rate_conversion.py` |
 | 交易翻頁翻到重複或空白 | [`ui/pages/transactions.py`](../src/tagcor_ledger/ui/pages/transactions.py) 的游標堆疊（keyset，不是 OFFSET） | `tests/ui/test_transactions_paging.py` |
 | 想加一個新的 `raise ValueError("SOME_CODE")` | 加完要在 `ERROR_MESSAGES` 補一列，並在 [error-codes](architecture/error-codes.md) 補一列 | 兩條都會紅，訊息會告訴你缺哪一個 |
 | 備份刪不掉、清單看不懂哪一份是哪一份 | `infrastructure/maintenance.py`（每個 `sqlite3.connect()` 都要包 `closing`）＋ `ui/formatting/messages.py::backup_row_text` | `tests/integration/test_backup_deletion.py`、`tests/unit/test_formatting.py` |
-| 到期日跳月、續存日期不對、每月領息少一期 | `domain/dates.py`（`add_months` 夾月底、`next_due_date` 夾 `anchor_day`，**兩者語意不同**） | `tests/unit/test_dates.py` |
-| 模板存下去卻不見了 | `infrastructure/stores/templates.py::validate_template` —— 空主鍵會 UPSERT 成一列空 id | `tests/integration/test_templates.py` |
 | 表格少一欄、最後一欄空白或炸 IndexError | 欄位標題在頁面的 `RowsModel(...)`，值在 `ui/formatting/rows.py` —— **兩邊各自定義** | `tests/ui/test_table_columns.py` |
 | 搜尋框打特殊字元就查不出東西或跳錯 | `infrastructure/stores/base.py::build_fts_query`（雙引號要跳脫成 `""`）＋ 呼叫端的「空白就不要走 FTS」 | `tests/unit/test_fts_query.py`、`tests/integration/test_search_input.py` |
 | 查詢變慢 | `infrastructure/stores/` 的 SQL | `tests/integration/test_query_plans.py` |

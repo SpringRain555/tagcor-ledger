@@ -4,12 +4,14 @@
 當月最後一天」只寫在 docstring 裡，`monthly_dates()` 則是連一條測試都沒有 ——
 而定存的每一期到期日、每一次領息與每一次續存都建立在這兩個函式上。
 
-（月底與閏年已經有直接測試，在
-`tests/integration/test_phase2_automation.py`；那一份不重複，只在這裡補它缺的
-「未知頻率」與「每日」兩格。）
+**月底夾取與閏年的直接測試就在這一份裡。** 這一段原本寫著「那幾格在
+`tests/integration/test_phase2_automation.py` 已經有，這裡只補它缺的『未知頻率』與
+『每日』兩格」—— v0.23.0 之後三句話全部不成立：那個檔案隨定期收支改名成
+`test_templates.py`，頻率相關的測試連同功能一起走了，夾取與閏年反而變成只剩這裡有。
 
-**M2 這幾個函式會搬到 `domain/dates.py`。** 到時候只有下面的 import 行會變 ——
-那一行 diff 就是「搬移沒有改行為」的證據。
+這幾個函式在 v0.21.0 從 `application/deposits.py` 與
+`infrastructure/stores/automation.py` 搬進 `domain/dates.py`，那次搬移只動到下面的
+import 行 —— 那一行 diff 就是「搬移沒有改行為」的證據。
 """
 
 from __future__ import annotations
