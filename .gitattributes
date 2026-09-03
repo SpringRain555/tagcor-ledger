@@ -3,8 +3,9 @@
 # **這份的存在理由是 .githooks/**：那些 hook 是 POSIX shell 腳本。全域
 # core.autocrlf = true 的意思是「入庫存 LF、簽出轉 CRLF」，所以一旦 repo 被
 # clone，pre-commit 會以 CRLF 出來，`#!/bin/sh\r` 直接失效 —— 守門會在最需要
-# 它的那一刻靜默失去作用。目前無 remote 所以還沒踩到，但 remote 欄位存在的
-# 理由就是記錄「打算推到哪」。
+# 它的那一刻靜默失去作用。**不必等到有 remote 才加** —— 從本機路徑 clone、
+# 從 bundle 還原、或別人拿走一份重新簽出，都會套用這份屬性；等真的踩到再補，
+# 壞掉的那一份 clone 早就在別的地方了。
 #
 # 加上這份不會產生重新正規化的大 diff：實測 `git ls-files --eol`，31 個 repo
 # 的 index 已經全是 LF（其餘只有 i/none 空檔與 i/-text 二進位，零個 i/crlf）。
