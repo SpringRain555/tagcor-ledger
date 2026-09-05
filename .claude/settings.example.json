@@ -2,37 +2,65 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "_readme": [
     "複製成 .claude/settings.json 再改路徑。那一份不進版控 —— 它列的是本機私人",
-    "資料夾的實際名稱，而每次新增一個私人資料夾就要多列一條 deny，追蹤它等於把",
-    "那份清單一起公開。",
+    "資料夾的實際名稱，追蹤它等於把那份清單一起公開。",
     "",
-    "三層的理由：deny 優先於 allow，而且路徑 pattern 沒有否定語法，所以做不到",
-    "『deny 整棵樹但 allow 其中一個子樹』—— 那樣寫會連允許的資料夾一起擋掉。",
-    "  deny  寫入絕對禁止，無例外（資料只由 App 自己寫，agent 永遠不需要寫）",
-    "  ask   讀取一律先問過使用者",
-    "  allow 指定的資料夾免問",
+    "== 為什麼寫入不是一律 deny ==",
+    "deny 優先於 allow，而且路徑 pattern 沒有否定語法，所以做不到「deny 整棵樹",
+    "但 allow 其中一個子樹」—— 那樣寫會連允許的資料夾一起擋掉。",
     "",
-    "新增 deny 條目一定要用 /** 結尾。單一 * 在 glob 裡只 match 一層，",
-    "Read(D:/Private/X/*) 會涵蓋 X 這個資料夾本身卻涵蓋不到 X\\secret.txt。",
+    "2026-09-05 之前這裡是「寫入絕對禁止，無例外」，而那是錯的方向：資料根裡除了",
+    "帳本，還有上線 runbook 這類本來就該被修改的文件。一律 deny 的話它們改不動，",
+    "合法的修改只剩下走 shell —— 而下面第一個極限正是「攔不住 shell」。閘門把守",
+    "規矩的那條路擋死、只留沒有守門的那條，方向是反的。",
     "",
-    "三個極限，不要當成滴水不漏：",
+    "改成整棵樹的讀寫都 ask，硬擋改用「只 deny 該擋的葉子」—— 那個方向 glob 寫",
+    "得出來，而且用副檔名與資料夾名、不綁專案名：",
+    "  ask   整棵私人樹的讀與寫，一律先問過使用者",
+    "  deny  帳本、備份、*.sqlite / *.db（那些只由 App 自己寫，agent 永遠不需要寫）",
+    "  allow 這個專案的資料根：讀取整棵；寫入只到頂層的 .md（runbook 那類文件）",
+    "",
+    "allow 的 *.md 用單一 * 是刻意的 —— 只 match 一層，底下的資料夾一個都不放行。",
+    "deny 則一定要用 /** 結尾，理由正好相反：單一 * 會涵蓋 X 這個資料夾本身卻涵蓋",
+    "不到 X\\secret.txt。同一個 glob 特性，兩個方向各用一次。",
+    "",
+    "== 如果你另外維護一層使用者層基線 ==",
+    "~/.claude/settings.json 是「你，每個專案」，不管從哪個目錄啟動都生效，而",
+    "permissions 這種清單鍵跨層是合併不是覆蓋。那時把下面的 ask 五條與不綁專案名",
+    "的葉子 deny 移上去，這一份只留 allow 與這個專案自己的 deny。",
+    "注意專案層只在「從專案目錄啟動」時載入 —— 從上層工作區啟動時它完全不生效，",
+    "所以真正要硬擋的東西不能只寫在專案層。",
+    "下面給的是「沒有基線也能用」的完整版。",
+    "",
+    "== 三個極限，不要當成滴水不漏 ==",
     "  1. 攔不住 shell。Get-Content、cat、Select-String 都能讀檔。成文規則才是依據。",
-    "  2. 改了要重啟 session 才生效。",
+    "  2. 不能假設什麼時候生效。這裡原本寫「一定要重開 session」，實測不是（改完",
+    "     當場就載入了）。兩個方向都別假設 —— 要驗就用全新 session 驗。",
     "  3. 新資料夾不會自動被擋，只會被 ask 攔下來問。Verify.ps1 的漂移檢查會列出它們。"
   ],
   "permissions": {
     "allow": [
       "Read(<your-data-root>/**)",
       "Glob(<your-data-root>/**)",
-      "Grep(<your-data-root>/**)"
+      "Grep(<your-data-root>/**)",
+      "Edit(<your-data-root>/*.md)",
+      "Write(<your-data-root>/*.md)"
     ],
     "ask": [
       "Read(<your-private-tree>/**)",
       "Glob(<your-private-tree>/**)",
-      "Grep(<your-private-tree>/**)"
-    ],
-    "deny": [
+      "Grep(<your-private-tree>/**)",
       "Edit(<your-private-tree>/**)",
       "Write(<your-private-tree>/**)"
+    ],
+    "deny": [
+      "Edit(<your-data-root>/ledger/**)",
+      "Write(<your-data-root>/ledger/**)",
+      "Edit(<your-private-tree>/**/backups/**)",
+      "Write(<your-private-tree>/**/backups/**)",
+      "Edit(<your-private-tree>/**/*.sqlite)",
+      "Write(<your-private-tree>/**/*.sqlite)",
+      "Edit(<your-private-tree>/**/*.db)",
+      "Write(<your-private-tree>/**/*.db)"
     ]
   }
 }
