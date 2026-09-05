@@ -1,3 +1,4 @@
+# template: .gitattributes v1
 # D:\Projects 共用 .gitattributes 範本
 #
 # **這份的存在理由是 .githooks/**：那些 hook 是 POSIX shell 腳本。全域

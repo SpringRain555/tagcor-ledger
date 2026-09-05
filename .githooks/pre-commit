@@ -1,4 +1,5 @@
 #!/bin/sh
+# template: .githooks/pre-commit v1
 #
 # D:\Projects 共用 pre-commit 守門
 #
