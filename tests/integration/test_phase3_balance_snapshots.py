@@ -128,3 +128,46 @@ def test_balance_snapshot_update_void_and_export(tmp_path: Path) -> None:
     listed = service.list(account_id=account_id, status="active")
     assert listed.success
     assert listed.details["gaps"] == []
+
+
+def test_v11_removes_the_dead_reminder_setting_from_an_existing_database(
+    tmp_path: Path,
+) -> None:
+    """舊資料庫裡那個沒有人再讀的設定鍵，要靠 v11 才會消失。
+
+    **它留著不會壞任何東西** —— `settings` 是 key/value 表，多一列沒有人讀的鍵
+    不影響任何查詢。正因為不會壞，所以永遠不會有人發現它已經沒有人讀了
+    （[ADR-0014](../../docs/decisions/ADR-0014-drop-daily-snapshot-reminder.md)）。
+
+    這裡刻意**先把 v11 從 registry 刪掉再插回那個鍵**，模擬一個只跑到 v10 的
+    資料庫 —— 直接檢查全新資料庫沒有那個鍵是不夠的，那條路連 migration 都沒走到。
+    """
+    import sqlite3
+
+    from tagcor_ledger.infrastructure.database import initialize_database
+    from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION
+
+    paths = resolve_app_paths(tmp_path / "data")
+    initialize_database(paths)
+
+    with sqlite3.connect(paths.database_path) as connection:
+        connection.execute("DELETE FROM schema_migrations WHERE version = 11")
+        connection.execute(
+            "INSERT INTO settings(key, value, updated_at) VALUES "
+            "('balance_snapshot_reminder', 'true', '2026-01-01T00:00:00+08:00')"
+        )
+        connection.commit()
+
+    initialize_database(paths)
+
+    with sqlite3.connect(paths.database_path) as connection:
+        version = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+        left = connection.execute(
+            "SELECT COUNT(*) FROM settings WHERE key = 'balance_snapshot_reminder'"
+        ).fetchone()[0]
+        # 陽性對照：其他設定鍵一個都不能被掃到。
+        others = connection.execute("SELECT COUNT(*) FROM settings").fetchone()[0]
+
+    assert version == LATEST_SCHEMA_VERSION
+    assert left == 0
+    assert others > 0
