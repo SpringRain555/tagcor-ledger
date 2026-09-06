@@ -251,14 +251,18 @@ def test_both_spec_readers_actually_find_every_tool() -> None:
 # 都在文件裡），只有散文裡的那個數字錯了。
 
 CHINESE_NUMERALS = {3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八"}
-TAB_COUNT_DOCS = ("README.md", "docs/architecture/ui-workflows.md", "docs/release_checklist.md")
+TAB_COUNT_DOCS = (
+    "README.md",
+    "docs/architecture/ui-workflows.md",
+    "docs/operations/release-checklist.md",
+)
 
 
 def test_the_prose_tab_count_matches_the_code() -> None:
     """操作設定有幾個分頁，散文裡也要對。
 
     v0.23.0 移除定期收支，操作設定從六個分頁變五個。`operation_settings.py`、
-    `ui-workflows.md`、`release_checklist.md` 都跟著改了，**README 沒有** ——
+    `ui-workflows.md`、發版檢查表都跟著改了，**README 沒有** ——
     它一路寫著「有六個分頁，前四個是名冊，後兩個是會自己到期的東西」直到
     2026-09-03，而底下列出來的一直只有五項。上面那三組逐字比對抓不到它，
     因為五個名字一個不缺，錯的只有那個數字。

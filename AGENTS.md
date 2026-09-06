@@ -1,14 +1,34 @@
+<!-- agent-doc:sync-notice -->
 # AGENTS — TagCor Ledger
 
 > **這份與 `CLAUDE.md` 是平級的兩份完整規則**（Codex 只自動載入 `AGENTS.md`，
 > Claude Code 只自動載入 `CLAUDE.md`）。**改任何一份就要同步改另一份。**
 > 唯一該有的差異是「工具專屬」那一節。
 >
-> 產生器會比對兩份最後被改的 commit，不一致就報 `agent-doc-drift`。
+> 產生器會比對兩份最後被改的 commit，不一致就報 `agent-doc-drift`；
+> 也會**剝掉這兩對標記之間的內容**再比 hash，不一致就報 `agent-doc-content-drift`。
+> 後者是 opt-in 的 —— 沒有標記它根本不啟動，而這兩對標記是 2026-09-06 才補上的。
 >
 > 2026-08-30 之前 `CLAUDE.md` 只是一份指向這裡的指路檔 —— 也就是說 Claude Code
 > 自動載入到的只有那幾行，底下這一整份規則要靠它自己去跟。
+<!-- /agent-doc:sync-notice -->
 
+<!-- upstream: D:\Projects v1 -->
+
+> **上游規範。** 這個專案在 `D:\Projects` 底下，治理規則的單一真實來源是
+> `_meta\CONVENTIONS.md`。**下面是摘要不是副本**，有出入時以那一份為準。
+>
+> 適用：§3 命名｜§6 git 與守門｜§8 編碼（`.ps1` 要 BOM、`.md` 不要）｜§9 README 與
+> agent 檔｜§11 外部資料根｜§12 文件區骨架｜§13 公開前準備｜§14 規則的上行。
+>
+> **本專案的例外**：`docs\archive\phase-0-2\` 是 §12 沒有的第七區，
+> **只供追溯、不是目前規格來源**。
+>
+> **不要假設上游那一份會被讀到。** Claude Code 會往上層目錄串接，但 Codex 的慣例是
+> 「最近的那一份勝出」—— 失敗方向是「Codex 讀不到上游規則」，所以**這一份必須自給自足**
+> （§14）。完整脈絡見 `_meta\cards\tagcor-ledger.md`。
+
+<!-- agent-doc:tool-specific -->
 ## 工具專屬
 
 **Codex**（讀這一份）：沒有額外規則，往下讀就好。
@@ -22,6 +42,7 @@
   `cat`、`Select-String` 都能讀檔）。用 shell 時靠的是下面「資料位置與讀取邊界」
   的成文規則，不是設定檔。
 - 主要 shell 是 PowerShell 5.1，沒有 `&&`／`||`／三元運算子。
+<!-- /agent-doc:tool-specific -->
 
 ## 專案定位
 
@@ -30,6 +51,8 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 每一筆帳都由使用者手動輸入 —— 這是刻意的設計，不是還沒做的功能。手動輸入才讓使用者感受得到花費的程度。
 
 ## 資料位置與讀取邊界
+
+<!-- data-boundary -->
 
 **「運作的地方」與「儲存的地方」是分開的**，這樣專案日後若推上 remote，只會公開程式，不會公開任何個人財務資料。
 

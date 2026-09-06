@@ -30,6 +30,7 @@ dependencies = [
 # （2026-09-01 第一次跑 CI 就踩到：新版 ruff 預設開了 I001 import 排序）。
 # 一個會因為別人發新版而變紅的閘門，紅的時候不代表你改壞了什麼。
 # 升級要有意識地做：把上界往上抬，然後跑一次 .\Verify.ps1 -Ui 看要修什麼。
+# **這四條同時宣告在 environment.yaml，兩邊要一起改** —— docs/environment/versions.md。
 dev = [
     "pytest>=8.0,<10",
     "pytest-qt>=4.4,<5",

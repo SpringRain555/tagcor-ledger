@@ -7,6 +7,8 @@
 #
 # 上界的理由寫在 pyproject 那一段：一個會因為別人發新版而變紅的閘門，
 # 紅的時候不代表你改壞了什麼。
+#
+# **哪幾條要一起動、怎麼升、刻意不裝什麼**：docs/environment/versions.md。
 name: tagcor-ledger
 channels:
   - conda-forge

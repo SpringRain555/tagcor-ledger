@@ -164,6 +164,7 @@ function Test-PathDrift {
     }
 
     $allow = @($config.permissions.allow)
+    $ask = @($config.permissions.ask)
     $deny = @($config.permissions.deny)
     $expected = "Read($(ConvertTo-RulePath $dataRoot)/**)"
 
@@ -175,38 +176,71 @@ function Test-PathDrift {
         Write-Note "目前有  ：$($allow -join ', ')"
     }
 
-    # data_root 之外、<私人資料樹> 底下的任何資料夾都應該被 deny 列舉到。
-    # 只報告，不推論該怎麼處理。
+    # ── <私人資料樹> 的保護：檢查「基線在不在」，不是「清單全不全」──────────────
+    #
+    # 2026-09-06 之前，這裡列舉 <私人資料樹> 底下的每一個資料夾，要求每一個都出現在
+    # **這個專案**的 deny 清單裡。那個做法有三個問題，而且當天三個都真的發生了：
+    #
+    #   1. **它是一份手維護的跨專案清單，所以會漂。** 檢查當天它同時「少了兩個新的
+    #      資料根」與「擋著一個已經改名、根本不存在的資料夾」—— 兩個方向一起錯。
+    #      而且每次**別的**專案新增資料根，這個專案就會紅一次。
+    #   2. **它的失敗訊息是假的。** 使用者層基線已經把整棵樹的讀寫設成 `ask`，
+    #      所以沒被列舉到的資料夾不是「agent 讀得到」，是「agent 要先問」。
+    #      **一個把後果講錯的驗證器比沒有驗證器更糟。**
+    #   3. **它會把私人資料夾的名字印到終端機上**，而這支腳本在公開 repo 裡。
+    #
+    # 現在檢查的是真正在保護的那個東西：**基線在不在**。規則在
+    # `D:\Projects\_meta\CONVENTIONS.md` §11 —— 整棵私人樹 `ask`，硬擋只用
+    # 「該擋的葉子」（備份與資料庫檔），而那些 pattern **不綁專案名，所以不會漂**。
     $financeDir = Split-Path -Parent $dataRoot
     $personalDir = Split-Path -Parent $financeDir
-    $onAllowedChain = @($dataRoot, $financeDir, $personalDir)
+    $tree = ConvertTo-RulePath $personalDir
 
-    $unlisted = New-Object System.Collections.ArrayList
-    foreach ($scope in @($personalDir, $financeDir)) {
-        if (-not (Test-Path -LiteralPath $scope)) { continue }
-        foreach ($child in (Get-ChildItem -LiteralPath $scope -Directory -Force -ErrorAction SilentlyContinue)) {
-            if ($onAllowedChain -contains $child.FullName) { continue }
-            $rule = ConvertTo-RulePath $child.FullName
-            $covered = $false
-            foreach ($entry in $deny) {
-                if ($entry -like "*($rule*") { $covered = $true; break }
-            }
-            if (-not $covered) { [void]$unlisted.Add($child.FullName) }
+    # 基線在使用者層（「你，每個專案」），不管從哪個目錄啟動都生效 ——
+    # 而**專案層只在從專案目錄啟動時載入**，所以真正要硬擋的東西不能只寫在這裡。
+    $rules = @{ ask = @($ask); deny = @($deny) }
+    $userSettings = Join-Path $env:USERPROFILE '.claude\settings.json'
+    if (Test-Path -LiteralPath $userSettings) {
+        try {
+            $baseline = Get-Content -LiteralPath $userSettings -Raw -Encoding UTF8 | ConvertFrom-Json
+            $rules.ask += @($baseline.permissions.ask)
+            $rules.deny += @($baseline.permissions.deny)
+        } catch {
+            Add-Failure "無法解析使用者層 $userSettings —— JSON 壞掉時整份設定會被靜默忽略。"
         }
-    }
-
-    if ($unlisted.Count -eq 0) {
-        Write-Pass "<私人資料樹> 底下沒有未列入 deny 的資料夾"
     } else {
-        Add-Failure "以下資料夾在保護範圍內但沒有 deny 規則，agent 可能讀得到："
-        foreach ($item in $unlisted) {
-            $rule = ConvertTo-RulePath $item
-            Write-Note "$item"
-            # 一定要用 /** 結尾。單一 * 在 glob 裡只 match 一層，
-            # 會涵蓋資料夾本身卻涵蓋不到裡面的檔案。
-            Write-Note "    加進 permissions.deny：`"Read($rule/**)`", `"Glob($rule/**)`", `"Grep($rule/**)`""
+        Write-Note "沒有使用者層 $userSettings —— 下面兩項只看得到專案層。"
+    }
+
+    $wantAsk = @('Read', 'Glob', 'Grep', 'Edit', 'Write') | ForEach-Object { "$_($tree/**)" }
+    $missingAsk = @($wantAsk | Where-Object { $rules.ask -notcontains $_ })
+    if ($missingAsk.Count -eq 0) {
+        Write-Pass "<私人資料樹> 整棵是 ask"
+    } else {
+        Add-Failure "<私人資料樹> 沒有被 ask 涵蓋 —— 讀寫不會先問過使用者就直接放行。"
+        foreach ($item in $missingAsk) { Write-Note "    缺：`"$item`"" }
+    }
+
+    # 葉子 deny 一定要用 /** 結尾。單一 * 在 glob 裡只 match 一層，
+    # 會涵蓋資料夾本身卻涵蓋不到裡面的檔案。
+    $wantDeny = @()
+    foreach ($verb in @('Edit', 'Write')) {
+        foreach ($leaf in @('**/backups/**', '**/*.sqlite', '**/*.db')) {
+            $wantDeny += "$verb($tree/$leaf)"
         }
     }
+    $missingDeny = @($wantDeny | Where-Object { $rules.deny -notcontains $_ })
+    if ($missingDeny.Count -eq 0) {
+        Write-Pass "備份與資料庫檔的寫入是 deny"
+    } else {
+        Add-Failure "該硬擋的葉子沒有 deny —— 備份或資料庫檔可能被寫壞。"
+        foreach ($item in $missingDeny) { Write-Note "    缺：`"$item`"" }
+    }
+
+    # **這三項都攔不住 shell**（`Get-Content`、`cat`、`Select-String`）。
+    # 成文規則（`AGENTS.md` 的資料邊界那一節）才是界線，設定檔只是把守規矩的那條路
+    # 標示出來。這一行留在這裡，是為了不讓上面三個 OK 讀起來像「滴水不漏」。
+    Write-Note '提醒：以上三項都攔不住 shell —— 成文規則才是界線（AGENTS.md）。'
 }
 
 function Invoke-Step {

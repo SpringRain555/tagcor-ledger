@@ -267,6 +267,12 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 
 要動手改東西的 agent 讀 `AGENTS.md` 或 `CLAUDE.md`（兩份平級、內容相同）。
 
+**跨專案的脈絡不在這個 repo 裡。** 這個專案住在一個叫 `D:\Projects` 的本機工作區
+底下，那裡有一張卡片 `_meta\cards\tagcor-ledger.md` 記著狀態、資料根與它跟其他
+專案的關係，治理規則則在 `_meta\CONVENTIONS.md`。**兩者都不會被推上來** ——
+所以如果你是從 GitHub 讀到這裡的，這一段只是說明「為什麼有些文件提到上游規範」，
+不是你少了什麼東西。這個 repo 自己是完整的。
+
 ## 授權與第三方元件
 
 本專案的程式碼與文件採 **MIT** 授權，全文見 [LICENSE](LICENSE)。

@@ -1,5 +1,13 @@
 # 開發環境
 
+**這一份是「怎麼建、怎麼更新、怎麼驗證」。**
+每條版本上下界**為什麼是那個範圍**、哪幾條要一起動、怎麼升，在
+[versions.md](versions.md)。
+
+> **機器可讀的定義不在這一區。** `environment.yaml` 是 `conda env create -f` 的
+> 慣例位置，`pyproject.toml` 是 pip 的 —— 那是外部工具規定的，不是我們選的。
+> 這一區裝的是散文。
+
 ## 建立
 
 ```powershell

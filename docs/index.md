@@ -34,16 +34,28 @@
 | REQ-XXXX | 該功能的需求、邊界與驗收條件 |
 | ADR-XXXX | 該決定的理由與後果。**決定改了要新增 ADR，不要改舊的** |
 | [失敗紀錄](lessons.md) | 踩過的坑。append-only |
-| [研究](research/market-scan.md) | 市面產品的判讀，**附抓取日期** |
-| [維護者筆記](maintainer_notes.md) | **對什麼都沒有權威。** 它是「這件事的規則寫在哪」的查詢表 |
+| [研究](research/index.md) | 可信度分級與重查門檻。結論在 [市面產品對照](research/market-scan.md)，**附抓取日期** |
+| [環境](environment/index.md) | 怎麼建、怎麼更新、怎麼驗證。**機器可讀的定義不在這裡**（見下） |
+| [版本界線](environment/versions.md) | 每條上下界的**理由**、哪幾條要一起動、刻意不裝什麼 |
+| [發版檢查表](operations/release-checklist.md) | 發版前的**人工**驗收步驟 |
+| [維護者筆記](operations/maintainer-notes.md) | **對什麼都沒有權威。** 它是「這件事的規則寫在哪」的查詢表 |
 | `architecture/diagrams/*.svg` | **對什麼都沒有權威。** 產生物，正本是各文件裡的 ` ```mermaid ` 區塊 |
 
 ## 快速入口
 
 - [README](../README.md)｜[AGENTS](../AGENTS.md)＝[CLAUDE](../CLAUDE.md)（agent 規則，**兩份平級、內容相同**）
-- [Roadmap](roadmap.md)｜[Changelog](changelog.md)｜[Release checklist](release_checklist.md)
+- [Roadmap](roadmap.md)｜[Changelog](changelog.md)｜[發版檢查表](operations/release-checklist.md)
 - [失敗紀錄](lessons.md) —— 踩過的坑與「不要再做」清單
-- [維護者筆記](maintainer_notes.md)（規則在哪的查詢表）｜[環境](environment.md)
+- [維護者筆記](operations/maintainer-notes.md)（規則在哪的查詢表）｜[環境](environment/index.md)
+
+> **`docs/` 分六區**（`architecture`／`environment`／`research`／`decisions`／
+> `requirements`／`operations`），根層只留 `index`／`roadmap`／`changelog`／`lessons`
+> 四份跨區文件。這個專案另有第七個 `archive/`，**只供追溯，不是規格**。
+>
+> **機器可讀的環境定義留在 repo 根目錄** —— `environment.yaml` 是
+> `conda env create -f` 的慣例位置，那是外部工具規定的，不是我們選的。
+> `docs/environment/` 裝的是散文，不是定義本身。**分界線是「誰在讀它」**：
+> 工具讀的留根目錄，人讀的進 `docs/`。
 
 ## Requirements
 
@@ -51,7 +63,7 @@
 |---|---|
 | [REQ-0001 穩固核心](requirements/REQ-0001-stable-core.md) | 已實作 |
 | [REQ-0002 Phase 1–2](requirements/REQ-0002-phase-1-2.md) | 已實作；**週期排程那一段在 v0.23.0 移除**（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
-| [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作 |
+| [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作；**「今天還沒盤點」那則提醒在 0.25.0 移除**（[ADR-0014](decisions/ADR-0014-drop-daily-snapshot-reminder.md)）|
 | [REQ-0004 Phase 4 設定與路徑](requirements/REQ-0004-phase-4-settings-paths-terms.md) | 已實作；操作設定現在是**五個**分頁（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
 | [REQ-0005 Phase 4.1 深色 UI](requirements/REQ-0005-phase-4-1-dark-ui-docs.md) | 已實作 |
 | [REQ-0006 資料與程式分離](requirements/REQ-0006-data-program-separation.md) | 已實作 |
@@ -75,6 +87,7 @@
 - [ADR-0011 移除定期收支](decisions/ADR-0011-drop-recurring-schedules.md)
 - [ADR-0012 定存的待確認項目從建檔那天開始](decisions/ADR-0012-deposit-events-start-at-record-date.md)
 - [ADR-0013 AGENTS.md 與 CLAUDE.md 平級](decisions/ADR-0013-peer-agent-docs.md)
+- [ADR-0014 拿掉「今天還沒盤點」](decisions/ADR-0014-drop-daily-snapshot-reminder.md)
 
 ## Architecture
 
@@ -105,5 +118,6 @@
 
 證據，不是規格。每個判讀都附抓取日期，**過期的結論要重查而不是沿用**。
 
+- [調查區入口](research/index.md)：可信度分級與重查門檻。
 - [市面產品對照](research/market-scan.md)：借什麼、不借什麼、為什麼。
 - [問題拆解與來源地圖](research/questions.md)｜[查詢紀錄](research/query-log.md)｜[未解決清單](research/open-questions.md)

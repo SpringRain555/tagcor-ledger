@@ -57,6 +57,49 @@ re-export），只是換成資料。
 同一列的 `gap_note` 只在有差額時才顯示，而那個 fixture 是全新的帳本。
 兩者走同一個 `_action_row()`，所以量一個就守得住那個換行陷阱；註解裡寫清楚了。
 
+### 同一版順手做完的三件治理工作
+
+**1. `docs/` 對齊六區骨架。** 三個檔案搬家（`git mv`，歷史跟著走）：
+
+| 舊 | 新 |
+|---|---|
+| `docs/environment.md` | `docs/environment/index.md` |
+| `docs/release_checklist.md` | `docs/operations/release-checklist.md` |
+| `docs/maintainer_notes.md` | `docs/operations/maintainer-notes.md` |
+| `docs/research/README.md` | `docs/research/index.md` |
+
+檔名跟著改成 kebab-case，與另外兩個專案一致。
+新增 `docs/environment/versions.md` —— 它回答的是那兩個機器可讀檔案**各自回答不了**
+的事：哪幾條界線同時宣告在兩個檔案裡、哪幾條必須一起動、怎麼升。
+（`environment.yaml` 的註解本來寫著「上界的理由寫在 pyproject 那一段」，
+也就是說那個理由只存在於一個 `.toml` 的註解裡。）
+
+搬家把 `maintainer-notes.md` 的 20 條相對連結全部弄斷了，`test_docs_links.py` 全部接住。
+**反過來驗過一次**：把其中一條改回舊路徑，那條測試如期紅。
+
+**2. 兩份 agent 檔補上標記與上游區塊。** `<!-- agent-doc:sync-notice -->` 與
+`<!-- agent-doc:tool-specific -->` 圈出「合法可以不同」的兩塊 ——
+在這之前 `agent-doc-content-drift` 對這個專案是**關的**（那條檢查 opt-in，
+沒有標記就不啟動）。補完實測：剝掉標記兩份 hash 相同。
+同時補 `<!-- upstream: -->` 區塊與 `<!-- data-boundary -->` 標記。
+
+**3. `Verify.ps1` 的路徑漂移檢查改成驗「基線在不在」，不再列舉別人的資料夾。**
+
+舊版要求 `<私人資料樹>` 底下的每一個資料夾都出現在**這個專案**的 deny 清單裡。
+那是一份手維護的跨專案清單，而 2026-09-06 檢查時它同時：
+
+- **少了兩個**新的資料根（別的專案新增的）；
+- **擋著一個已經改名、根本不存在的資料夾**。
+
+兩個方向一起錯。更糟的是**它的失敗訊息是假的** —— 基線早就把整棵樹設成 `ask`，
+所以沒被列舉到的資料夾不是「agent 讀得到」，是「agent 要先問」。
+**一個把後果講錯的驗證器比沒有驗證器更糟。** 而且它會把私人資料夾的名字印到
+終端機上，而這支腳本在公開 repo 裡。
+
+現在檢查的是真正在保護的那個東西：整棵樹有沒有 `ask`、備份與 `*.sqlite`／`*.db`
+的寫入有沒有 `deny`。這些 pattern **不綁專案名，所以不會漂**。
+一樣反過來驗過：把使用者層基線藏起來再跑，兩項如期紅並列出缺哪幾條。
+
 ## 0.24.1 - 記帳頁照填寫順序問，設定表格的欄寬會讓路，勾選框有勾號了
 
 實機使用之後的三件事。前兩件是「畫面沒有照使用者實際做事的樣子排」，
