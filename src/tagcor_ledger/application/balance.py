@@ -24,7 +24,6 @@ from tagcor_ledger.domain.models import (
     CreateBalanceSnapshotRequest,
 )
 from tagcor_ledger.domain.money import Money
-from tagcor_ledger.infrastructure.clock import today_taipei
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
@@ -272,12 +271,6 @@ class BalanceSnapshotService:
                 "餘額盤點 CSV 無法匯出。請確認匯出資料夾存在且可寫入、磁碟還有空間。",
                 details={"detail": str(exc)},
             )
-
-    def reminder_due(self, account_id: str) -> bool:
-        return not self.store.has_balance_snapshot_on_date(
-            account_id,
-            today_taipei().isoformat(),
-        )
 
 
 def balance_gap_to_dict(gap: BalanceGap | None) -> dict[str, Any] | None:

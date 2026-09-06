@@ -96,7 +96,6 @@ def _seed_defaults(connection: sqlite3.Connection, version: int) -> None:
         "default_account_id": "acct_cash",
         "default_entry_type": "expense",
         "transactions_page_size": "50",
-        "balance_snapshot_reminder": "true",
     }
     for key, value in defaults.items():
         connection.execute(

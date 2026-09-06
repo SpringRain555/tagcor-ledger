@@ -12,8 +12,18 @@
 2. **每次切到這一頁就重新整理。** 不在 `main_window` 的每個 `_..._changed` 各記一筆：
    那種清單一定會漏掉一項，而漏掉的症狀是「總資產停在舊的數字」—— 一個看起來像算錯帳
    的 bug。切頁重算是 O(帳戶數)，不值得為了省它而冒這個險。
-3. **提醒放在頁面上，不放狀態列。** 盤點提醒本來是一則 10 秒就消失的狀態列訊息，
+3. **提醒放在頁面上，不放狀態列。** 提醒本來是一則 10 秒就消失的狀態列訊息，
    使用者去泡杯茶回來它就不在了。
+
+## 這裡**沒有**「今天還沒盤點」那則提醒
+
+拿掉了，理由在
+[ADR-0014](../../../docs/decisions/ADR-0014-drop-daily-snapshot-reminder.md)。
+一句話版本：那是**依日曆觸發**的提醒 —— 只要今天沒盤點就跳，不管帳對不對得上，
+而餘額盤點是一個不定期的動作。於是它每天都在說一件不需要處理的事。
+
+留下來的是**依事實觸發**的那一則：**盤點過了、而金額對不上。**
+那是真的有事情要做，所以它才配得上一顆按鈕。
 
 ## 帳戶表右邊的占比圓環
 
@@ -62,9 +72,8 @@ class OverviewPage(QWidget):
         self.deposit_note = QLabel()
         self.gap_note = QLabel()
         self.inbox_note = QLabel()
-        self.snapshot_note = QLabel()
         self.inbox_button = QPushButton("去處理")
-        self.snapshot_button = QPushButton("去盤點")
+        self.gap_button = QPushButton("去盤點")
         self.table = QTableView()
         self.model = RowsModel(
             ["帳戶", "目前餘額（TWD）"],
@@ -81,11 +90,12 @@ class OverviewPage(QWidget):
         total_caption = QLabel("總資產（TWD）")
         total_caption.setObjectName("sectionTitle")
         self.total.setObjectName("totalAmount")
+        # `gap_note` 不在這裡：它住在待辦的 action row 裡，而那裡**不能開換行**
+        # （理由見 `_action_row`）。
         for label in (
             self.archived_note,
             self.negative_note,
             self.deposit_note,
-            self.gap_note,
         ):
             label.setObjectName("hintLabel")
             label.setWordWrap(True)
@@ -115,12 +125,11 @@ class OverviewPage(QWidget):
         todo_caption.setObjectName("sectionTitle")
         layout.addWidget(todo_caption)
         layout.addLayout(self._action_row(self.inbox_note, self.inbox_button))
-        layout.addLayout(self._action_row(self.snapshot_note, self.snapshot_button))
-        layout.addWidget(self.gap_note)
+        layout.addLayout(self._action_row(self.gap_note, self.gap_button))
         layout.addStretch()
 
         self.inbox_button.clicked.connect(lambda: self.inbox_requested.emit())
-        self.snapshot_button.clicked.connect(lambda: self.balance_requested.emit())
+        self.gap_button.clicked.connect(lambda: self.balance_requested.emit())
 
     def _accounts_row(self) -> QHBoxLayout:
         """表格在左、占比圓環在右，兩邊都靠上對齊。
@@ -165,7 +174,6 @@ class OverviewPage(QWidget):
         self._show_archived(list(snapshot["archived_with_balance"]))
         self._show_deposit(snapshot["deposit"])
         self._show_inbox(int(snapshot["inbox_count"]))
-        self._show_snapshot_due(snapshot["snapshot_due_account"])
         self._show_gap(snapshot["latest_gap"])
 
     def _show_chart(self, accounts: list[dict[str, Any]]) -> None:
@@ -231,23 +239,20 @@ class OverviewPage(QWidget):
             self.inbox_note.setText("沒有待確認項目。")
             self.inbox_button.setVisible(False)
 
-    def _show_snapshot_due(self, account_name: object) -> None:
-        if isinstance(account_name, str):
-            self.snapshot_note.setText(f"今天還沒記錄「{account_name}」的目前金額。")
-            self.snapshot_note.setVisible(True)
-            self.snapshot_button.setVisible(True)
-            return
-        self.snapshot_note.setVisible(False)
-        self.snapshot_button.setVisible(False)
-
     def _show_gap(self, gap: object) -> None:
-        """未解釋差額為 0 就不顯示。**「差額 0」不是待辦事項。**"""
+        """未解釋差額為 0 就整列收起來。**「差額 0」不是待辦事項。**
+
+        句子裡**不再寫「可到『餘額盤點』補記交易」** —— 旁邊那顆按鈕就是那句話，
+        而 `_action_row` 不能換行（見它的 docstring），句子留短一點才不會被擠掉。
+        """
         if not isinstance(gap, dict) or int(gap["difference_minor"]) == 0:
             self.gap_note.setVisible(False)
+            self.gap_button.setVisible(False)
             return
         self.gap_note.setText(
             f"最近一次盤點（{gap['account_name']}，"
             f"{display_date(str(gap['observed_at']))}）"
-            f"未解釋差額 {gap['difference']} TWD，可到「餘額盤點」補記交易。"
+            f"未解釋差額 {gap['difference']} TWD。"
         )
         self.gap_note.setVisible(True)
+        self.gap_button.setVisible(True)

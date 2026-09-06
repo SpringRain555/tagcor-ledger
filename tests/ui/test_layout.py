@@ -410,18 +410,23 @@ def test_the_summary_table_stops_at_its_last_row(qtbot, tmp_path: Path) -> None:
 
 
 def test_todo_lines_do_not_wrap_while_there_is_room_to_spare(qtbot, tmp_path: Path) -> None:
-    """待辦那兩行不可以在還有大片空白時就斷行。
+    """待辦那一行不可以在還有大片空白時就斷行。
 
     旁邊有 stretch 時，QLabel 拿到的是它的 `sizeHint` 寬度，而**會換行的** QLabel 的
     sizeHint 是一個「大致方形」的啟發值 —— 於是「今天還沒記錄「現金」的目前金額。」
     在右邊還有 700 px 空白的情況下斷成兩行（2026-08-20 實機截圖）。
+
+    **只量得到 `inbox_note`。** 同一列的另一個是 `gap_note`，而它只在有未解釋差額
+    的時候才顯示 —— 這個 fixture 是全新的帳本，一次都還沒盤點。兩者走的是同一個
+    `_action_row()`，所以量一個就守得住那個陷阱；`gap_note` 的顯示條件在
+    `tests/ui/test_overview_page.py`。
     """
     window = _open(qtbot, tmp_path, size=(1600, 900))
     window.show_page(PageId.OVERVIEW)
     QApplication.processEvents()
 
     page = window.overview
-    for label in (page.inbox_note, page.snapshot_note):
+    for label in (page.inbox_note,):
         assert label.isVisible(), label.text()
         assert label.text(), "標籤是空的，這條測試等於沒作用"
         # **量的是配到的寬度，不是 widget 的高度。** 這一列的高度是旁邊那顆按鈕決定的，

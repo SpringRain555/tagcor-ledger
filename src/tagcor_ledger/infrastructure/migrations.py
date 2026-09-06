@@ -12,7 +12,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 10
+LATEST_SCHEMA_VERSION = 11
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -493,6 +493,24 @@ def migrate_v10(connection: sqlite3.Connection) -> None:
     )
 
 
+def migrate_v11(connection: sqlite3.Connection) -> None:
+    """刪掉 `settings` 裡的 `balance_snapshot_reminder`。
+
+    **理由寫在 [ADR-0014](../../../docs/decisions/ADR-0014-drop-daily-snapshot-reminder.md)。**
+    一句話版本：「今天還沒盤點」是**依日曆觸發**的提醒，而餘額盤點是一個不定期的
+    動作 —— 於是它每天都在說一件不需要處理的事。留下來的是依事實觸發的那一則
+    （盤點過了、金額對不上），它在資產總覽上，而且不需要任何設定。
+
+    **這一列不刪也不會壞** —— `settings` 是 key/value 表，多一列沒有人讀的鍵不影響
+    任何查詢。但留著它，下一個開資料庫的人會以為那個功能還在，然後去找是哪裡讀它
+    （答案是沒有）。**沒有人讀的資料跟沒有人 import 的 re-export 一樣**，
+    不會有任何測試提醒你它過期了（`docs/lessons.md`）。
+
+    刪一列 key/value 不影響任何既有交易，也不需要重建表。
+    """
+    connection.execute("DELETE FROM settings WHERE key = 'balance_snapshot_reminder'")
+
+
 def _add_column_if_missing(
     connection: sqlite3.Connection, table: str, column: str, definition: str
 ) -> None:
@@ -514,6 +532,7 @@ MIGRATIONS: dict[int, Migration] = {
     8: migrate_v8,
     9: migrate_v9,
     10: migrate_v10,
+    11: migrate_v11,
 }
 
 

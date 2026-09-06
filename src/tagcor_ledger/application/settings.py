@@ -1,4 +1,4 @@
-"""存在 SQLite 裡的操作偏好（預設帳戶、盤點提醒、各名冊分頁的排序⋯⋯）。
+"""存在 SQLite 裡的操作偏好（預設帳戶、預設流向、每頁筆數、各名冊分頁的排序⋯⋯）。
 
 **資料路徑不在這裡** —— 那是 `app/path_settings.py` 的外部 JSON。
 
@@ -102,10 +102,6 @@ class SettingsService:
             default_account_id=values.get("default_account_id", "acct_cash"),
             default_entry_type=values.get("default_entry_type", "expense"),
             transactions_page_size=int(values.get("transactions_page_size", "50")),
-            balance_snapshot_reminder=values.get(
-                "balance_snapshot_reminder", "true"
-            ).lower()
-            == "true",
         )
 
     def update(self, settings: ApplicationSettings) -> Result:
@@ -129,9 +125,6 @@ class SettingsService:
                     "default_account_id": settings.default_account_id,
                     "default_entry_type": settings.default_entry_type,
                     "transactions_page_size": str(settings.transactions_page_size),
-                    "balance_snapshot_reminder": (
-                        "true" if settings.balance_snapshot_reminder else "false"
-                    ),
                 }
                 for key, value in values.items():
                     connection.execute(

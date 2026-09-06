@@ -134,7 +134,6 @@ class ApplicationSettings:
     default_account_id: str
     default_entry_type: str
     transactions_page_size: int
-    balance_snapshot_reminder: bool = True
     timezone: str = "Asia/Taipei"
     default_currency: str = "TWD"
 

@@ -51,14 +51,8 @@ class OverviewSection(LedgerSection, TemplateSection, DepositSection, BalanceSec
             ],
             "deposit": self._next_deposit_term(),
             "inbox_count": self.inbox_count(),
-            # 提醒是**現算**的，不讀 `balance_snapshot_reminder_due` 那個快取值：
-            # 那個值只在啟動與存設定時更新，於是「剛盤點完，提醒還在」。
-            "snapshot_due_account": (
-                str(default_account["name"])
-                if default_account is not None
-                and self.refresh_balance_snapshot_reminder_due()
-                else None
-            ),
+            # 未解釋差額是**現算**的（每次切到這一頁重新查），不讀任何快取值 ——
+            # 快取只會在啟動與存設定時更新，於是「剛補完那筆帳，差額還在」。
             "latest_gap": (
                 self.latest_balance_gap(settings.default_account_id)
                 if default_account is not None

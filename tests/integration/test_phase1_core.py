@@ -258,14 +258,12 @@ def test_settings_no_longer_contains_startup_backup(tmp_path: Path) -> None:
             default_account_id="acct_cash",
             default_entry_type="income",
             transactions_page_size=100,
-            balance_snapshot_reminder=False,
         )
     )
     assert result.success
     settings = service.get()
     assert settings.transactions_page_size == 100
     assert settings.default_entry_type == "income"
-    assert settings.balance_snapshot_reminder is False
     assert not hasattr(service, "startup_backup_due")
 
 

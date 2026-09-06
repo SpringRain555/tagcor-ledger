@@ -1,4 +1,4 @@
-"""一般設定：預設帳戶、預設流向、每頁筆數、盤點提醒。
+"""一般設定：預設帳戶、預設流向、每頁筆數。
 
 幣別與時區固定顯示為唯讀（TWD、Asia/Taipei），不是還沒做的下拉選單。
 """
@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
@@ -35,7 +34,6 @@ class GeneralSettingsPage(QWidget):
         self.account = QComboBox()
         self.flow = QComboBox()
         self.page_size = QComboBox()
-        self.balance_snapshot_reminder = QCheckBox("每日提醒記錄預設帳戶目前金額")
         self.result = QLabel()
         self._build()
         self.reload()
@@ -52,7 +50,6 @@ class GeneralSettingsPage(QWidget):
         form.addRow("預設帳戶", self.account)
         form.addRow("預設流向", self.flow)
         form.addRow("交易列表每頁", self.page_size)
-        form.addRow("餘額盤點提醒", self.balance_snapshot_reminder)
         form.addRow("固定幣別", QLabel("TWD"))
         form.addRow("固定時區", QLabel("Asia/Taipei"))
         # 資料庫檔案的完整路徑在「資料路徑」分頁 —— 這一頁講的是偏好，不是位置。
@@ -78,7 +75,6 @@ class GeneralSettingsPage(QWidget):
         select_data(self.account, settings.default_account_id)
         select_data(self.flow, settings.default_entry_type)
         select_data(self.page_size, settings.transactions_page_size)
-        self.balance_snapshot_reminder.setChecked(settings.balance_snapshot_reminder)
 
     def save(self) -> None:
         result = self.controller.save_settings(
@@ -86,7 +82,6 @@ class GeneralSettingsPage(QWidget):
                 default_account_id=str(self.account.currentData()),
                 default_entry_type=str(self.flow.currentData()),
                 transactions_page_size=int(self.page_size.currentData()),
-                balance_snapshot_reminder=self.balance_snapshot_reminder.isChecked(),
             )
         )
         self.result.setText(result_message(result))

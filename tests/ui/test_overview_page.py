@@ -181,25 +181,33 @@ def test_a_negative_balance_is_named_instead_of_being_drawn(window) -> None:
     assert page.total.text() == "-1,750"
 
 
-def test_the_snapshot_reminder_lives_on_the_page_not_the_status_bar(window) -> None:
-    """盤點提醒是**頁面上的一行字加一顆按鈕**，不是 10 秒就消失的狀態列訊息。
+def test_the_gap_reminder_lives_on_the_page_not_the_status_bar(window) -> None:
+    """**留下來的那則提醒是「盤點過了、金額對不上」**，不是「今天還沒盤點」。
 
-    去泡杯茶回來就看不到的提醒等於沒有提醒。按下「去盤點」要真的跳到餘額盤點頁。
+    v0.26.0 拿掉後者：它依日曆觸發，只要今天沒盤點就跳，而這位使用者的盤點是不定期
+    的 —— 一則永遠都在的提醒等於沒有提醒。前者依事實觸發，是真的有事情要做。
+
+    這一條同時守三件事：**沒有差額就整列收起來**（「差額 0」不是待辦）、
+    提醒是頁面上的一行字加一顆按鈕而不是 10 秒就消失的狀態列訊息、
+    以及按下「去盤點」要真的跳到餘額盤點頁。
     """
     window.show_page(PageId.OVERVIEW)
-
     page = window.overview
-    assert page.snapshot_note.isVisible()
-    assert page.snapshot_button.isVisible()
-    assert "現金" in page.snapshot_note.text()
-    assert window.statusBar().currentMessage() == ""
 
-    page.snapshot_button.click()
-    assert window.pages.currentWidget() is window.balance
+    # 陽性對照：還沒盤點過，所以這一列是收起來的 —— 不是「永遠顯示」。
+    assert not page.gap_note.isVisible()
+    assert not page.gap_button.isVisible()
 
-    # 盤點完，提醒就該消失 —— 這是「現算」而不是讀啟動時算好的快取值。
-    window.balance.amount.setText("0")
+    # 現金餘額是 0，盤點填 500 → 未解釋差額 500。
+    window.balance.amount.setText("500")
     window.balance.create_snapshot()
     window.show_page(PageId.OVERVIEW)
-    assert not page.snapshot_note.isVisible()
-    assert not page.snapshot_button.isVisible()
+
+    assert page.gap_note.isVisible()
+    assert page.gap_button.isVisible()
+    assert "現金" in page.gap_note.text()
+    assert "500" in page.gap_note.text()
+    assert window.statusBar().currentMessage() == ""
+
+    page.gap_button.click()
+    assert window.pages.currentWidget() is window.balance

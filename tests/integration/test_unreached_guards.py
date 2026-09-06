@@ -131,7 +131,6 @@ def test_an_unknown_entry_type_is_refused(tmp_path: Path) -> None:
             default_account_id="acct_cash",
             default_entry_type="adjustment",
             transactions_page_size=50,
-            balance_snapshot_reminder=True,
         )
     )
     assert not result.success
@@ -150,7 +149,6 @@ def test_only_three_page_sizes_are_accepted(tmp_path: Path, size: int) -> None:
             default_account_id="acct_cash",
             default_entry_type="expense",
             transactions_page_size=size,
-            balance_snapshot_reminder=True,
         )
     )
     assert not result.success
@@ -178,7 +176,6 @@ def test_the_default_account_must_exist_and_be_active(tmp_path: Path, state: str
             default_account_id=account_id,
             default_entry_type="expense",
             transactions_page_size=50,
-            balance_snapshot_reminder=True,
         )
     )
     assert not result.success
@@ -197,7 +194,6 @@ def test_a_valid_settings_update_is_saved(tmp_path: Path) -> None:
             default_account_id="acct_cash",
             default_entry_type="income",
             transactions_page_size=100,
-            balance_snapshot_reminder=False,
         )
     )
     assert result.success, result.message
@@ -205,4 +201,3 @@ def test_a_valid_settings_update_is_saved(tmp_path: Path) -> None:
     saved = service.get()
     assert saved.default_entry_type == "income"
     assert saved.transactions_page_size == 100
-    assert saved.balance_snapshot_reminder is False

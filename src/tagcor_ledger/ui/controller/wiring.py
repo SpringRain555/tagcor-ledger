@@ -73,15 +73,6 @@ class ControllerBase:
         （`UNIQUE (term_id, event_type, due_date)`）。
         """
         self.deposits.generate_due()
-        self.refresh_balance_snapshot_reminder_due()
-
-    def refresh_balance_snapshot_reminder_due(self) -> bool:
-        settings = self.settings.get()
-        self.balance_snapshot_reminder_due = (
-            settings.balance_snapshot_reminder
-            and self.balance.reminder_due(settings.default_account_id)
-        )
-        return self.balance_snapshot_reminder_due
 
     @staticmethod
     def _rows(result: Result, key: str) -> list[dict[str, Any]]:

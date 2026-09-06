@@ -242,23 +242,6 @@ class BalanceStore(StoreBase):
             rows = connection.execute(sql, parameters).fetchall()
         return [self._row_to_transaction(row) for row in rows]
 
-    def has_balance_snapshot_on_date(self, account_id: str, day: str) -> bool:
-        with connect_database(self.paths.database_path) as connection:
-            row = connection.execute(
-                """
-                SELECT 1 FROM balance_snapshots
-                WHERE account_id = ? AND status = 'active'
-                  AND observed_at >= ? AND observed_at <= ?
-                LIMIT 1
-                """,
-                (
-                    account_id,
-                    f"{day}T00:00:00+08:00",
-                    f"{day}T23:59:59+08:00",
-                ),
-            ).fetchone()
-        return row is not None
-
     @staticmethod
     def _balance_snapshot_select() -> str:
         return """

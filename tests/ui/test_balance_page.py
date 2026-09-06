@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 
 
-def test_balance_snapshot_page_creates_snapshot_and_setting(window) -> None:
+def test_balance_snapshot_page_creates_snapshot(window) -> None:
     page = window.balance
 
     page.amount.setText("0")
@@ -21,10 +21,6 @@ def test_balance_snapshot_page_creates_snapshot_and_setting(window) -> None:
     assert page.model.rowCount() == 1
     assert "餘額盤點已儲存" in page.result.text()
     assert "未解釋差額" in page.summary.text()
-
-    window.system_settings.general.balance_snapshot_reminder.setChecked(False)
-    window.system_settings.general.save()
-    assert not window.controller.get_settings().balance_snapshot_reminder
 
 
 def _amount_in_summary(text: str) -> str:

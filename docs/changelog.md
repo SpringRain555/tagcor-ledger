@@ -6,6 +6,57 @@
 > **2026-08-22 決定不分卷** —— 理由同 [`lessons.md`](lessons.md) 開頭那段：
 > 標題清單已經是索引，分卷只會多一層查找。
 
+## 0.25.0 - 拿掉「今天還沒盤點」：一則永遠都在的提醒等於沒有提醒
+
+資產總覽的待辦區從三列變兩列。拿掉的那一列是**依日曆觸發**的 ——
+只要今天沒盤點就跳，不管帳到底對不對得上。而餘額盤點是一個**不定期**的動作
+（要存摺或網銀在手邊才做得了），於是它每天都在說一件不需要處理的事。
+
+**理由完整寫在 [ADR-0014](decisions/ADR-0014-drop-daily-snapshot-reminder.md)**，
+與 [ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md) 同源。
+
+留下來的兩則**觸發條件都是外部事實**，不是日期：
+
+| 提醒 | 憑什麼跳 |
+|---|---|
+| 待確認筆數 | 定存到期／領息 —— 銀行那一端自己會動的錢 |
+| 未解釋差額 | 帳面與你數出來的金額對不起來 |
+
+### 拿掉的東西
+
+`ApplicationSettings.balance_snapshot_reminder`、`BalanceSnapshotService.reminder_due()`、
+`LedgerStore.has_balance_snapshot_on_date()`、`refresh_balance_snapshot_reminder_due()`、
+`overview_snapshot()` 的 `snapshot_due_account`、資產總覽的 `snapshot_note` 與
+`_show_snapshot_due()`、一般設定那個核取方塊。
+
+**`migrate_v11` 把 `settings` 那一列 DELETE 掉。** 不刪也不會壞（key/value 表多一列
+沒有人讀的鍵不影響任何查詢）—— 但**正因為不會壞，所以永遠不會有人發現它已經沒有人
+讀了**。這是這個 repo 已經記過一次的教訓（`lessons.md` 那條沒有人 import 的
+re-export），只是換成資料。
+
+### 「去盤點」搬到未解釋差額那一列
+
+它本來屬於被拿掉的那一列。跟著消失的話，`balance_requested` 這個訊號就沒有人發了 ——
+而沒有人發的訊號跟沒有人 import 的 re-export 是同一件事。
+
+所以它搬到差額那一列：**留下來的那則提醒是真的有事情要做的，它配得上一顆按鈕。**
+差額那句話裡的「可到『餘額盤點』補記交易」跟著拿掉 —— 旁邊那顆按鈕就是那句話，
+而且 `_action_row()` 不能換行，句子留短才不會被擠掉。
+
+**副作用寫在這裡而不是藏著：沒有差額的時候，資產總覽就沒有通往餘額盤點頁的按鈕了**，
+要走側邊欄。那是刻意的 —— 沒有事情要做的時候，不該有一顆叫你去做事的按鈕。
+
+### 測試
+
+`test_the_snapshot_reminder_lives_on_the_page_not_the_status_bar` 改寫成
+`test_the_gap_reminder_lives_on_the_page_not_the_status_bar`，而且**多了一段陽性對照**：
+還沒盤點過的時候那一列是收起來的。沒有那一段的話，把 `_show_gap()` 改成無條件顯示
+也會全綠。實際反過來驗過一次（把兩個 `setVisible(True)` 改成 `False`，那條測試如期紅）。
+
+`test_todo_lines_do_not_wrap_while_there_is_room_to_spare` 只剩量得到 `inbox_note` ——
+同一列的 `gap_note` 只在有差額時才顯示，而那個 fixture 是全新的帳本。
+兩者走同一個 `_action_row()`，所以量一個就守得住那個換行陷阱；註解裡寫清楚了。
+
 ## 0.24.1 - 記帳頁照填寫順序問，設定表格的欄寬會讓路，勾選框有勾號了
 
 實機使用之後的三件事。前兩件是「畫面沒有照使用者實際做事的樣子排」，

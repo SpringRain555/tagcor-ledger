@@ -13,7 +13,7 @@
 - `category_allocations`：類別/項目配置。目前 UI 只建立一筆 allocation，schema 保留未來拆分交易能力。
 - `audit_events`：帳務與設定變更 audit。
 - `transaction_fts`：FTS5 搜尋備註、類別/項目與帳戶。
-- `settings`：ledger 內的一般偏好，例如預設帳戶、預設流向、每頁筆數、盤點提醒。
+- `settings`：ledger 內的一般偏好，例如預設帳戶、預設流向、每頁筆數。
 - `schema_migrations`：migration registry。
 - `transaction_templates`：交易模板。
 - `balance_snapshots`：餘額盤點。
