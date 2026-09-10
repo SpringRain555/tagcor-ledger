@@ -292,25 +292,12 @@ schema 有 `idx_templates_active_name`（`UNIQUE(name) WHERE status = 'active'`�
 
 ---
 
-## 6. 應用程式啟動
+## 6. 應用程式啟動與關閉
 
-不是資料庫裡的狀態，是**啟動流程的結果分支**。列在這裡是因為它決定使用者看到什麼。
-
-| 結果 | 觸發條件 | 使用者應該看到 |
-|---|---|---|
-| 正常啟動 | 一切就緒 | 主視窗 |
-| 設定檔損毀 | `system_paths.json` 不是合法 JSON（`SYSTEM_PATH_SETTINGS_INVALID`） | 繁中對話框：設定檔位置 ＋ 刪掉它會退回預設路徑 |
-| 路徑越界 | `ledger_dir`／`backup_dir` 不在 `data_root` 底下（`PATH_OUTSIDE_DATA_ROOT`） | 繁中對話框：三個路徑的實際值 |
-| 資料夾不可用 | 磁碟未接、權限不足（`OSError`／`sqlite3.OperationalError`） | 繁中對話框：路徑 ＋ 檢查磁碟是否連接 |
-| **schema 太新** | 資料庫版本 > 程式支援版本（`DATABASE_SCHEMA_TOO_NEW`） | 繁中對話框：**不要繼續，去更新程式** |
-| 已有實例在跑 | 單一實例守門偵測到 | **把既有視窗叫到最前面**，第二個行程安靜結束（exit 0）。叫不動才退回繁中對話框 |
-
-**六種分支都已實作**（v0.8.0）。分類在 `app/startup.py::classify_startup_error`，
-訊息與錯誤碼在 `docs/architecture/error-codes.md` 的「啟動失敗」一節，
-驗收在 `tests/integration/test_startup_failures.py`。
-
-> 認不出來的例外會落到 `STARTUP_FAILED`。**那個碼出現就代表這張表漏了一種情形** ——
-> 它是待補的訊號，不是正常的終點。
+**搬走了。** 那一節開頭第一句就是「不是資料庫裡的狀態」——
+它講的是行程的生命週期，而這一份是資料狀態轉移的權威。
+2026-09-10 移到 [應用程式生命週期](app-lifecycle.md)，並在那裡補上一直沒寫過的
+另一半：**關閉**。六種啟動結果的表也在那一份。
 
 ---
 

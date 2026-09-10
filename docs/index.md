@@ -31,6 +31,7 @@
 | [用詞對照表](architecture/glossary.md) | 中文用詞與程式識別字的對應 |
 | [UI 流程](architecture/ui-workflows.md) | 側邊欄順序與各頁的操作流程 |
 | [架構總覽](architecture/overview.md) | 分層與資料流 |
+| [應用程式生命週期](architecture/app-lifecycle.md) | 啟動、單一實例、關閉的完整路徑 |
 | REQ-XXXX | 該功能的需求、邊界與驗收條件 |
 | ADR-XXXX | 該決定的理由與後果。**決定改了要新增 ADR，不要改舊的** |
 | [失敗紀錄](lessons.md) | 踩過的坑。append-only |
@@ -94,6 +95,7 @@
 - [總覽](architecture/overview.md)｜[資料模型](architecture/data-model.md)｜[狀態機](architecture/state-machines.md)
 - [儲存配置](architecture/storage-layout.md)｜[UI 流程](architecture/ui-workflows.md)
 - [錯誤碼目錄](architecture/error-codes.md)｜[用詞對照表](architecture/glossary.md)
+- [應用程式生命週期](architecture/app-lifecycle.md)
 
 ### 圖
 
