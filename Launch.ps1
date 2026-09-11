@@ -20,6 +20,10 @@
 .PARAMETER DataDir
     覆寫這一次執行的資料根目錄。平常不要用 —— 正式資料路徑由「系統設定 → 資料路徑」管理。
 
+.PARAMETER ReadyTimeoutSeconds
+    最多等主視窗幾秒。程式在 `window.show()` 之後會寫一個標記檔，這個腳本等的是那個檔案
+    出現，不是固定秒數 —— 這個數字只是「等到什麼時候該說出來還沒看到」的上限。
+
 .EXAMPLE
     .\Launch.ps1
     .\Launch.ps1 -CreateShortcut
@@ -27,7 +31,8 @@
 [CmdletBinding()]
 param(
     [switch]$CreateShortcut,
-    [string]$DataDir
+    [string]$DataDir,
+    [int]$ReadyTimeoutSeconds = 90
 )
 
 $ErrorActionPreference = 'Stop'
@@ -192,32 +197,67 @@ try {
     $errorLog = $null      # log 目錄不可寫不該讓程式開不起來
 }
 
+# 程式在 `window.show()` 之後會寫這個標記檔（app/startup_signal.py）。路徑從 --json
+# 拿，不在這裡自己拼 —— 拼出來的會是第二份路徑實作，--data-dir 換了資料根之後它會
+# 安靜地指錯地方，於是標記永遠等不到。
+$marker = [string]$info.ready_marker
+if (-not $marker) {
+    Stop-WithMessage '啟動資訊缺少 ready_marker' @(
+        '這一版的 Launch.ps1 需要程式回報標記檔的位置，請確認套件是同一個版本：',
+        '    conda activate tagcor-ledger',
+        '    python -m pip install -e ".[dev]" --no-deps'
+    )
+}
+# 上一次留下的標記不能讓這一次以為自己已經成功了。
+Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+
 $process = Start-Process @startArgs
 
-# 等一小段時間：啟動當下就死掉的話，這裡還來得及把原因顯示出來。
+# 等兩件事之一：標記檔出現（視窗真的顯示了），或行程結束（成功交棒、或啟動失敗）。
+#
+# 2026-08-18 到 2026-09-11 之間這裡是「等 5 秒，還活著就當視窗開了」。那擋得住
+# 一啟動就死的情形，擋不住另外兩種：視窗第 8 秒才出來（主控台已經說「已開啟」然後
+# 關掉，使用者對著空白等）、以及第 6 秒才炸掉（錯誤進了 log，唯一會說話的視窗已經
+# 不在了）。固定秒數不是訊號，是猜測 —— CONVENTIONS §16 第 3 題。
 #
 # **正常結束（0）也會走到這裡。** 第二次啟動時程式會把既有視窗叫到最前面然後以 0 結束，
 # 那是成功不是失敗。而 `Start-Process -PassThru` 的 `ExitCode` 有時候是 $null，
 # 而 PowerShell 裡 `$null -ne 0` 為真 —— 2026-08-18 的誤報就是這樣來的：
 # 畫面上印出「程式啟動後隨即結束（exit code ）」，括號裡是空的。
-$exited = $process.WaitForExit(5000)
-$processExitCode = 0
-if ($exited -and $null -ne $process.ExitCode) { $processExitCode = [int]$process.ExitCode }
-
-if ($exited -and $processExitCode -ne 0) {
-    $detail = @()
-    if ($errorLog -and (Test-Path -LiteralPath $errorLog)) {
-        $detail = Get-Content -LiteralPath $errorLog -Tail 20 -Encoding UTF8
-    }
-    Stop-WithMessage "程式啟動後隨即結束（exit code $processExitCode）" (
-        $detail + @('', "完整訊息：$errorLog")
-    )
+$deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
+while ((Get-Date) -lt $deadline) {
+    if (Test-Path -LiteralPath $marker) { break }
+    if ($process.HasExited) { break }
+    Start-Sleep -Milliseconds 250
 }
 
-if ($exited) {
+if (Test-Path -LiteralPath $marker) {
+    Write-Ok '視窗已開啟，可以關閉這個畫面。'
+    exit 0
+}
+
+if ($process.HasExited) {
+    $processExitCode = 0
+    if ($null -ne $process.ExitCode) { $processExitCode = [int]$process.ExitCode }
+    if ($processExitCode -ne 0) {
+        $detail = @()
+        if ($errorLog -and (Test-Path -LiteralPath $errorLog)) {
+            $detail = Get-Content -LiteralPath $errorLog -Tail 20 -Encoding UTF8
+        }
+        Stop-WithMessage "程式啟動後隨即結束（exit code $processExitCode）" (
+            $detail + @('', "完整訊息：$errorLog")
+        )
+    }
     # 以 0 結束代表既有視窗已經被叫到最前面，這是第二次啟動的正常路徑。
     Write-Ok '既有視窗已切換到最前面。'
-} else {
-    Write-Ok '視窗已開啟，可以關閉這個畫面。'
+    exit 0
 }
-exit 0
+
+# 還在跑，但沒有主視窗也沒有結束。這個程式沒有 watchdog，所以最常見的解釋是
+# 畫面上開著一個啟動失敗的對話框（六種啟動結果之一）—— 它在等使用者按掉。
+# 不要說「應該沒問題」，把看到的說出來。
+Stop-WithMessage "等了 $ReadyTimeoutSeconds 秒還沒看到主視窗，程式仍在執行（PID $($process.Id)）" @(
+    '畫面上如果有錯誤對話框，照它的說明處理。',
+    "沒有的話看 $errorLog",
+    '（要多等一點可以加 -ReadyTimeoutSeconds 180）'
+)

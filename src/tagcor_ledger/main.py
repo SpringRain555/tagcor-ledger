@@ -11,6 +11,7 @@ from typing import Sequence
 from tagcor_ledger import __version__
 from tagcor_ledger.app.bootstrap import bootstrap
 from tagcor_ledger.app.logging_setup import configure_logging, current_log_path, get_logger
+from tagcor_ledger.app import startup_signal
 from tagcor_ledger.app.single_instance import AlreadyRunningError, SingleInstanceGuard
 from tagcor_ledger.app.startup import classify_startup_error, resolve_log_dir
 from tagcor_ledger.infrastructure.database import initialize_database
@@ -100,6 +101,9 @@ def _run(args: argparse.Namespace) -> int:
                     )
                     return 1
                 raise
+            # 上一次留下的「視窗已開」標記不能讓這一次的啟動器以為已經成功了。
+            # 啟動器自己也會先刪；這一行守的是沒有啟動器的那條路。
+            startup_signal.clear(startup_signal.marker_path(context.paths))
             return run_gui(context)
         finally:
             guard.release()
@@ -115,6 +119,9 @@ def _run(args: argparse.Namespace) -> int:
         "export_dir": str(context.paths.export_dir),
         "log_dir": str(context.paths.log_dir),
         "tmp_dir": str(context.paths.tmp_dir),
+        # 啟動器等的就是這個檔案出現（app/startup_signal.py）。路徑從這裡拿，
+        # 不在 PowerShell 那一側自己拼 —— 那會是第二份路徑實作。
+        "ready_marker": str(startup_signal.marker_path(context.paths)),
         "styles_available": context.styles_available,
         "initialized_files": (
             {key: str(value) for key, value in initialized_files.items()}
