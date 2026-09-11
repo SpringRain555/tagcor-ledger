@@ -79,12 +79,27 @@ function Get-Sha256 {
     }
 }
 
+# **配色檔也要進 manifest。**
+#
+# 2026-09-11 之前這裡只雜湊 mermaid 原始碼，於是 `mermaid-config.json` 改了
+# 之後 `-Check` 照樣說「所有圖都是最新的」—— 而已提交的 SVG 全部是用舊配色算的。
+# **一張用錯顏色的圖跟一張用對顏色的圖，在過期檢查上長得一樣。**
+#
+# 行尾先正規化再雜湊：`.gitattributes` 會換行尾，
+# 直接雜湊檔案內容的話，同一份設定在兩台機器上會得到兩個 hash。
+$themeHash = Get-Sha256 -Text ([System.IO.File]::ReadAllLines($themePath) -join "`n")
+
 $entries = @()
 $stale = @()
 $existing = @{}
+$themeChanged = $true
 if (Test-Path $manifestPath) {
     $loaded = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach ($item in $loaded.diagrams) { $existing[$item.svg] = $item.sha256 }
+    $themeChanged = ($loaded.theme -ne $themeHash)
+}
+if ($themeChanged -and -not $Check) {
+    Write-Host '配色檔變了 —— 全部重算。'
 }
 
 foreach ($doc in (Get-ChildItem -Path $docsDir -Filter '*.md' | Sort-Object Name)) {
@@ -101,7 +116,7 @@ foreach ($doc in (Get-ChildItem -Path $docsDir -Filter '*.md' | Sort-Object Name
             sha256   = $hash
         }
 
-        $upToDate = (Test-Path $svgPath) -and $existing.ContainsKey($name) -and ($existing[$name] -eq $hash)
+        $upToDate = (-not $themeChanged) -and (Test-Path $svgPath) -and $existing.ContainsKey($name) -and ($existing[$name] -eq $hash)
         if ($Check) {
             if (-not $upToDate) { $stale += $name }
             continue
@@ -151,7 +166,8 @@ if ($Check) {
 }
 
 $manifest = [ordered]@{
-    note     = '產生物。改了 .md 裡的 mermaid 就重跑 tools/diagrams/Render-Diagrams.ps1。'
+    note     = '產生物。改了 .md 裡的 mermaid 或 tools/diagrams/mermaid-config.json 就重跑 tools/diagrams/Render-Diagrams.ps1。'
+    theme    = $themeHash
     diagrams = $entries
 }
 # .json 一律 UTF-8 無 BOM。

@@ -102,6 +102,27 @@ def test_every_diagram_has_an_up_to_date_svg() -> None:
         )
 
 
+def test_the_manifest_records_the_theme_it_was_rendered_with() -> None:
+    """**配色檔也算原始碼。**
+
+    2026-09-11 之前 manifest 只記每一段 mermaid 的 hash，於是改了
+    `mermaid-config.json` 之後所有的檢查都照樣說「最新的」——
+    而已提交的 SVG 全部是用舊配色算的。
+    **一張用錯顏色的圖跟一張用對顏色的圖，在漂移檢查上長得一樣。**
+
+    行尾先正規化再雜湊，切法與 `Render-Diagrams.ps1` 的
+    `ReadAllLines -join "\\n"` 一致 —— `.gitattributes` 會換行尾，
+    直接雜湊檔案內容的話同一份設定在兩台機器上會得到兩個 hash。
+    """
+    config = PROJECT_ROOT / "tools" / "diagrams" / "mermaid-config.json"
+    normalised = "\n".join(config.read_text(encoding="utf-8").splitlines())
+    digest = hashlib.sha256(normalised.encode("utf-8")).hexdigest()
+
+    recorded = json.loads(MANIFEST.read_text(encoding="utf-8")).get("theme")
+    assert recorded is not None, f"manifest 裡沒有 theme 欄位。{RERUN}"
+    assert recorded == digest, f"配色檔變了而圖沒有重算。{RERUN}"
+
+
 def test_the_manifest_is_utf8_without_bom() -> None:
     """`.json` 一律 UTF-8 **無 BOM**（`AGENTS.md` 的「語言與編碼」）。"""
     assert not MANIFEST.read_bytes().startswith(b"\xef\xbb\xbf")
