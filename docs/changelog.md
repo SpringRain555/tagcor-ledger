@@ -6,6 +6,40 @@
 > **2026-08-22 決定不分卷** —— 理由同 [`lessons.md`](lessons.md) 開頭那段：
 > 標題清單已經是索引，分卷只會多一層查找。
 
+## 0.27.0 - 骨架對齊 D:\Projects 的共同慣例；程式行為零改變
+
+`D:\Projects` 的 CONVENTIONS 在 2026-09-12 多了幾條「四個本機 app 要長得一樣」的規則
+（§12 文件層級、§14 範本、§16 啟動器命名、§17 擷取紀律、§18 圖表）。這一版只做對齊，
+**沒有任何功能或行為改變**；每一件各自一個 commit，可以個別回退。
+
+### 使用者看得到的一件事：雙擊目標改名了
+
+- `Start TagCor Ledger.cmd` → **`start_tagcor-ledger.cmd`**（`start_<slug>.cmd`，§16）。
+  **舊的桌面捷徑要重建**：`.\tools\Launch.ps1 -CreateShortcut`。
+- `Launch.ps1`、`Verify.ps1` 搬進 `tools\`（我們自己的腳本全部住那裡，根目錄只留工具規定
+  位置的檔案）。`.cmd` 仍然只做一件事：把事情交給 `tools\Launch.ps1`。守門測試釘住新位置，
+  把委派改回根目錄驗過會紅。實跑：沙箱資料根雙擊 4 秒看到就緒標記、第二次啟動交棒給既有視窗。
+
+### 工具與範本
+
+- `tools\diagrams\Render-Diagrams.ps1` 換成範本 v2（這個專案是它的原產地；v2 多了固定檔名、
+  svg 的 id 不再全叫 `my-svg`）。14 張 SVG 全部重算，manifest 的 hash 一個都沒變。
+- **`tools\Sync-AgentDocs.ps1`**：兩份 agent 檔以前靠「同一個 commit 改兩份」這條儀式，
+  現在改 `CLAUDE.md` 之後跑它重生 `AGENTS.md`，`tools\Verify.ps1` 多一步 `-Check`。
+- `.gitignore` 檔頭插入共用基底段（`template: .gitignore v1`）；`.vscode\settings.json` 進版控，
+  直譯器走 `${env:TAGCOR_PYTHON}`，裡面沒有機器路徑。
+
+### 文件
+
+- `docs\environment\index.md` 改成 §12 的六段「專案環境文件」：runtime、怎麼建、怎麼驗證、
+  怎麼更新、環境變數（四個，逐一寫誰讀）、已知的坑。
+- `docs\research\index.md` 的擷取紀律改成引用 §17；數字留在 `tools\fetch.py`（一個字不動）。
+- agent 檔三處放寬（附錄 A §8b 的 #1／#2／#9）：「五份文件同步更新」→ changelog ＋
+  擁有那件事的那一份，其餘交 drift 測試（roadmap 的逐版表停在 v0.24.1 就是舊規則沒被遵守的證據，
+  往後不再逐版列）；七步「不要跳」的閱讀順序 → 這一份 ＋ lessons ＋ 擁有你要動的東西的那一份；
+  UI 樣式規範 55 行搬進 `ui-workflows.md`，硬規則檔只留會出事的六條。
+- README 指回卡片那一段搬到最末段。
+
 ## 0.26.0 - 啟動器等的是視窗，不是五秒
 
 `Launch.ps1` 把 `pythonw.exe` 叫起來之後，從 2026-08-18 起的判準是
