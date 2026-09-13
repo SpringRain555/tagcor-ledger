@@ -29,7 +29,7 @@
 | [儲存配置](architecture/storage-layout.md) | 檔案位置、`data_root` 約束、備份格式 |
 | [錯誤碼目錄](architecture/error-codes.md) | 每個錯誤碼的成因與處理 |
 | [用詞對照表](architecture/glossary.md) | 中文用詞與程式識別字的對應 |
-| [UI 流程](architecture/ui-workflows.md) | 側邊欄順序與各頁的操作流程 |
+| [UI 流程](architecture/ui-workflows.md) | 側邊欄順序、各頁的操作流程，以及 **UI 樣式規範**（色票、QSS、字體、表格、測試怎麼量） |
 | [架構總覽](architecture/overview.md) | 分層與資料流 |
 | [應用程式生命週期](architecture/app-lifecycle.md) | 啟動、單一實例、關閉的完整路徑 |
 | REQ-XXXX | 該功能的需求、邊界與驗收條件 |
