@@ -361,19 +361,24 @@ hook 沒生效的話跑一次 `git config core.hooksPath .githooks`。
 - `.md` / `.json`：UTF-8 **無 BOM**。
 - `.ps1` / `.psm1`：UTF-8 **必須有 BOM**（PowerShell 5.1 沒有 BOM 會退回 Big5 而整份亂碼）。
 
-## 閱讀順序
+## 先讀什麼
 
-**要動程式的話照這個順序，不要跳：**
+**兩份一定要讀**：這一份（硬規則與邊界）＋ `docs/lessons.md`（踩過的坑；
+**動 migration 或路徑之前必讀**）。然後只讀**擁有你要動的東西的那一份** ——
+哪一份擁有哪件事，`docs/index.md` 的權威範圍表說了算：
 
-1. 這一份（`AGENTS.md`）—— 硬規則與邊界
-2. `docs/architecture/state-machines.md` —— 有哪些狀態、哪些轉移合法、哪裡刻意不推論
-3. `docs/architecture/data-model.md` —— 表與欄位
-4. `docs/architecture/error-codes.md` —— 每個錯誤的成因與使用者該怎麼做
-5. `docs/architecture/glossary.md` —— 什麼該叫什麼，以及**不該叫什麼**
-6. `docs/lessons.md` —— 踩過的坑。**動 migration 或路徑之前必讀**
-7. 才是相關的 `docs/requirements/REQ-XXXX` 與 `docs/decisions/ADR-XXXX`
+| 要動的是 | 讀 |
+|---|---|
+| 狀態與轉移 | `docs/architecture/state-machines.md`（哪些轉移合法、哪裡刻意不推論） |
+| 表與欄位 | `docs/architecture/data-model.md` |
+| 錯誤碼 | `docs/architecture/error-codes.md`（成因與使用者該怎麼做） |
+| 用詞 | `docs/architecture/glossary.md`（什麼該叫什麼，以及**不該叫什麼**） |
+| 某一頁 | `docs/architecture/ui-workflows.md` |
+| 某個功能的範圍與決定 | 那份 `docs/requirements/REQ-XXXX` 與 `docs/decisions/ADR-XXXX` |
 
-`docs/index.md` 有完整索引與每份文件的權威範圍。
+> 2026-09-13 之前這裡是七步「不要跳」的閱讀順序。七份全讀，對改一行 UI 文字的人是
+> 過度約束，而過度約束的清單會被整份跳過 —— 那比「只讀相關的那一份」更糟。
+
 `docs/archive/phase-0-2/` 只是歷史紀錄，**不是**現行規格。
 
 ## 文件維護
