@@ -1,23 +1,71 @@
-# Python
+# template: .gitignore v1
+# D:\Projects 共用 .gitignore 基底。各專案在下面接自己的堆疊段落，
+# 上面這一段不要改 —— 改了要回 _meta\templates 改，版本號 +1（CONVENTIONS §14）。
+#
+# 這裡是 blocklist（各專案自己的 repo）。根目錄那一份是 allowlist，兩者刻意不同：
+# 根 repo 要預設忽略一切（新增專案不必改任何檔案），專案 repo 要預設追蹤一切。
+
+# ── agent 與本機設定 ───────────────────────────────────────
+# settings.json 會寫實際的私人路徑，絕不進版控。範本另外給 settings.example.json。
+.claude/settings.json
+.claude/settings.local.json
+.mcp.json
+
+# ── 密鑰與環境 ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+
+# ── 作業系統與編輯器 ───────────────────────────────────────
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ── 產生物與快取 ───────────────────────────────────────────
+*.log
+.cache/
+tmp/
+
+# ══ Python 段（用不到就整段刪掉）═══════════════════════════
 __pycache__/
 *.py[cod]
-*.egg-info/
+.venv/
+venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# ============================================================
+# 以下為 tagcor-ledger 專屬（2026-09-13 把上面那段共用基底插到檔頭；
+# 之前是 2026-08-11 手動補的一段「安全網」，內容重疊、沒有版本標記）。
+# ============================================================
+
+# 這個專案自己的快取與暫存
 .tmp/
 .tmp-mypy/
 test-runtime/
 .uv-cache/
-
-# Virtual environments
-.venv/
-venv/
 env/
+desktop.ini
 
-# Local runtime data
+# 本機的測試／沙箱資料根（--data-dir 指過去的那些）
 .local-data/
 .local-data-*/
+
+# SQLite 是本專案的主要儲存，資料庫檔一律不追蹤 —— 帳本永遠不進 repo
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
 
 # 研究抓取的第三方內容：可用 tools/fetch.py 依 manifest 重抓，不進版控。
 # 追蹤的是「出處」而不是「內容」—— manifest.jsonl 有 URL、抓取時間與 SHA-256，
@@ -26,47 +74,14 @@ env/
 docs/research/sources/raw/
 docs/research/sources/text/
 
-# Build outputs
-build/
-dist/
-
-# ============================================================
-#  以下由 D:\Projects\_meta 於 2026-08-11 統一補上
-#  補的是共用 base 的安全網，原有規則完全保留
-#  規範見 D:\Projects\_meta\CONVENTIONS.md 第 6 節
-# ============================================================
-
-# SQLite 是本專案的主要儲存，資料庫檔一律不追蹤
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
-
-.agents/
-.claude/settings.local.json
-
-# 本機的路徑權限規則。**不進版控** —— 它列的是私人資料夾的實際名稱，而漂移檢查
-# 會要求每新增一個私人資料夾就多列一條 deny，追蹤它等於把那份清單一起公開。
-# 範本是 .claude/settings.example.json。
-.claude/settings.json
-
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-credentials.json
-secrets.json
-*.mp4
-*.zip
-*.7z
-.DS_Store
-Thumbs.db
-desktop.ini
-.vscode/
-.idea/
-
 # 法規參考庫的產生物 —— 隨時可以從 reference/corpus/ 重建。
 # corpus 是手寫＋抓取的文字，**要進版控**；下面這些不進。
 reference/reference.sqlite3
 reference/raw/
+
+# 其他不該進版控的東西
+.agents/
+credentials.json
+*.mp4
+*.zip
+*.7z
