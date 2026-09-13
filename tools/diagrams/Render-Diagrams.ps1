@@ -1,36 +1,65 @@
 ﻿<#
+    template: tools/diagrams/Render-Diagrams.ps1 v2
+
 .SYNOPSIS
-    把 docs 裡的 mermaid 區塊算成 SVG，並記下每一段原始碼的 SHA-256。
+    把 docs 裡的 mermaid 區塊算成 SVG，並記下每一段原始碼與配色檔的 SHA-256。
+
+    v2（2026-09-12）：區塊第一行寫 `%% name: <名字>` 就用那個名字當檔名（`<名字>.svg`），
+    沒寫的照舊 `<文件名>-<第幾段>.svg`。`%%` 是 mermaid 的註解，渲染時被忽略。
+    要固定名字的理由是 dashboard／README 會用路徑引用某一張圖，而序號在前面插一張就會位移。
+    同一個 OutDir 裡名字撞到會直接 throw，不會靜默覆蓋。
 
 .DESCRIPTION
-    **人手動跑，不進 Verify.ps1。** 第一次執行會讓 npx 下載 mermaid-cli 與它帶的
+    CONVENTIONS §18：mermaid 寫在 .md 裡是唯一正本，SVG 是產生物但進版控 ——
+    否則沒裝 node 的人（含日後讀這份專案的 LLM）看不到圖。
+
+    **人手動跑，不進 Verify.ps1 的必經路徑。** 第一次執行會讓 npx 下載 mermaid-cli 與它帶的
     Chromium（約數百 MB，需要網路）。App 的「永遠不連網」規則約束的是 `src/`；
-    `tools/` 本來就是手動離線工具，`tools/law_sync/` 是同樣的形狀。
+    `tools/` 本來就是手動離線工具。
 
-    產出的 SVG **會進版控** —— 否則沒裝 node 的人（含日後讀這份專案的 LLM）看不到圖。
+    改了任何一段 mermaid 或 `mermaid-config.json` 就要重跑，否則 `-Check` 會紅。
+    `-Check` 只比對 SHA-256，**不需要 node**，所以 Verify.ps1 照樣跑得動。
 
-    改了任何一段 mermaid 就要重跑，否則 tests/unit/test_diagrams_drift.py 會紅。
-    那條測試只比對 SHA-256，**不需要 node**，所以 Verify.ps1 照樣跑得動。
+    這份是逐字複製型範本（CONVENTIONS §14）：專案照抄、不改。專案能調的只有旁邊的
+    `mermaid-config.json`（配色，骨架型）與呼叫時的參數。要改腳本本身就回
+    `_meta\templates\tools\diagrams\Render-Diagrams.ps1` 改，版本號 +1。
+    來源是 tagcor-ledger 的 `tools\diagrams\Render-Diagrams.ps1`（2026-09-11），
+    參數化了目錄與背景，讓 `_meta` 自己也能用同一支。
+
+.PARAMETER Check
+    只檢查有沒有過期，不重算。過期 exit 1。
+
+.PARAMETER DocsDir
+    掃哪個資料夾的 .md（不遞迴）。預設 `docs\architecture`。
+
+.PARAMETER OutDir
+    SVG 與 manifest.json 放哪。預設 `<DocsDir>\diagrams`。
+
+.PARAMETER Background
+    傳給 mermaid-cli 的 -b。預設 transparent；要固定底色就給色碼。
 
 .EXAMPLE
     .\tools\diagrams\Render-Diagrams.ps1
-    .\tools\diagrams\Render-Diagrams.ps1 -Check   # 只檢查有沒有過期，不重算
+    .\tools\diagrams\Render-Diagrams.ps1 -Check
 #>
 [CmdletBinding()]
 param(
-    [switch]$Check
+    [switch]$Check,
+    [string]$DocsDir,
+    [string]$OutDir,
+    [string]$Background = 'transparent'
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$docsDir = Join-Path $root 'docs\architecture'
-$outDir = Join-Path $docsDir 'diagrams'
-$manifestPath = Join-Path $outDir 'manifest.json'
+if (-not $DocsDir) { $DocsDir = Join-Path $root 'docs\architecture' }
+if (-not $OutDir)  { $OutDir  = Join-Path $DocsDir 'diagrams' }
+$manifestPath = Join-Path $OutDir 'manifest.json'
 $themePath = Join-Path $PSScriptRoot 'mermaid-config.json'
 
-if (-not (Test-Path $outDir)) {
-    New-Item -ItemType Directory -Path $outDir | Out-Null
+if (-not (Test-Path $OutDir)) {
+    New-Item -ItemType Directory -Path $OutDir | Out-Null
 }
 
 function Get-Blocks {
@@ -81,8 +110,8 @@ function Get-Sha256 {
 
 # **配色檔也要進 manifest。**
 #
-# 2026-09-11 之前這裡只雜湊 mermaid 原始碼，於是 `mermaid-config.json` 改了
-# 之後 `-Check` 照樣說「所有圖都是最新的」—— 而已提交的 SVG 全部是用舊配色算的。
+# 只雜湊 mermaid 原始碼的話，`mermaid-config.json` 改了之後 `-Check` 照樣說
+# 「所有圖都是最新的」—— 而已提交的 SVG 全部是用舊配色算的。
 # **一張用錯顏色的圖跟一張用對顏色的圖，在過期檢查上長得一樣。**
 #
 # 行尾先正規化再雜湊：`.gitattributes` 會換行尾，
@@ -102,13 +131,24 @@ if ($themeChanged -and -not $Check) {
     Write-Host '配色檔變了 —— 全部重算。'
 }
 
-foreach ($doc in (Get-ChildItem -Path $docsDir -Filter '*.md' | Sort-Object Name)) {
+$taken = @{}
+foreach ($doc in (Get-ChildItem -Path $DocsDir -Filter '*.md' -File | Sort-Object Name)) {
     $blocks = @(Get-Blocks -Path $doc.FullName)
     for ($i = 0; $i -lt $blocks.Count; $i++) {
         $source = $blocks[$i]
         $hash = Get-Sha256 -Text $source
-        $name = '{0}-{1}.svg' -f $doc.BaseName, ($i + 1)
-        $svgPath = Join-Path $outDir $name
+        # v2：第一行 `%% name: xxx` 決定檔名；只認第一行，避免把圖裡別處的註解當成命名。
+        $firstLine = ($source -split "`n", 2)[0].Trim()
+        if ($firstLine -match '^%%\s*name:\s*(?<n>[A-Za-z0-9][A-Za-z0-9._-]*)\s*$') {
+            $name = '{0}.svg' -f $Matches['n']
+        } else {
+            $name = '{0}-{1}.svg' -f $doc.BaseName, ($i + 1)
+        }
+        if ($taken.ContainsKey($name)) {
+            throw "兩段 mermaid 都要輸出成 $name（$($taken[$name]) 與 $($doc.Name) 第 $($i + 1) 段）—— 名字要唯一"
+        }
+        $taken[$name] = '{0} 第 {1} 段' -f $doc.Name, ($i + 1)
+        $svgPath = Join-Path $OutDir $name
         $entries += [ordered]@{
             document = $doc.Name
             index    = $i + 1
@@ -139,7 +179,10 @@ foreach ($doc in (Get-ChildItem -Path $docsDir -Filter '*.md' | Sort-Object Name
             $previous = $ErrorActionPreference
             $ErrorActionPreference = 'Continue'
             try {
-                & npx -y '@mermaid-js/mermaid-cli@11' -i $mmd -o $svgPath -c $themePath -b transparent
+                # v2：svg 的 id 用檔名（預設全部叫 my-svg）。把兩張圖內嵌進同一頁 HTML 時，
+                # 每張圖的 <style> 都以 #<id> 限定範圍，id 重複就互相套到對方身上。
+                $svgId = 'diagram-' + [System.IO.Path]::GetFileNameWithoutExtension($name)
+                & npx -y '@mermaid-js/mermaid-cli@11' -i $mmd -o $svgPath -c $themePath -b $Background -I $svgId
             }
             finally {
                 $ErrorActionPreference = $previous
@@ -175,4 +218,4 @@ $json = $manifest | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($manifestPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ''
-Write-Host ("完成：{0} 張圖 -> {1}" -f $entries.Count, $outDir)
+Write-Host ("完成：{0} 張圖 -> {1}" -f $entries.Count, $OutDir)

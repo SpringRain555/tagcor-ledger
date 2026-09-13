@@ -2,7 +2,9 @@
 # CLAUDE — TagCor Ledger
 
 > **這份與 `AGENTS.md` 是平級的兩份完整規則**（Claude Code 只自動載入 `CLAUDE.md`，
-> Codex 只自動載入 `AGENTS.md`）。**改任何一份就要同步改另一份。**
+> Codex 只自動載入 `AGENTS.md`）。**改規則一律改這一份，然後跑 `.\tools\Sync-AgentDocs.ps1`
+> 重生 `AGENTS.md`；不要直接改 `AGENTS.md`**（2026-09-13 起；之前靠「同一個 commit 改兩份」
+> 這條儀式，而儀式會漏）。`tools\Verify.ps1` 會驗兩份本文逐字相同。
 > 唯一該有的差異是「工具專屬」那一節。
 >
 > 產生器會比對兩份最後被改的 commit，不一致就報 `agent-doc-drift`；
@@ -325,7 +327,7 @@ python -m tagcor_ledger --gui
 理由是工具 shell 以 `-NonInteractive` 啟動、**不載入 `profile.ps1`**，所以 `conda init powershell` 裝的 hook 沒生效。此時 `conda activate` 會跑在子 process 裡改不到父層環境，**回報成功、退出碼 0、實際上什麼都沒換**（2026-08-18 實測）。接著跑到的會是 PATH 上碰巧排在前面的別的直譯器 —— 那個直譯器多半沒有 PySide6，於是失敗訊息會指向完全無關的方向。
 
 ```powershell
-.\tools\Verify.ps1                 # 路徑漂移檢查 + ruff + mypy --strict + pytest
+.\tools\Verify.ps1                 # 路徑漂移檢查 + Qt stub + agent 檔同步 + ruff + mypy --strict + pytest
 .\tools\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
 .\tools\Verify.ps1 -Performance    # 加跑 20 萬筆效能測試
 ```

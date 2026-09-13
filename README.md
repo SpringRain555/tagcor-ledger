@@ -245,7 +245,7 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 ## 驗證
 
 ```powershell
-.\tools\Verify.ps1                 # 路徑漂移檢查 + Qt stub + ruff + mypy --strict + pytest
+.\tools\Verify.ps1                 # 路徑漂移檢查 + Qt stub + agent 檔同步 + ruff + mypy --strict + pytest
 .\tools\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
 .\tools\Verify.ps1 -Performance    # 加跑 200,000 筆效能回歸
 ```

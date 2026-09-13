@@ -4,7 +4,7 @@
     TagCor Ledger 的本機驗證閘門。
 
 .DESCRIPTION
-    依序跑：路徑漂移檢查 -> ruff -> mypy --strict -> pytest。
+    依序跑：路徑漂移檢查 -> Qt 型別 stub -> agent 檔同步 -> ruff -> mypy --strict -> pytest。
     任何一項失敗都會讓整支腳本以非零 exit code 結束，並在最後列出所有失敗項。
 
     這支腳本刻意「只報矛盾、不自動修」。漂移檢查發現的問題要由人決定怎麼處理。
@@ -272,6 +272,12 @@ try {
 
     # 要在 mypy 之前 —— 它決定了那一步到底有沒有在檢查 Qt。
     Test-QtTypeStubs
+
+    # 兩份 agent 檔的本文要逐字相同（CONVENTIONS §9）。以前靠「同一個 commit 改兩份」這條儀式，
+    # 而儀式會漏；現在改 CLAUDE.md 之後跑 tools\Sync-AgentDocs.ps1 產生 AGENTS.md，這裡只驗。
+    Write-Section 'agent 檔同步'
+    & (Join-Path $PSScriptRoot 'Sync-AgentDocs.ps1') -Check
+    if ($LASTEXITCODE -ne 0) { Add-Failure 'AGENTS.md 與 CLAUDE.md 的本文不同（跑 .\tools\Sync-AgentDocs.ps1）' }
 
     Invoke-Step -Name 'ruff' -Arguments @('-m', 'ruff', 'check', '--no-cache', '.')
     Invoke-Step -Name 'mypy --strict' -Arguments @('-m', 'mypy', '--no-incremental', 'src')
