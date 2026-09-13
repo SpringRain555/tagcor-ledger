@@ -119,7 +119,7 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 
 1. **攔不住 shell。** `Get-Content`、`cat`、`type`、`Select-String` 都能讀檔，任意 shell 指令無法可靠地用 pattern 比對。用 shell 時靠的是這一節的成文規則。
 2. **不能假設什麼時候生效。** 這裡原本寫「改了一定要重開 session 才會載入」，2026-09-05 實測不是：改完基線那兩層之後，同一個 session 裡原本被擋掉的 Edit **當場就寫得動了**。兩個方向都別假設 —— 要驗就用**全新 session** 驗，因為要驗的本來就是「全新 session 看到什麼」。
-3. **新資料夾不會自動被擋。** `<私人資料樹>\` 底下新增的資料夾不在 deny 清單裡，只會被 `ask` 攔下來問。`Verify.ps1` 的漂移檢查會列出它們並印出該加的規則字串。
+3. **新資料夾不會自動被擋。** `<私人資料樹>\` 底下新增的資料夾不在 deny 清單裡，只會被 `ask` 攔下來問。`tools\Verify.ps1` 的漂移檢查會列出它們並印出該加的規則字串。
 
 ### 改資料路徑是三步，不是一步
 
@@ -127,7 +127,7 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 
 1. App「系統設定 → 記帳資料路徑」改路徑。
 2. `.claude\settings.json` 的 deny／allow 清單同步改。
-3. 跑 `.\Verify.ps1` 確認漂移檢查通過。
+3. 跑 `.\tools\Verify.ps1` 確認漂移檢查通過。
 
 ## 架構邊界
 
@@ -303,7 +303,9 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 環境是 **conda**（`environment.yaml` 的 `tagcor-ledger`），專案裡沒有 `.venv`。
 PySide6 由 conda dependency 管理，**不能**放回 `pyproject.toml` 讓 pip 安裝 —— Windows 下混用 conda/pip 的 PySide6 會造成 Qt DLL 載入失敗。
 
-**人要開程式：雙擊 `Start TagCor Ledger.cmd`。** 它用絕對路徑呼叫環境直譯器，不碰 PATH。
+**人要開程式：雙擊 `start_tagcor-ledger.cmd`。** 它只做一件事：把事情交給 `tools\Launch.ps1`，
+而那一支用絕對路徑呼叫環境直譯器，不碰 PATH。（2026-09-13 之前叫 `Start TagCor Ledger.cmd`，
+邏輯在根目錄的 `Launch.ps1`；改名與搬家是為了四個本機 app 長得一樣 —— CONVENTIONS §12／§16。）
 
 **人在互動式 PowerShell 裡：先啟動環境。**
 
@@ -323,9 +325,9 @@ python -m tagcor_ledger --gui
 理由是工具 shell 以 `-NonInteractive` 啟動、**不載入 `profile.ps1`**，所以 `conda init powershell` 裝的 hook 沒生效。此時 `conda activate` 會跑在子 process 裡改不到父層環境，**回報成功、退出碼 0、實際上什麼都沒換**（2026-08-18 實測）。接著跑到的會是 PATH 上碰巧排在前面的別的直譯器 —— 那個直譯器多半沒有 PySide6，於是失敗訊息會指向完全無關的方向。
 
 ```powershell
-.\Verify.ps1                 # 路徑漂移檢查 + ruff + mypy --strict + pytest
-.\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
-.\Verify.ps1 -Performance    # 加跑 20 萬筆效能測試
+.\tools\Verify.ps1                 # 路徑漂移檢查 + ruff + mypy --strict + pytest
+.\tools\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
+.\tools\Verify.ps1 -Performance    # 加跑 20 萬筆效能測試
 ```
 
 **三層閘門，各擋不同的東西：**
@@ -345,14 +347,14 @@ marker）只有這裡會自動跑到。CI 在 Linux，字體與 Qt 平台外掛�
 使用者會看到的東西。
 
 兩個 hook 的直譯器查找共用 `.githooks/resolve-python.sh`，認的環境變數與
-`Launch.ps1`／`Verify.ps1` 相同（`$TAGCOR_PYTHON`）。要跳過用 `--no-verify`；
-完整輸出仍然是 `.\Verify.ps1 -Ui`。
+`tools\Launch.ps1`／`tools\Verify.ps1` 相同（`$TAGCOR_PYTHON`）。要跳過用 `--no-verify`；
+完整輸出仍然是 `.\tools\Verify.ps1 -Ui`。
 
 hook 沒生效的話跑一次 `git config core.hooksPath .githooks`。
 
 ## 語言與編碼
 
-- **中文一律繁體。** 不得混入簡體字。`tests/unit/test_traditional_chinese.py` 是自動守門，`Verify.ps1` 每次都會跑。它只收「簡體專用」字，繁簡同形的字（量、常、伙、台…）不列入，所以零誤報。
+- **中文一律繁體。** 不得混入簡體字。`tests/unit/test_traditional_chinese.py` 是自動守門，`tools\Verify.ps1` 每次都會跑。它只收「簡體專用」字，繁簡同形的字（量、常、伙、台…）不列入，所以零誤報。
 - 介面文字、錯誤訊息、註解、文件全部繁體中文；程式識別字用英文。
 - `.md` / `.json`：UTF-8 **無 BOM**。
 - `.ps1` / `.psm1`：UTF-8 **必須有 BOM**（PowerShell 5.1 沒有 BOM 會退回 Big5 而整份亂碼）。

@@ -63,7 +63,7 @@ bug 的成因，而精簡過的 Linux 容器也可能沒有 tzdata。約 1 MB，
 conda env update -f environment.yaml --prune
 python -m pip install -e ".[dev]"
 # 3. 跑完整閘門，含 UI
-.\Verify.ps1 -Ui
+.\tools\Verify.ps1 -Ui
 ```
 
 **升 `ruff` 或 `mypy` 之後要看的不是「有沒有紅」，是「紅的是什麼」** ——

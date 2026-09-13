@@ -37,12 +37,12 @@ python -m pip install -e ".[dev]"
 
 ## 驗證
 
-**平常一律跑 `Verify.ps1`**，它把路徑漂移檢查、ruff、mypy --strict 與 pytest 串在一起：
+**平常一律跑 `tools\Verify.ps1`**，它把路徑漂移檢查、ruff、mypy --strict 與 pytest 串在一起：
 
 ```powershell
-.\Verify.ps1          # 不含 tests\ui
-.\Verify.ps1 -Ui      # 含 tests\ui（改過 UI 就用這個）
-.\Verify.ps1 -Performance   # 20 萬筆的效能測試
+.\tools\Verify.ps1          # 不含 tests\ui
+.\tools\Verify.ps1 -Ui      # 含 tests\ui（改過 UI 就用這個）
+.\tools\Verify.ps1 -Performance   # 20 萬筆的效能測試
 ```
 
 要單獨跑某一段時：

@@ -19,7 +19,7 @@
 - **搬移資料的順序**：複製到新位置 → 確認成功 → 寫指標檔 → 才刪舊檔。
   任何一步失敗都要刪掉新位置的半成品複本，舊資料與舊指標檔保持原狀。
 - agent 的讀寫邊界寫在 `AGENTS.md`，並由 `.claude/settings.json` 的規則輔助。
-- `Verify.ps1` 檢查 `system_paths.json` 與 `.claude/settings.json` 是否漂移。
+- `tools\Verify.ps1` 檢查 `system_paths.json` 與 `.claude/settings.json` 是否漂移。
 
 ## 邊界
 

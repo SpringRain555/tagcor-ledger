@@ -18,9 +18,12 @@
 .PARAMETER SkipDrift
     略過路徑漂移檢查。只在還沒設定過資料路徑時使用。
 
+.NOTES
+    住在 tools\ 底下（CONVENTIONS §12），專案根目錄是它的上一層。
+
 .EXAMPLE
-    .\Verify.ps1
-    .\Verify.ps1 -Ui -Performance
+    .\tools\Verify.ps1
+    .\tools\Verify.ps1 -Ui -Performance
 #>
 [CmdletBinding()]
 param(
@@ -31,10 +34,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Definition)
 
-# 查找邏輯與 Launch.ps1 共用同一份，見 tools\Resolve-TagcorPython.ps1。
-. (Join-Path $ProjectRoot 'tools\Resolve-TagcorPython.ps1')
+# 查找邏輯與 Launch.ps1 共用同一份，見旁邊的 Resolve-TagcorPython.ps1。
+. (Join-Path $PSScriptRoot 'Resolve-TagcorPython.ps1')
 $Python = Resolve-TagcorPython
 if (-not $Python) {
     Write-Host ''

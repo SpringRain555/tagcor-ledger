@@ -1,6 +1,6 @@
-# 對應 Verify.ps1 的 ruff → mypy --strict → pytest 三段。
+# 對應 tools/Verify.ps1 的 ruff → mypy --strict → pytest 三段。
 #
-# **不呼叫 Verify.ps1 本身**：它是 Windows-only，而且會去讀 %LOCALAPPDATA% 的指標檔
+# **不呼叫 tools/Verify.ps1 本身**：它是 Windows-only，而且會去讀 %LOCALAPPDATA% 的指標檔
 # 做路徑漂移檢查 —— 那一項在 CI 上沒有意義（沒有真實資料路徑可以比對）。步驟在這裡
 # 重列一次，兩邊要一起改。
 #
@@ -12,7 +12,7 @@
 # **跑得動的都跑，只排除量像素的那 21 條**（`-m "not geometry"`）。那幾條量出來的
 # 數字取決於字體與 Qt 平台外掛，而這個專案是 Windows-first —— 在 Linux 上驗版面，
 # 驗到的不是使用者會看到的東西，失敗訊息還會指向錯的方向。它們由本機的
-# `.\Verify.ps1 -Ui` 負責，而那是發版前一定會跑的。
+# `.\tools\Verify.ps1 -Ui` 負責，而那是發版前一定會跑的。
 #
 # UI 是這個專案缺陷密度最高的地方（changelog 的 v0.14.1–v0.16.4 幾乎全是實機才
 # 發現的 UI bug，那 148 條行為測試就是它們的回歸守門），所以值得進 CI。

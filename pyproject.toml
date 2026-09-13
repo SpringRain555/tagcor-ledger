@@ -29,7 +29,7 @@ dependencies = [
 # 最新版而本機是 0.15.x —— 兩邊的預設規則集不同，同一份程式碼本機綠、CI 紅
 # （2026-09-01 第一次跑 CI 就踩到：新版 ruff 預設開了 I001 import 排序）。
 # 一個會因為別人發新版而變紅的閘門，紅的時候不代表你改壞了什麼。
-# 升級要有意識地做：把上界往上抬，然後跑一次 .\Verify.ps1 -Ui 看要修什麼。
+# 升級要有意識地做：把上界往上抬，然後跑一次 .\tools\Verify.ps1 -Ui 看要修什麼。
 # **這四條同時宣告在 environment.yaml，兩邊要一起改** —— docs/environment/versions.md。
 dev = [
     "pytest>=8.0,<10",
@@ -58,7 +58,7 @@ markers = [
     # 量像素的測試。CI 跑在 Linux，字體與 Qt 平台外掛都與 Windows 不同，同一份
     # 版面量出來的數字不會一樣 —— 而這個專案是 Windows-first，在 Linux 上驗版面
     # 驗到的不是使用者會看到的東西。CI 用 `-m "not geometry"` 跳過，這幾條由
-    # 本機的 `.\Verify.ps1 -Ui` 負責。
+    # 本機的 `.\tools\Verify.ps1 -Ui` 負責。
     "geometry: measures widget pixels; Windows-only, excluded from Linux CI",
 ]
 

@@ -4,7 +4,7 @@
     找出專案 conda 環境的 python.exe，不依賴 PATH，也不用 `conda activate`。
 
 .DESCRIPTION
-    `Launch.ps1` 與 `Verify.ps1` 都需要這件事，而且答案必須一致 —— 所以它只寫在
+    `tools\Launch.ps1` 與 `tools\Verify.ps1` 都需要這件事，而且答案必須一致 —— 所以它只寫在
     這裡一份。兩邊各寫一份的話，改了一邊而沒改另一邊，症狀是「雙擊啟動得起來
     但驗證跑不了」（或反過來），而那種不一致很難聯想到根因。
 

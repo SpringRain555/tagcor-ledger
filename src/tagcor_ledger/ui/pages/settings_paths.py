@@ -1,7 +1,7 @@
 """資料路徑設定。
 
 改完這一頁之後還有兩步，不要以為改完就結束：同步改 `.claude\\settings.json` 的
-deny／allow 清單，然後跑 `.\\Verify.ps1` 確認漂移檢查通過。細節見 `AGENTS.md`。
+deny／allow 清單，然後跑 `.\\tools\\Verify.ps1` 確認漂移檢查通過。細節見 `AGENTS.md`。
 
 「搬移目前資料」的順序是先複製、再寫指標檔、最後才刪舊檔，順序不可調換 —— 詳見
 `docs/lessons.md`。

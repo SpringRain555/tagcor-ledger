@@ -61,7 +61,7 @@ fi
 # 為什麼只有 ruff 與 mypy：實測 ruff 0.1 秒、mypy 1.6 秒，加起來感覺不到。
 # **pytest 不進來** —— 整包 66 秒，那會讓人習慣性打 --no-verify，
 # 而一個被習慣性繞過的閘門比沒有閘門更糟（它讓人以為有守）。
-# 測試由 .github/workflows/verify.yml 在 CI 跑；發版前仍然自己跑 .\Verify.ps1 -Ui。
+# 測試由 .github/workflows/verify.yml 在 CI 跑；發版前仍然自己跑 .\tools\Verify.ps1 -Ui。
 # ============================================================================
 
 # 直譯器查找與 pre-push 共用同一份，見 .githooks/resolve-python.sh。
@@ -80,7 +80,7 @@ if ! "$PYTHON" -m ruff check --no-cache . ; then
 	exit 1
 fi
 
-# 這裡**不加 --no-incremental**（Verify.ps1 才加）。hook 要快，
+# 這裡**不加 --no-incremental**（tools/Verify.ps1 才加）。hook 要快，
 # 而 mypy 的快取判斷對「檔案剛改完就檢查」這個情境是準的。
 if ! "$PYTHON" -m mypy src ; then
 	echo ""

@@ -2,7 +2,7 @@
 
 ## 問題
 
-`Launch.ps1` 把 `pythonw.exe` 叫起來之後要決定自己什麼時候可以退場。
+`tools/Launch.ps1` 把 `pythonw.exe` 叫起來之後要決定自己什麼時候可以退場。
 2026-08-18 到 2026-09-11 之間它的判準是**等 5 秒，行程還在就當視窗開了**。
 那個數字擋得住「一啟動就死」，擋不住另外兩種：
 
@@ -26,7 +26,7 @@
 ## 位置從 `AppPaths` 來，不在 PowerShell 那一側拼
 
 標記放在 `tmp_dir` 底下 —— 它的生命週期是「這一次啟動」，不是「這份安裝」。
-`Launch.ps1` 從 `--json` 的 `ready_marker` 欄位拿路徑；那個 payload 它本來就
+`tools/Launch.ps1` 從 `--json` 的 `ready_marker` 欄位拿路徑；那個 payload 它本來就
 要讀（`log_dir` 也是從那裡來的）。在 PowerShell 裡自己拼 `tmp\\ui-ready.txt`
 就是第二份路徑實作，`--data-dir` 或指標檔改了資料根之後它會安靜地指錯地方。
 

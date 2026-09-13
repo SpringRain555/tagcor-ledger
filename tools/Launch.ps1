@@ -24,9 +24,14 @@
     最多等主視窗幾秒。程式在 `window.show()` 之後會寫一個標記檔，這個腳本等的是那個檔案
     出現，不是固定秒數 —— 這個數字只是「等到什麼時候該說出來還沒看到」的上限。
 
+.NOTES
+    住在 tools\ 底下（CONVENTIONS §12：我們自己的腳本全部在 tools\，根目錄只留
+    工具規定位置的檔案）。雙擊目標是根目錄的 start_tagcor-ledger.cmd，它只做一件事：
+    把事情交給這一支。
+
 .EXAMPLE
-    .\Launch.ps1
-    .\Launch.ps1 -CreateShortcut
+    .\tools\Launch.ps1
+    .\tools\Launch.ps1 -CreateShortcut
 #>
 [CmdletBinding()]
 param(
@@ -36,7 +41,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# 這支住在 tools\，專案根目錄是它的上一層。
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $EnvName = 'tagcor-ledger'
 
 function Write-Step  ([string]$Text) { Write-Host "`n=== $Text" -ForegroundColor Cyan }
@@ -77,9 +83,9 @@ function Stop-WithMessage {
 }
 
 # --- 找到 conda 環境的直譯器 -------------------------------------------------
-# 查找邏輯在 tools\Resolve-TagcorPython.ps1，與 Verify.ps1 共用同一份 ——
+# 查找邏輯在旁邊的 Resolve-TagcorPython.ps1，與 Verify.ps1 共用同一份 ——
 # 兩邊各寫一份的話，改了一邊沒改另一邊會變成「啟動得起來但驗證跑不了」。
-. (Join-Path $ProjectRoot 'tools\Resolve-TagcorPython.ps1')
+. (Join-Path $PSScriptRoot 'Resolve-TagcorPython.ps1')
 
 Write-Step "尋找 conda 環境 $EnvName"
 $python = Resolve-TagcorPython -EnvName $EnvName
@@ -163,7 +169,7 @@ Write-Ok "資料庫 $($info.database_path)"
 
 if ($CreateShortcut) {
     Write-Step '建立桌面捷徑'
-    $launcher = Join-Path $ProjectRoot 'Start TagCor Ledger.cmd'
+    $launcher = Join-Path $ProjectRoot 'start_tagcor-ledger.cmd'
     $linkPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'TagCor Ledger.lnk'
     $shell = New-Object -ComObject WScript.Shell
     $link = $shell.CreateShortcut($linkPath)

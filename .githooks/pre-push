@@ -66,7 +66,7 @@ export QT_QPA_PLATFORM
 if ! "$PYTHON" -m pytest -q ; then
 	echo ""
 	echo "✗ 測試沒過。修好再推，或 git push --no-verify。"
-	echo "  想看完整輸出：.\\Verify.ps1 -Ui"
+	echo "  想看完整輸出：.\\tools\\Verify.ps1 -Ui"
 	exit 1
 fi
 echo "  OK    pytest"

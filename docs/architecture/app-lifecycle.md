@@ -8,11 +8,11 @@
 > 而那一節開頭第一句就是「**不是資料庫裡的狀態**」。
 > 2026-09-10 把它移到這裡，並補上一直沒有寫過的另一半：**關閉**。
 
-## 啟動器：`Start TagCor Ledger.cmd` → `Launch.ps1`
+## 啟動器：`start_tagcor-ledger.cmd` → `tools\Launch.ps1`
 
 ```mermaid
 flowchart TD
-  S1["雙擊 Start TagCor Ledger.cmd 或桌面捷徑"] --> L["Launch.ps1"]
+  S1["雙擊 start_tagcor-ledger.cmd 或桌面捷徑"] --> L["tools/Launch.ps1"]
   L --> C1["用絕對路徑找 conda 環境的 python.exe，不信 PATH"]
   C1 --> C2["清掉繼承來的 VIRTUAL_ENV、PYTHONHOME、PYTHONPATH、PYTHONSTARTUP"]
   C2 --> C3["前置檢查：跑 --json"]
@@ -145,7 +145,7 @@ Qt 事件迴圈卡住，而任何寫在程式裡的結束路 —— 具名管道
 |---|---|---|
 | 1 | 第二次啟動要做什麼 | 把既有視窗叫到最前面，第二個行程以 0 結束（`SingleInstanceGuard` ＋ `ActivationServer`） |
 | 2 | 「已經在跑」的判斷放哪 | 在程式裡：`main._run` 開資料庫之前拿 `ledger_dir` 的檔案鎖；具名管道只負責敲門 |
-| 3 | 啟動器憑什麼退場 | `run_gui` 在 `show()` 之後寫 `tmp\ui-ready.txt`，`Launch.ps1` 等它出現（上限 90 秒），不是固定秒數 |
+| 3 | 啟動器憑什麼退場 | `run_gui` 在 `show()` 之後寫 `tmp\ui-ready.txt`，`tools\Launch.ps1` 等它出現（上限 90 秒），不是固定秒數 |
 | 4 | 使用者關掉畫面之後，行程有沒有真的結束 | **有** —— 關主視窗就是結束行程，沒有分離的 server。UI 卡死只剩強制結束，而強制結束什麼都不留 |
 | 5 | 結束時進行中的工作變成哪個狀態 | **不適用** —— 沒有背景執行緒、排程或跑到一半的工作（實查 2026-09-10：`src/` 底下沒有 `QThread`／`QTimer`／`threading`） |
 

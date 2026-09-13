@@ -1,6 +1,6 @@
 """主控台要在主視窗出來之後才退場 —— 不是 5 秒之後，也不是永遠不退。
 
-`Launch.ps1` 從 2026-08-18 到 2026-09-11 的判準是「等 5 秒，行程還在就當視窗開了」。
+`tools/Launch.ps1` 從 2026-08-18 到 2026-09-11 的判準是「等 5 秒，行程還在就當視窗開了」。
 那擋得住一啟動就死的情形，擋不住視窗第 8 秒才出來、或第 6 秒才炸掉。
 現在程式在 `window.show()` 之後寫一個標記檔，啟動器等它出現。這裡守的是約定的兩端。
 """
@@ -16,7 +16,7 @@ from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.main import main
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LAUNCH_SCRIPT = PROJECT_ROOT / "Launch.ps1"
+LAUNCH_SCRIPT = PROJECT_ROOT / "tools" / "Launch.ps1"
 
 
 def test_the_marker_lives_under_tmp_dir(tmp_path: Path) -> None:

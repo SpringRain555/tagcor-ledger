@@ -84,7 +84,8 @@ python -m pip install -e ".[dev]"
 
 ### 一鍵啟動（建議）
 
-**雙擊專案根目錄的 `Start TagCor Ledger.cmd`。** 不用先開終端機、不用 `conda activate`。
+**雙擊專案根目錄的 `start_tagcor-ledger.cmd`。** 不用先開終端機、不用 `conda activate`。
+（2026-09-13 之前叫 `Start TagCor Ledger.cmd`；舊的桌面捷徑要重建。）
 
 它會自己找到 conda 環境的直譯器（絕對路徑）、清掉繼承來的 `VIRTUAL_ENV`／`PYTHONPATH`、
 跑一次前置檢查確認套件與資料路徑可用，然後開視窗。出問題時會停在畫面上說明原因與修法，
@@ -93,7 +94,7 @@ python -m pip install -e ".[dev]"
 想在桌面放捷徑：
 
 ```powershell
-.\Launch.ps1 -CreateShortcut
+.\tools\Launch.ps1 -CreateShortcut
 ```
 
 conda 裝在非標準位置時，設一次環境變數即可：
@@ -244,9 +245,9 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 ## 驗證
 
 ```powershell
-.\Verify.ps1                 # 路徑漂移檢查 + Qt stub + ruff + mypy --strict + pytest
-.\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
-.\Verify.ps1 -Performance    # 加跑 200,000 筆效能回歸
+.\tools\Verify.ps1                 # 路徑漂移檢查 + Qt stub + ruff + mypy --strict + pytest
+.\tools\Verify.ps1 -Ui             # 加跑 tests\ui（offscreen）
+.\tools\Verify.ps1 -Performance    # 加跑 200,000 筆效能回歸
 ```
 
 三層自動閘門，各擋不同的東西（第一次 clone 要跑一次

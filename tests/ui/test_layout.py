@@ -5,7 +5,7 @@
 
 **整份標成 `geometry`，所以不在 Linux CI 跑。** 量出來的像素取決於字體與 Qt 平台
 外掛，而這個專案是 Windows-first —— 在 Linux 上驗版面，驗到的不是使用者會看到的
-東西，而失敗訊息會指向錯的方向。這幾條由本機的 `.\\Verify.ps1 -Ui` 負責。
+東西，而失敗訊息會指向錯的方向。這幾條由本機的 `.\\tools\\Verify.ps1 -Ui` 負責。
 """
 
 from __future__ import annotations

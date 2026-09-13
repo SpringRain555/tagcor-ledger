@@ -77,14 +77,25 @@ def test_version_is_the_same_number_everywhere() -> None:
 
 
 def test_one_click_launcher_files_exist_and_are_encoded_correctly() -> None:
-    launcher = PROJECT_ROOT / "Start TagCor Ledger.cmd"
-    script = PROJECT_ROOT / "Launch.ps1"
+    """雙擊目標叫 `start_<slug>.cmd`、住在根目錄；邏輯在 `tools\\Launch.ps1`（CONVENTIONS §12／§16）。
+
+    2026-09-13 之前是根目錄的 `Start TagCor Ledger.cmd` ＋ `Launch.ps1`。搬家的理由：
+    我們自己的腳本全部住 `tools\\`，根目錄只留工具規定位置的檔案；`.cmd` 的名字
+    照卡片的 slug，四個本機 app 才長得一樣。
+    """
+    launcher = PROJECT_ROOT / "start_tagcor-ledger.cmd"
+    script = PROJECT_ROOT / "tools" / "Launch.ps1"
     assert launcher.exists() and script.exists()
+    assert not (PROJECT_ROOT / "Launch.ps1").exists(), "根目錄不該再有 Launch.ps1（搬進 tools\\ 了）"
+    assert not (PROJECT_ROOT / "Verify.ps1").exists(), "根目錄不該再有 Verify.ps1（搬進 tools\\ 了）"
 
     # PowerShell 5.1 讀沒有 BOM 的 .ps1 會退回 Big5，整份中文亂碼且無法解析。
-    assert script.read_bytes()[:3] == b"\xef\xbb\xbf", "Launch.ps1 必須是 UTF-8 with BOM"
+    assert script.read_bytes()[:3] == b"\xef\xbb\xbf", "tools/Launch.ps1 必須是 UTF-8 with BOM"
 
     # cmd.exe 的字碼頁行為不可靠，所以包裝檔一律純 ASCII，中文全留在 .ps1。
-    launcher.read_bytes().decode("ascii")
+    text = launcher.read_text(encoding="ascii")
 
-    assert "Launch.ps1" in launcher.read_text(encoding="ascii")
+    # 它只做一件事：把事情交給 tools\\Launch.ps1。委派那一行要指到搬家後的位置。
+    delegation = [line for line in text.splitlines() if "powershell" in line.lower()]
+    assert len(delegation) == 1, text
+    assert "tools\\Launch.ps1" in delegation[0], delegation[0]

@@ -80,7 +80,7 @@ python -m pytest -q
 ## 文件
 
 - README、AGENTS、Roadmap、Changelog、Requirements、Architecture 互相一致。
-- `.\Verify.ps1` 全過（含路徑漂移檢查、錯誤碼目錄同步、文件連結、繁體中文守門）。
+- `.\tools\Verify.ps1` 全過（含路徑漂移檢查、錯誤碼目錄同步、文件連結、繁體中文守門）。
 - 有新錯誤碼的話，`docs/architecture/error-codes.md` 已同步（測試會擋）。
 - 有新狀態或新轉移的話，`docs/architecture/state-machines.md` 已同步。
 - 有新用詞的話，`docs/architecture/glossary.md` 已同步。

@@ -111,7 +111,7 @@
 ```
 
 沒重跑的話 `tests/unit/test_diagrams_drift.py` 會紅 —— 那條測試只比對 SHA-256，
-**不需要 node**，所以 `Verify.ps1` 照樣跑得動。
+**不需要 node**，所以 `tools\Verify.ps1` 照樣跑得動。
 
 > **圖是導覽，不是規格。** 狀態機的權威仍然是那幾張「從 A 能不能到 B」的轉移表 ——
 > 圖回答不了那個問題（見 [狀態機](architecture/state-machines.md) 開頭）。
