@@ -378,12 +378,25 @@ hook 沒生效的話跑一次 `git config core.hooksPath .githooks`。
 
 ## 文件維護
 
-任何功能變更都要同步更新 README、requirements、architecture、roadmap、changelog ——
-但**每一份只寫屬於它的那一段**，不要同一件事寫三遍：
+**功能變更一定要寫的只有兩份**：`docs/changelog.md`（那一版改了什麼、為什麼）＋
+**擁有那件事的那一份** —— 改了狀態就 `state-machines.md`、錯誤碼就 `error-codes.md`、
+頁面就 `ui-workflows.md`、用詞就 `glossary.md`、環境就 `environment/index.md`、
+需求範圍就那份 REQ。哪一份擁有哪件事，`docs/index.md` 的權威範圍表說了算。
+
+其餘**不必每次改**，交給 drift 測試：頁面名、圖、連結、錯誤碼、版本號、分頁數都有測試
+逐字比對（`tests/unit/test_docs_drift.py`、`test_docs_links.py`、`test_diagrams_drift.py`
+等），漂了會紅；沒有測試守的（README 的功能清單、roadmap）講的是**方向**，不是每一版的內容。
+
+> 2026-09-13 之前這裡寫「任何功能變更都要同步更新 README、requirements、architecture、
+> roadmap、changelog」五份。那條規則沒有被遵守 —— roadmap 的逐版表停在 v0.24.1，
+> 後面三版沒有人補 —— 而一條做不到的規則不會被遵守，只會被繞過（同「資料邊界」那一節
+> 2026-09-05 的教訓）。
+
+三份跨區文件各自的範圍，**每一份只寫屬於它的那一段**：
 
 | 文件 | 寫什麼 | **不要**寫什麼 |
 |---|---|---|
-| `docs/roadmap.md` | 做過什麼、接下來做什麼。已完成的版本一版**一列** | 那一版怎麼做的、踩到什麼坑 |
+| `docs/roadmap.md` | 做過什麼、接下來做什麼；**計畫改變時才動它** | 每一版的內容（那是 changelog；版本索引是 `grep "^## " docs/changelog.md`） |
 | `docs/changelog.md` | 那一版改了什麼、為什麼這樣改 | 未來的計畫 |
 | `docs/lessons.md` | 踩到的坑與根因。append-only | 功能說明 |
 
