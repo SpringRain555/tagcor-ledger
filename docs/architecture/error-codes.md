@@ -156,6 +156,7 @@
 | `SYSTEM_PATH_SETTINGS_INVALID` | `system_paths.json` 不是合法 JSON | **刪掉它會退回預設路徑**，不會損失帳務資料 |
 | `TARGET_LEDGER_ALREADY_EXISTS` | 搬移目標已經有一個資料庫檔 | 換一個空資料夾，或先處理掉目標位置那一份 |
 | `PATH_SETTINGS_SAVE_FAILED` | **退路碼**：路徑設定儲存失敗，而且原因不是這一節其他任何一個 | **舊設定與舊資料都沒有變動。** 匯出診斷資訊回報 |
+| `PATH_SETTINGS_RELOAD_FAILED` | 指標檔已經寫進新路徑，之後重新接上 service 才失敗 | **搬移過的資料在新位置，沒有遺失。** 重新啟動程式 |
 | `DATABASE_SCHEMA_TOO_NEW` | 資料庫版本比程式支援的新 | **不要繼續使用，先更新程式。** 用舊程式開新資料庫會壞資料 |
 | `DATABASE_WRITE_FAILED` | 寫入交易時資料庫層失敗 | 磁碟滿、檔案被鎖、資料庫損毀都可能。匯出診斷資訊 |
 

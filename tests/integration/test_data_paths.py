@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -159,6 +160,91 @@ def test_successful_move_relocates_data_and_pointer(tmp_path: Path) -> None:
     assert LedgerStore(controller.paths).account_balance_minor("acct_cash") == -250
     assert not (original_root / "data" / "ledger.sqlite3").exists()
     assert Path(json.loads(settings_path.read_text(encoding="utf-8"))["data_root"]) == next_root
+
+
+def _controller_with_one_entry(tmp_path: Path) -> tuple[LedgerController, Path]:
+    settings_path = tmp_path / "system_paths.json"
+    controller = LedgerController(resolve_app_paths(tmp_path / "original"))
+    controller.path_settings = PathSettingsService(settings_path)
+    assert controller.submit(
+        occurred_at="2026-09-01T10:00:00+08:00",
+        entry_type="expense",
+        amount="250",
+        account_id="acct_cash",
+        destination_account_id=None,
+        category_id="cat_food_711",
+        description="搬移後要留著",
+    ).success
+    return controller, settings_path
+
+
+def _move(controller: LedgerController, next_root: Path):
+    return controller.save_path_settings(
+        ledger_dir=next_root / "ledger",
+        backup_dir=next_root / "backups",
+        data_root=next_root,
+        move_current=True,
+    )
+
+
+def test_move_keeps_the_new_copy_when_the_old_database_cannot_be_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """指標檔寫進去之後，新位置那份就是正本 —— 刪舊檔失敗也不能回頭刪它。
+
+    Windows 上舊資料庫的某個檔被別的程式開著時，`unlink` 會丟 WinError 32。
+    2026-09-13 之前複製、寫指標檔、刪舊檔包在同一個 `try`：主檔已經刪掉、`-wal` 才失敗，
+    `except` 卻把新位置的複本刪掉 —— 兩邊都沒有完整的一份，而指標檔已經指著新位置，
+    畫面還說「舊設定與舊資料都沒有變動」。
+    """
+    controller, settings_path = _controller_with_one_entry(tmp_path)
+    old_database = controller.paths.database_path
+    locked = old_database.with_name(f"{old_database.name}-wal")
+    real_unlink = Path.unlink
+
+    def unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == locked:
+            raise PermissionError(32, "另一個程式正在使用此檔案（測試注入）")
+        real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    next_root = tmp_path / "next"
+    result = _move(controller, next_root)
+
+    assert result.success, result.message
+    assert "沒刪乾淨" in result.message
+    assert Path(json.loads(settings_path.read_text(encoding="utf-8"))["data_root"]) == next_root
+    assert controller.paths.database_path == next_root / "ledger" / "ledger.sqlite3"
+    assert LedgerStore(controller.paths).account_balance_minor("acct_cash") == -250
+
+
+def test_move_keeps_the_new_copy_when_reloading_at_the_new_place_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """同一條理由的另一個出口：搬完、指標檔也寫了，重接 service 時才失敗。
+
+    這時舊檔已經刪了，**唯一的一份在新位置**。回報失敗可以，刪它不行；
+    訊息也不能再說「舊資料都沒有變動」。
+    """
+    controller, settings_path = _controller_with_one_entry(tmp_path)
+
+    def broken_wiring() -> None:
+        raise sqlite3.OperationalError("disk I/O error（測試注入）")
+
+    monkeypatch.setattr(controller, "_wire_services", broken_wiring)
+
+    next_root = tmp_path / "next"
+    result = _move(controller, next_root)
+
+    assert not result.success
+    assert result.error_code == "PATH_SETTINGS_RELOAD_FAILED"
+    new_database = next_root / "ledger" / "ledger.sqlite3"
+    assert new_database.exists()
+    assert Path(json.loads(settings_path.read_text(encoding="utf-8"))["data_root"]) == next_root
+    assert controller.paths.database_path == new_database
+    monkeypatch.undo()
+    assert LedgerStore(controller.paths).account_balance_minor("acct_cash") == -250
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows 的路徑大小寫語意")

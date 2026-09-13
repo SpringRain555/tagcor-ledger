@@ -50,6 +50,10 @@ class DataPathSection(ControllerBase):
         順序是刻意的：先把資料庫複製到新位置並確認成功，**才**寫指標檔，最後才刪掉
         舊檔。任何一步失敗都不會留下「指標指向新位置、資料還在舊位置」的狀態 ——
         那會讓下次啟動在新位置建一個空資料庫，看起來像資料消失。
+
+        **指標檔寫進去是分水嶺。** 在那之前失敗，清掉新位置的複本、舊的原封不動；
+        在那之後，新位置那份就是正本 —— 刪舊檔或重接 service 失敗都**不能回頭刪它**。
+        2026-09-13 之前五步包在同一個 `try`，刪舊檔刪到一半失敗時 `except` 會把複本也刪掉。
         """
         copied: Path | None = None
         try:
@@ -65,11 +69,6 @@ class DataPathSection(ControllerBase):
             if move_current:
                 copied = self._copy_current_database(next_paths.database_path)
             self.path_settings.write(settings)
-            if copied is not None:
-                self._discard_previous_database()
-            self.paths = next_paths
-            self._wire_services()
-            return Result.ok("資料路徑設定已更新。")
         except (PathSettingsError, OSError, sqlite3.Error, ValueError) as exc:
             if copied is not None:
                 # 指標檔還沒寫成功，新位置那份複本必須清掉，否則下次搬移會撞上
@@ -85,6 +84,30 @@ class DataPathSection(ControllerBase):
                     "資料路徑設定無法儲存，舊設定與舊資料都沒有變動。請匯出診斷資訊回報。"
                 ),
             )
+
+        # 從這裡開始指標檔已經指著新位置。
+        leftover = False
+        if copied is not None:
+            try:
+                self._discard_previous_database()
+            except OSError:
+                # 舊檔被別的程式開著。新位置是完整的，殘骸留著給使用者自己刪。
+                leftover = True
+        self.paths = next_paths
+        try:
+            self._wire_services()
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            return Result.fail(
+                "PATH_SETTINGS_RELOAD_FAILED",
+                "資料路徑設定已經儲存，但重新載入失敗。搬移過的資料在新位置，沒有遺失；請重新啟動程式。",
+                details={"detail": str(exc)},
+            )
+        if leftover:
+            return Result.ok(
+                "資料路徑設定已更新。舊位置的資料庫檔沒刪乾淨（可能被別的程式開著），"
+                "確認沒有在用之後可以手動刪除。"
+            )
+        return Result.ok("資料路徑設定已更新。")
 
     def _paths_for_settings(self, settings: SystemPathSettings) -> AppPaths:
         root = data_root_of(settings)
