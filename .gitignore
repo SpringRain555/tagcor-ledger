@@ -79,6 +79,10 @@ docs/research/sources/text/
 reference/reference.sqlite3
 reference/raw/
 
+# VS Code 的專案設定進版控（直譯器走 ${env:TAGCOR_PYTHON}，裡面沒有機器路徑）；
+# 基底把 .vscode/* 全忽略，這裡只放行這一個檔。
+!.vscode/settings.json
+
 # 其他不該進版控的東西
 .agents/
 credentials.json

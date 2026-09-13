@@ -1,0 +1,16 @@
+{
+  // 這一份進版控，所以裡面不能有機器路徑。直譯器走環境變數 TAGCOR_PYTHON
+  // （tools\Launch.ps1、tools\Verify.ps1、.githooks 認的同一個）：設了它 VS Code 就自動
+  // 選對 conda 環境；沒設就是空字串，VS Code 退回自己的偵測，要手選一次。
+  // PATH 上的 python 是別的直譯器（AGENTS.md「工具專屬」），千萬不要拿它當預設。
+  "python.defaultInterpreterPath": "${env:TAGCOR_PYTHON}",
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.unittestEnabled": false,
+
+  // CONVENTIONS §8：.md／.json 無 BOM；.ps1／.psm1 必須有 BOM（PS 5.1 否則當 Big5 讀）。
+  "files.encoding": "utf8",
+  "[powershell]": {
+    "files.encoding": "utf8bom"
+  }
+}
