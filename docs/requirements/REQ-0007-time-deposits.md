@@ -15,7 +15,7 @@
 > 4. **三處計算修正**：存本取息到期不再重複建議整期利息、零存整付到期轉回累積本金
 >    而不是 0、到期項目不能略過。
 
-實作位置：`domain/deposits.py`（列舉與試算）、`infrastructure/stores/deposits.py`（持久化）、`application/deposits.py`（十二種組合的效果）、`ui/pages/deposits.py`（合約與期）。到期與領息一律走「待確認」頁。
+實作位置：`domain/deposits.py`（列舉與試算）、`infrastructure/stores/deposit_contracts.py`／`deposit_terms.py`／`deposit_events.py`（持久化）、`application/deposits.py`（十二種組合的效果）、`ui/pages/deposits.py`（合約與期）。到期與領息一律走「待確認」頁。
 
 ## 目標
 

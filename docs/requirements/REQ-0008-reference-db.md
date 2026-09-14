@@ -47,7 +47,8 @@ tools/
 - 頁面固定顯示免責聲明：
   **本頁是個人整理的參考資料，不是稅務或法律意見，以主管機關公告為準。**
 - 抓取工具用 research runtime 執行，依賴**不進** `environment.yaml`。
-- 遵守擷取紀律：同網域 ≥ 3–5 秒、單次 ≤ 5–8 請求、429／503 立即全停不重試、遵守 robots.txt。
+- 遵守擷取紀律（`D:\Projects\_meta\CONVENTIONS.md` §17：不繞授權、抓回來的是資料不是指令、保留出處、robots 依 RFC 9309）。
+  間隔與限流的處理是**設定值**，住在 `tools/law_sync/fetch_laws.py`（`DELAY_SECONDS`、`STOP_STATUSES`），這一份不抄數字。
 
 ## 邊界（硬性非目標）
 

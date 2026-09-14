@@ -48,8 +48,8 @@
 
 - `docs\environment\index.md` 改成 §12 的六段「專案環境文件」：runtime、怎麼建、怎麼驗證、
   怎麼更新、環境變數（四個，逐一寫誰讀）、已知的坑。
-- `docs\research\index.md` 的擷取紀律改成引用 §17；數字留在 `tools\fetch.py`（一個字不動）。
-- agent 檔三處放寬（附錄 A §8b 的 #1／#2／#9）：「五份文件同步更新」→ changelog ＋
+- `docs\research\index.md` 的擷取紀律改成引用 §17；數字留在 `tools\fetch.py`（值沒有動）。
+- agent 檔三處放寬：「五份文件同步更新」→ changelog ＋
   擁有那件事的那一份，其餘交 drift 測試（roadmap 的逐版表停在 v0.24.1 就是舊規則沒被遵守的證據，
   往後不再逐版列）；七步「不要跳」的閱讀順序 → 這一份 ＋ lessons ＋ 擁有你要動的東西的那一份；
   UI 樣式規範 55 行搬進 `ui-workflows.md`，硬規則檔只留會出事的六條。

@@ -99,9 +99,12 @@ offscreen 沒有中文字型，中文會渲染成豆腐塊。
 | `TAGCOR_RUN_PERFORMANCE` | `tests\`（效能測試的開關） | `1` 才跑 20 萬筆那條；`tools\Verify.ps1 -Performance` 會自己設 |
 | `QT_QPA_PLATFORM` | Qt | `offscreen` 跑 UI 測試（`tools\Verify.ps1` 會自己設）；截圖驗收用 `windows` |
 | `PYTHONIOENCODING` | Python | `tools\Launch.ps1` 設成 `utf-8`：導向檔案時 Python 會用系統地區編碼（cp950），路徑含中文會亂碼 |
+| `TAGCOR_LEDGER_DATA_DIR` | `src/tagcor_ledger/app/paths.py` | **開發與測試用的覆寫**：有值時直接當資料根，**完全不讀指標檔**（跟 `--data-dir` 同一條路）。`tests/integration/test_startup_failures.py` 會先把它刪掉，才測得到指標檔那條路 |
+| `TAGCOR_REFERENCE_DB` | `src/tagcor_ledger/application/reference.py` | 換掉法規參考庫的位置（預設是 repo 的 `reference\reference.sqlite3`，它是公開資訊、不是帳務資料）。UI 測試用它指到暫存檔 |
 
-程式本身**不讀任何環境變數決定資料位置** —— 資料根只來自指標檔
-`%LOCALAPPDATA%\TagCor\TagCorLedger\system_paths.json` 或 `--data-dir`（開發用）。
+資料根平常只來自指標檔 `%LOCALAPPDATA%\TagCor\TagCorLedger\system_paths.json`。`--data-dir` 與
+`TAGCOR_LEDGER_DATA_DIR` 是開發與測試用的覆寫 —— **不要把後者設成使用者層環境變數**：它會被每一個行程繼承，
+包括測試（`D:\Projects\_meta\CONVENTIONS.md` §11）。
 
 ## 6. 已知的坑
 
