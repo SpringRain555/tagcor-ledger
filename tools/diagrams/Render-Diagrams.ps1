@@ -1,5 +1,5 @@
 ﻿<#
-    template: tools/diagrams/Render-Diagrams.ps1 v2
+    template: tools/diagrams/Render-Diagrams.ps1 v3
 
 .SYNOPSIS
     把 docs 裡的 mermaid 區塊算成 SVG，並記下每一段原始碼與配色檔的 SHA-256。
@@ -8,6 +8,10 @@
     沒寫的照舊 `<文件名>-<第幾段>.svg`。`%%` 是 mermaid 的註解，渲染時被忽略。
     要固定名字的理由是 dashboard／README 會用路徑引用某一張圖，而序號在前面插一張就會位移。
     同一個 OutDir 裡名字撞到會直接 throw，不會靜默覆蓋。
+
+    v3（2026-09-15）：`-Check` 不建任何資料夾，`DocsDir` 不存在就直接 throw。v2 不管有沒有 `-Check`
+    都先建 OutDir —— 在 `D:\Projects` 根目錄不帶參數跑 `-Check`，建出一個空的 `docs\architecture\diagrams`
+    （連同上層），然後因為裡面沒有任何 .md 而回報「所有圖都是最新的」。檢查指錯地方要紅，不能是綠的。
 
 .DESCRIPTION
     CONVENTIONS §18：mermaid 寫在 .md 裡是唯一正本，SVG 是產生物但進版控 ——
@@ -58,7 +62,12 @@ if (-not $OutDir)  { $OutDir  = Join-Path $DocsDir 'diagrams' }
 $manifestPath = Join-Path $OutDir 'manifest.json'
 $themePath = Join-Path $PSScriptRoot 'mermaid-config.json'
 
-if (-not (Test-Path $OutDir)) {
+# v3：掃的資料夾不在就停下來 —— 否則 -Check 會對一個不存在（或剛被建出來的空）資料夾說「所有圖都是最新的」。
+if (-not (Test-Path -LiteralPath $DocsDir -PathType Container)) {
+    throw "找不到要掃的資料夾：$DocsDir（-DocsDir 指錯了，或這支腳本不在 <專案>\tools\diagrams\ 底下）"
+}
+# v3：只有真的要算圖才建輸出資料夾；-Check 是唯讀的。
+if (-not $Check -and -not (Test-Path -LiteralPath $OutDir)) {
     New-Item -ItemType Directory -Path $OutDir | Out-Null
 }
 
