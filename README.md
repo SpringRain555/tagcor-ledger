@@ -148,7 +148,7 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 4. 填寫 TWD 整數金額、日期與備註。**日期只到「哪一天」，沒有時分欄位。**
 5. 按「儲存交易」。
 
-「項目」用來描述具體收支項目，例如早餐、捷運、7-11。備註用來補充當次交易的額外資訊。Phase 4 已移除「對象／商家」欄位。
+「項目」用來描述具體收支項目，例如早餐、捷運、7-11。備註用來補充當次交易的額外資訊。v0.6.0 已移除「對象／商家」欄位。
 
 快捷鍵：
 
@@ -266,7 +266,7 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 
 ## 文件入口
 
-完整文件請從 [docs/index.md](docs/index.md) 開始閱讀。歷史 Phase 0–2 文件保留於 `docs/archive/phase-0-2/`，僅供追溯，不再作為目前規格來源。
+完整文件請從 [docs/index.md](docs/index.md) 開始閱讀。v0.3.0 以前的歷史文件保留於 `docs/archive/phase-0-2/`，僅供追溯，不再作為目前規格來源。
 
 要動手改東西的 agent 讀 `AGENTS.md` 或 `CLAUDE.md`（兩份平級、內容相同；改 `CLAUDE.md`
 然後跑 `.\tools\Sync-AgentDocs.ps1` 重生 `AGENTS.md`）。

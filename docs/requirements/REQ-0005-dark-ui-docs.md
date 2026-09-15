@@ -1,4 +1,4 @@
-# REQ-0005：Phase 4.1 深色主題、UI 可讀性與文件重整
+# REQ-0005：深色主題、UI 可讀性與文件重整
 
 > **兩條已被 v0.12.0 / v0.13.0 取代（2026-08-20 補註）。**
 > 下面的條文**不改寫** —— 它記錄的是當時談定的需求。但第 3、8 條已經不是現況：
@@ -17,11 +17,11 @@
 
 ## 目標
 
-Phase 4.1 修正 Phase 4 後的 UI 可讀性問題，將桌面介面統一為深色主題，並整理文件入口，讓使用者與維護者能從 README 與 docs index 讀到一致規格。
+v0.6.1 修正 v0.6.0 之後的 UI 可讀性問題，將桌面介面統一為深色主題，並整理文件入口，讓使用者與維護者能從 README 與 docs index 讀到一致規格。
 
 ## 功能需求
 
-1. PySide6 應用固定使用深色主題，不在本階段提供亮色／暗色切換。
+1. PySide6 應用固定使用深色主題，這一版不提供亮色／暗色切換。
 2. 主題入口為 `tagcor_ledger.ui.theme.apply_dark_theme(app)`，統一設定 `Fusion` style、QPalette、字體與 QSS。
 3. 背景使用深灰藍／墨藍，不使用純黑作主要內容背景。
 4. 主要操作按鈕使用 `primaryButton`；刪除、作廢、重製、還原等高風險操作使用 `dangerButton`。
@@ -29,7 +29,7 @@ Phase 4.1 修正 Phase 4 後的 UI 可讀性問題，將桌面介面統一為深
 6. 側邊欄 `QListWidget` 使用 `sidebarNavigation`；備份清單使用 `backupList`；不得用全域 `QListWidget` 樣式混用不同用途清單。
 7. 表格、下拉選單、清單、訊息框、狀態列與捲軸都需符合深色主題。
 8. 字體採本機 fallback，不打包字型檔：`Segoe UI Variable`、`Segoe UI`、`Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、sans-serif。
-9. README、CODEX、Roadmap、Changelog、Architecture 與 Release Checklist 需同步說明 Phase 4.1。
+9. README、agent 檔、Roadmap、Changelog、Architecture 與 Release Checklist 需同步說明深色主題。
 10. Markdown 文件以 UTF-8 儲存，當前規格文件不得出現 mojibake、替換字元或不可讀歷史段落。
 
 ## 驗收
@@ -42,5 +42,5 @@ Phase 4.1 修正 Phase 4 後的 UI 可讀性問題，將桌面介面統一為深
 
 ## 邊界
 
-- 本階段不加入主題切換、動畫、大型版面重設或字型檔打包。
-- 本階段不重新設計帳務流程或資料模型。
+- 這一版不加入主題切換、動畫、大型版面重設或字型檔打包。
+- 這一版不重新設計帳務流程或資料模型。

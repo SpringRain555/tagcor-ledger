@@ -170,7 +170,7 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 - 金額一律使用 `Money(amount_minor: int, currency: str)`，**禁止 float**。
 - 目前固定 TWD 與 Asia/Taipei。
 - UI 用詞：`類別` 表示第一層，`項目` 表示第二層；不要再用「分類／細項」。
-- Phase 4 已移除「對象／商家」欄位，**不得**新增 payee model、payees table 或 payee UI。
+- v0.6.0 已移除「對象／商家」欄位，**不得**新增 payee model、payees table 或 payee UI。
 - **不得為一卡通／悠遊卡／iCash 建立帳戶、餘額欄位，或任何「卡內餘額」概念。** 電子票證只記
   儲值當下的支出，見下一節。
 - 備份只能由使用者手動建立；啟動流程不得自動備份。
@@ -194,7 +194,7 @@ Windows-first、**純本機、完全不連網**的個人記帳工具。主資料
 | 退卡拿回卡內餘額 | **收入**，同一個類別與項目 |
 
 - **複數張卡共用同一個項目**，不依卡片拆項目、不在備註裡分卡。
-- **不建卡片帳戶、不追蹤卡內餘額。** 這條由 `tests/integration/test_phase1_core.py`
+- **不建卡片帳戶、不追蹤卡內餘額。** 這條由 `tests/integration/test_ledger_core.py`
   的 `test_schema_never_grows_a_stored_value_card_concept` 掃 schema 守著。
 
 那個測試守的是 **schema**，不是使用者怎麼命名 —— 使用者要把帳戶取名叫「悠遊卡」程式攔不住，

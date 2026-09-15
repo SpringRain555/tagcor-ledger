@@ -15,7 +15,7 @@
 |---|---|---|
 | 兩層分類（類別／項目） | AndroMoney 同為兩層；Firefly III 用四個正交軸；純文字記帳可任意深 | **主流中段，維持** |
 | 一律手動輸入，不接載具 | CWMoney／AndroMoney 都主打發票掃描與自動歸戶 | **異數，但刻意，維持** |
-| 盤點只記差額，不自動產生調整交易 | Actual Budget 提供「建立對帳交易」按鈕；GnuCash 對現金帳戶建議定期調整 | **偏保守，Phase 6 應補一個明確的使用者動作** |
+| 盤點只記差額，不自動產生調整交易 | Actual Budget 提供「建立對帳交易」按鈕；GnuCash 對現金帳戶建議定期調整 | **偏保守，roadmap 的「正式對帳與調整建議」應補一個明確的使用者動作** |
 | 交易沒有「已核對」狀態 | Actual 有 pending／cleared／locked 三態 | **缺口，郵局存摺對帳會需要** |
 | 電子票證只記儲值金額 | CWMoney 把悠遊卡／一卡通／iCash 當**帳戶**並自動歸戶 | **刻意相反，維持** |
 | 排程只產生待確認，不自動入帳 | Firefly III 會自動建立交易 | **刻意相反，維持** |
@@ -88,7 +88,7 @@ AndroMoney 的介面是「類別」加「子類別」，兩層，可自訂
 3. 工具即時顯示**差額**，使用者逐筆核對直到差額歸零。
 4. 按 **Lock transactions** 把已核對的交易上鎖。之後要編輯會跳警告。
 
-還有一個直接對應本專案 Phase 6 構想的功能：
+還有一個直接對應本專案 roadmap「正式對帳與調整建議」構想的功能：
 
 > "**Create reconciliation transaction** button ... to easily create a new transaction that automatically
 > brings the value of the asset in line with the new valuation."

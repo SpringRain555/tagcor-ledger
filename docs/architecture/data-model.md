@@ -71,13 +71,13 @@ erDiagram
 > 兩者都由 `tests/unit/test_reserved_schema.py` 守著「保持沒有人用」，並在
 > [REQ-0010](../requirements/REQ-0010-reconciliation-gap.md) 的 2026-10 評估時一併處理。
 
-Phase 4 起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snapshot`。
+v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snapshot`。
 
 ### 刻意不存在的表與欄位
 
 | 不存在的東西 | 為什麼 | 誰在守 |
 |---|---|---|
-| `payees` 表、`payee_id`、`payee_name_snapshot` | Phase 4 移除，用「項目」＋「備註」表達 | `test_schema_v1_migrates_to_latest_and_reruns_safely` |
+| `payees` 表、`payee_id`、`payee_name_snapshot` | v0.6.0 移除，用「項目」＋「備註」表達 | `test_schema_v1_migrates_to_latest_and_reruns_safely` |
 | 卡內餘額（`card_balance`、`stored_value`、`icash`…） | 電子票證只記儲值當下的支出，見 `AGENTS.md` 與 ADR-0006 | `test_schema_never_grows_a_stored_value_card_concept` |
 
 ## 金額規則
