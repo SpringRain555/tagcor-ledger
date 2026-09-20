@@ -120,6 +120,78 @@ def test_entry_page_reports_success_without_the_error_colour(window) -> None:
     assert page.status.property("state") == "error"
 
 
+def test_the_saved_message_clears_itself_after_three_seconds(window, qtbot) -> None:
+    """「交易已儲存。」三秒後自己消失。
+
+    留著不動的話，填第二筆時畫面上還寫著「交易已儲存」—— 而那句講的是上一筆，
+    使用者分不出眼前這筆存了沒。
+
+    **不在計時中改 interval**：Qt 對「執行中的 timer 被改 interval」的行為版本間
+    不一致，所以先把 interval 縮短、再送出，走的仍然是 `submit()` 啟動計時器的真實路徑。
+    """
+    from tagcor_ledger.ui.pages import entry as entry_module
+
+    page = window.entry
+    timer = page.saved_message_timer
+    assert timer.interval() == entry_module.SAVED_MESSAGE_MS == 3000
+    assert not timer.isActive(), "還沒存過任何東西，計時器不該在跑"
+    timer.setInterval(50)
+
+    page.select_entry_type("expense")
+    page.amount.setText("85")
+    page.submit()
+    assert page.status.text() == "交易已儲存。"
+    assert timer.isActive(), "成功之後計時器要開始跑"
+    qtbot.waitUntil(lambda: page.status.text() == "", timeout=2000)
+
+
+def test_a_failure_right_after_a_success_is_not_wiped_by_the_timer(window, qtbot) -> None:
+    """成功後三秒內接著失敗，失敗訊息要留著 —— 那是要讀完的。"""
+    page = window.entry
+    timer = page.saved_message_timer
+    timer.setInterval(50)
+
+    page.select_entry_type("expense")
+    page.amount.setText("85")
+    page.submit()
+    assert timer.isActive()
+
+    page.amount.setText("這不是金額")
+    page.submit()
+    assert not timer.isActive(), "失敗要把上一筆的計時器停掉"
+    assert page.status.property("state") == "error"
+    shown = page.status.text()
+    qtbot.wait(200)
+    assert page.status.text() == shown, "失敗訊息被上一筆成功的計時器清掉了"
+
+
+def test_the_clear_button_does_what_escape_does(window) -> None:
+    """「清空」＝ Esc：清日期（回今天）、金額、備註，**流向／帳戶／類別留著**。
+
+    連記幾筆同類的帳時那幾格本來就該留著；儲存成功後的自動清除也是同一個範圍。
+    """
+    page = window.entry
+    assert page.clear_button.text() == "清空"
+
+    page.select_entry_type("income")
+    category_before = page.category.currentData()
+    detail_before = page.detail.currentData()
+    account_before = page.account.currentData()
+    page.amount.setText("1200")
+    page.description.setText("紅包")
+    page.occurred_at.setDate(QDate.currentDate().addDays(-3))
+
+    page.clear_button.click()
+
+    assert page.amount.text() == ""
+    assert page.description.text() == ""
+    assert page.occurred_at.date() == QDate.currentDate()
+    assert page.current_entry_type() == "income"
+    assert page.account.currentData() == account_before
+    assert page.category.currentData() == category_before
+    assert page.detail.currentData() == detail_before
+
+
 def test_date_field_stores_a_timestamp_that_preserves_ordering(qtbot) -> None:
     """畫面只問日期，資料庫仍然存完整時間戳。
 

@@ -135,7 +135,8 @@ class MainWindow(QMainWindow):
         save_action = QAction("儲存交易", self)
         save_action.setShortcut(QKeySequence("Ctrl+S"))
         save_action.triggered.connect(self.entry.submit)
-        clear_action = QAction("清除", self)
+        # 與記帳頁的「清空」按鈕是同一件事，名字也要同一個。
+        clear_action = QAction("清空", self)
         clear_action.setShortcut(QKeySequence("Esc"))
         clear_action.triggered.connect(self.entry.clear_form)
         self.addActions([new_action, save_action, clear_action])

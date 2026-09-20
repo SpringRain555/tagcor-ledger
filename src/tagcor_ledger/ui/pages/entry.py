@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QDate, Signal
+from PySide6.QtCore import QDate, QTimer, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -83,6 +83,14 @@ SCOPE_ACCOUNT_LABELS = {
 """「帳戶」那一列在三種對象下各自叫什麼。同一個下拉在三種情境下問的是不同的問題，
 標籤不跟著改的話，使用者得自己推論那一格現在是誰。"""
 
+SAVED_MESSAGE_MS = 3000
+"""「交易已儲存。」停留多久（毫秒）。
+
+以前它會一直留著，直到下一次儲存或按清空。於是填第二筆的時候畫面上還寫著「交易已儲存」，
+而那句話講的是**上一筆** —— 使用者分不出眼前這一筆到底存了沒。成功訊息只需要被看到一眼，
+三秒夠了；**失敗訊息不會被清掉**（`submit()` 失敗時會先停掉計時器），那是要讀完的。
+"""
+
 
 class EntryPage(QWidget):
     saved = Signal()
@@ -102,6 +110,13 @@ class EntryPage(QWidget):
         self.description = QLineEdit()
         self.status = status_label()
         self.save_button = QPushButton("儲存交易")
+        self.clear_button = QPushButton("清空")
+        # 成功訊息的計時器。單發、只在 `submit()` 成功時啟動；任何會改寫訊息的動作
+        # （清空、帶入模板、失敗）都先把它停掉，免得三秒後把那句新的也清掉。
+        self.saved_message_timer = QTimer(self)
+        self.saved_message_timer.setSingleShot(True)
+        self.saved_message_timer.setInterval(SAVED_MESSAGE_MS)
+        self.saved_message_timer.timeout.connect(lambda: show_status(self.status, ""))
         self._build()
         self.reload_options()
         self.apply_defaults()
@@ -159,7 +174,15 @@ class EntryPage(QWidget):
         form.addRow("金額（TWD）", self.amount)
         form.addRow("備註", self.description)
         form.addRow("", self.status)
-        form.addRow("", self.save_button)
+        # 「清空」跟 Esc 是同一件事（`clear_form()`），只是做成看得到的按鈕。
+        # 它刻意**不**清流向／帳戶／類別 —— 連記幾筆同類的帳時那幾格本來就該留著，
+        # 儲存成功之後的自動清除也是同一個範圍。
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        actions.addWidget(self.save_button)
+        actions.addWidget(self.clear_button)
+        actions.addStretch()
+        form.addRow("", actions)
 
         layout = page_layout(self, width=FORM_WIDTH)
         layout.addWidget(title)
@@ -173,6 +196,7 @@ class EntryPage(QWidget):
         # 同一個，就又回到那個必定失敗的狀態。
         self.account.currentIndexChanged.connect(self._avoid_same_account)
         self.save_button.clicked.connect(self.submit)
+        self.clear_button.clicked.connect(self.clear_form)
         self.amount.returnPressed.connect(self.submit)
         self.description.returnPressed.connect(self.submit)
         self._sync_flow()
@@ -249,14 +273,17 @@ class EntryPage(QWidget):
                 return
 
     def apply_draft(self, draft: dict[str, Any], *, use_current_time: bool = True) -> None:
+        self.saved_message_timer.stop()
         self.select_entry_type(draft.get("entry_type"))
         select_data(self.account, draft.get("account_id"))
         select_data(self.destination, draft.get("destination_account_id"))
-        # **交易與模板的 `category_id` 不是指同一層。** 交易紀錄送過來的那一份，
-        # `category_id` 是類別（第一層）、`subcategory_id` 才是項目；模板只有一個
-        # `category_id`，存的就是項目。而 `_select_category()` 要的是**項目**的 id。
-        # 餵父層進去比對必然落空，結果是類別對了、項目卻被靜靜換成該類別的第一個
-        # —— 「複製到記帳」因此一直帶錯項目。
+        # **交易與模板的 `category_id` 不是指同一層。** 交易的 dict 裡 `category_id` 是
+        # 類別（第一層）、`subcategory_id` 才是項目；模板只有一個 `category_id`，存的就是
+        # 項目。而 `_select_category()` 要的是**項目**的 id。餵父層進去比對必然落空，
+        # 結果是類別對了、項目卻被靜靜換成該類別的第一個 —— 以前交易紀錄的
+        # 「複製到記帳」就是這樣帶錯項目的。那條路 2026-09-20 改成「建立模板」、走
+        # `TemplateDialog`，同一個坑在那邊有同一道防護；這裡留著 `or`，是因為兩種形狀
+        # 的 dict 都可能再送進來。
         self._select_category(draft.get("subcategory_id") or draft.get("category_id"))
         amount_minor = draft.get("amount_minor")
         self.amount.setText(minor_text(amount_minor) if amount_minor is not None else "")
@@ -267,6 +294,7 @@ class EntryPage(QWidget):
         self.amount.setFocus()
 
     def clear_form(self) -> None:
+        self.saved_message_timer.stop()
         self.occurred_at.setDate(QDate.currentDate())
         self.amount.clear()
         self.description.clear()
@@ -293,8 +321,11 @@ class EntryPage(QWidget):
         if result.success:
             self.clear_form()
             show_status(self.status, "交易已儲存。", ok=True)
+            self.saved_message_timer.start()
             self.saved.emit()
             return
+        # 失敗訊息要留到被讀完 —— 上一筆成功的計時器若還在跑，三秒後會把它清掉。
+        self.saved_message_timer.stop()
         show_status(self.status, result_message(result), ok=False)
 
     def _sync_flow(self) -> None:
