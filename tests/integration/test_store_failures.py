@@ -129,16 +129,7 @@ CASES: list[Case] = [
         "latest_balance_gap",
         lambda s: s.latest_gap("acct_cash"),
     ),
-    Case(
-        "balance.list_gap_transactions",
-        BalanceSnapshotService,
-        "list_transactions_for_balance_gap",
-        lambda s: s.list_gap_transactions(
-            account_id="acct_cash",
-            period_start=None,
-            period_end="2026-08-22",
-        ),
-    ),
+    # 「差額期間內的交易」那條查詢 2026-09-20 連同畫面一起移除，這裡少了一個 Case。
     # ---- 交易：兩層寫入路徑的第一層漏了 NotFoundError ----
     Case(
         "transaction.add",

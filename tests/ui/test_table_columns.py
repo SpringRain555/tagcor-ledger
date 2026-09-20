@@ -129,10 +129,11 @@ SAMPLES: dict[str, dict[str, Any]] = {
     },
 }
 
-# 值比標題多、而且**那是刻意的**：餘額盤點頁的明細表只顯示交易的前五欄，
-# 備註與狀態那兩欄在那個情境沒有意義（同一頁上方已經有整筆的說明）。
+# 值比標題多、而且**那是刻意的**：`(檔名, formatter 名) → 標題數`。
 # `RowsModel.data()` 是照 column 索引取值，多的在尾巴，所以截掉是安全的。
-DELIBERATE_TRUNCATION = {("balance_snapshot.py", "transaction_values"): 5}
+# 目前是空的 —— 唯一一筆（餘額盤點頁的「差額期間內的交易」只顯示交易的前五欄）
+# 2026-09-20 連同那張表一起拿掉了。名單留著，因為下一個靜默截斷還是要有人看過才算數。
+DELIBERATE_TRUNCATION: dict[tuple[str, str], int] = {}
 
 
 def _rows_model_sites() -> list[tuple[str, list[str], str]]:
@@ -183,7 +184,8 @@ def test_the_extractor_finds_every_table_in_the_app() -> None:
     assert _all_rows_model_calls() == len(literal) + 1, (
         "新增或改寫了一個 RowsModel，抽取器沒認出來 —— 先修抽取器，不要改這個數字"
     )
-    assert len(literal) >= 9, f"只抽到 {len(literal)} 張表，掃描路徑可能寫錯了"
+    # 八張：2026-09-20 餘額盤點頁少了「差額期間內的交易」那一張，從九降到八。
+    assert len(literal) >= 8, f"只抽到 {len(literal)} 張表，掃描路徑可能寫錯了"
 
 
 def test_every_formatter_used_by_a_table_has_a_sample_row() -> None:

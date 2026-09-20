@@ -1,16 +1,31 @@
 """餘額盤點：記錄「現在實際看到多少」，並顯示未解釋差額。
 
 盤點**不建立交易**。差額不為零時的處置是補記交易，不是叫程式生一筆調整。
+
+## 這一頁的形狀（2026-09-20 起）
+
+上方表單只負責**新增**。表格底下兩排按鈕：第一排是「產生新東西」（新增盤點、補記交易），
+第二排對**所選盤點**動作（編輯、刪除）加匯出。「編輯」開對話框（`BalanceSnapshotEditDialog`），
+「刪除」是 `void` —— 紀錄留著、列表狀態「已刪除」看得到、不可復原。
+
+以前點表格某一列會把值倒進上方表單，再按「更新所選盤點」寫回。兩個問題：正在打的新盤點
+會被點到的那一列蓋掉；而一顆叫「更新」的按鈕一按就寫入，使用者以為它會先開視窗。
+「重新整理」也拿掉了 —— 換帳戶、換狀態本來就會重查，跨頁的改動由 `main_window` 通知。
+
+**「最近盤點差額期間內的交易」那張表拿掉了。** 它佔掉半頁，而要查交易本來就有交易紀錄頁
+（帳戶、日期區間都篩得到）；連同底下那條只有它在用的查詢一起移除，不留死碼。
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import cast
+from typing import Any
 
 from PySide6.QtCore import QDate, Signal
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -18,9 +33,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QTableView,
+    QVBoxLayout,
     QWidget,
 )
 
+from tagcor_ledger.application.result import Result
 from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import (
@@ -28,7 +45,6 @@ from tagcor_ledger.ui.formatting import (
     display_date,
     minor_text,
     result_message,
-    transaction_values,
 )
 from tagcor_ledger.ui.widgets.forms import (
     date_field,
@@ -67,12 +83,6 @@ class BalanceSnapshotPage(QWidget):
             balance_gap_values,
             amount_column=4,
         )
-        self.transactions = QTableView()
-        self.transactions_model = RowsModel(
-            ["日期", "類型", "帳戶", "類別／項目", "金額（TWD）"],
-            transaction_values,
-            amount_column=4,
-        )
         self._build()
         self.reload_accounts()
 
@@ -95,13 +105,12 @@ class BalanceSnapshotPage(QWidget):
             self.status.addItem(label, value)
 
         create_button = QPushButton("新增盤點")
-        update_button = QPushButton("更新所選盤點")
-        void_button = QPushButton("刪除所選盤點")
-        export_button = QPushButton("匯出盤點 CSV")
-        refresh_button = QPushButton("重新整理")
         quick_button = QPushButton("補記交易")
+        edit_button = QPushButton("編輯")
+        delete_button = QPushButton("刪除")
+        export_button = QPushButton("匯出盤點 CSV")
         set_button_role(create_button, "primary")
-        set_button_role(void_button, "danger")
+        set_button_role(delete_button, "danger")
 
         form = QFormLayout()
         form.addRow("帳戶", self.account)
@@ -111,46 +120,46 @@ class BalanceSnapshotPage(QWidget):
         form.addRow("列表狀態", self.status)
         form.addRow("", self.result)
 
-        # 分兩行：對盤點動作的一行，其他的一行。六顆擠一行會把視窗最小寬度撐大。
-        actions = QHBoxLayout()
-        for button in (create_button, update_button, void_button):
-            actions.addWidget(button)
-        actions.addStretch()
-        extra_actions = QHBoxLayout()
-        for button in (export_button, refresh_button, quick_button):
-            extra_actions.addWidget(button)
-        extra_actions.addStretch()
+        # 兩排，分的是**動作的對象**：第一排產生新東西，第二排對所選盤點動作（加匯出）。
+        # 五顆擠一行會把視窗最小寬度撐大。
+        create_row = QHBoxLayout()
+        for button in (create_button, quick_button):
+            create_row.addWidget(button)
+        create_row.addStretch()
+        selected_row = QHBoxLayout()
+        for button in (edit_button, delete_button, export_button):
+            selected_row.addWidget(button)
+        selected_row.addStretch()
 
         setup_table(self.table, self.model, stretch_column=5)
-        setup_table(self.transactions, self.transactions_model, stretch_column=3)
-        # 更新／刪除是對所選盤點動作，沒選就停用。
-        bind_selection(self.table, update_button, void_button)
+        # 編輯／刪除是對所選盤點動作，沒選就停用；選到已刪除的那一列也停用 ——
+        # 以前對那種列是靜默 return，跟沒選取時一樣「按了沒反應」。
+        bind_selection(
+            self.table,
+            edit_button,
+            delete_button,
+            enabled_when=lambda item: item["status"] == "active",
+        )
         layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addWidget(help_text)
         # 表單另外收到 720 —— 這一頁有表單也有表格，整頁用表單寬度會塞不下七欄的表。
         layout.addWidget(form_panel(form))
-        layout.addLayout(actions)
-        layout.addLayout(extra_actions)
+        layout.addLayout(create_row)
+        layout.addLayout(selected_row)
         layout.addWidget(self.summary)
         records_title = QLabel("盤點紀錄")
         records_title.setObjectName("sectionTitle")
         layout.addWidget(records_title)
         layout.addWidget(self.table)
-        period_title = QLabel("最近盤點差額期間內的交易")
-        period_title.setObjectName("sectionTitle")
-        layout.addWidget(period_title)
-        layout.addWidget(self.transactions)
 
         self.account.currentIndexChanged.connect(self.refresh)
         self.status.currentIndexChanged.connect(self.refresh)
         create_button.clicked.connect(self.create_snapshot)
-        update_button.clicked.connect(self.update_selected)
-        void_button.clicked.connect(self.void_selected)
-        export_button.clicked.connect(self.export_csv)
-        refresh_button.clicked.connect(self.refresh)
         quick_button.clicked.connect(lambda: self.record_transaction_requested.emit())
-        self.table.selectionModel().selectionChanged.connect(lambda *_: self.load_selected())
+        edit_button.clicked.connect(self.edit_selected)
+        delete_button.clicked.connect(self.delete_selected)
+        export_button.clicked.connect(self.export_csv)
 
     def reload_accounts(self) -> None:
         fill_combo(self.account, self.controller.account_options(), "name", "account_id")
@@ -160,7 +169,6 @@ class BalanceSnapshotPage(QWidget):
         account_id = self._account_id()
         if account_id is None:
             self.model.replace_rows([])
-            self.transactions_model.replace_rows([])
             self.summary.setText("尚未建立帳戶。")
             return
         gaps = self.controller.list_balance_snapshots(
@@ -172,7 +180,6 @@ class BalanceSnapshotPage(QWidget):
         latest = self.controller.latest_balance_gap(account_id)
         if latest is None:
             self.summary.setText("此帳戶尚未盤點。可先輸入目前金額，之後再慢慢補記交易。")
-            self.transactions_model.replace_rows([])
             return
         difference = int(latest["difference_minor"])
         sign_text = "完全吻合" if difference == 0 else latest["difference"]
@@ -182,13 +189,6 @@ class BalanceSnapshotPage(QWidget):
             f"實際 {latest['actual_balance']} TWD，"
             f"預期 {latest['expected_balance']} TWD，"
             f"未解釋差額 {sign_text} TWD。"
-        )
-        self.transactions_model.replace_rows(
-            self.controller.list_balance_gap_transactions(
-                account_id=account_id,
-                period_start=cast(str | None, latest.get("period_start")),
-                period_end=str(latest["period_end"]),
-            )
         )
 
     def create_snapshot(self) -> None:
@@ -210,27 +210,19 @@ class BalanceSnapshotPage(QWidget):
             self.changed.emit()
             self.refresh()
 
-    def update_selected(self) -> None:
+    def edit_selected(self) -> None:
+        # 按鈕對已刪除的列本來就停用（`enabled_when`），這一行只是防程式直接呼叫。
         item = self.model.selected_item(self.table)
-        account_id = self._account_id()
-        if item is None or account_id is None:
-            show_status(self.result, "請先選擇要更新的盤點。", ok=False)
+        if item is None or item["status"] != "active":
             return
-        result = self.controller.update_balance_snapshot(
-            str(item["snapshot_id"]),
-            account_id=account_id,
-            observed_at=iso_from_date(
-                self.observed_at, keep_time_from=str(item["observed_at"])
-            ),
-            actual_balance=self.amount.text().strip(),
-            note=self.note.text().strip(),
-        )
-        show_status(self.result, result_message(result), ok=result.success)
-        if result.success:
-            self.changed.emit()
-            self.refresh()
+        dialog = BalanceSnapshotEditDialog(self.controller, item, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.saved_result is None:
+            return
+        show_status(self.result, result_message(dialog.saved_result), ok=True)
+        self.changed.emit()
+        self.refresh()
 
-    def void_selected(self) -> None:
+    def delete_selected(self) -> None:
         item = self.model.selected_item(self.table)
         if item is None or item["status"] != "active":
             return
@@ -247,19 +239,6 @@ class BalanceSnapshotPage(QWidget):
             self.changed.emit()
             self.refresh()
 
-    def load_selected(self) -> None:
-        item = self.model.selected_item(self.table)
-        if item is None:
-            return
-        select_data(self.account, item.get("account_id"))
-        try:
-            observed = datetime.fromisoformat(str(item["observed_at"])).astimezone(TAIPEI)
-            self.observed_at.setDate(QDate(observed.year, observed.month, observed.day))
-        except ValueError:
-            pass
-        self.amount.setText(minor_text(item["actual_balance_minor"]))
-        self.note.setText(str(item.get("note", "")))
-
     def export_csv(self) -> None:
         result = self.controller.export_balance_snapshots_csv()
         if result.success:
@@ -274,3 +253,73 @@ class BalanceSnapshotPage(QWidget):
     def _account_id(self) -> str | None:
         value = self.account.currentData()
         return str(value) if isinstance(value, str) else None
+
+
+class BalanceSnapshotEditDialog(QDialog):
+    """編輯一筆盤點。形狀照 `transactions.TransactionEditDialog`：
+    失敗把訊息印在視窗裡、**不關視窗**，成功才 `accept()`。
+
+    `saved_result` 給頁面拿成功訊息用 —— **不叫 `result`**，那是 `QDialog` 自己的方法。
+    """
+
+    def __init__(
+        self,
+        controller: LedgerController,
+        snapshot: dict[str, Any],
+        parent: QWidget,
+    ) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.snapshot = snapshot
+        self.account = QComboBox()
+        self.observed_at = date_field()
+        self.amount = QLineEdit(minor_text(snapshot["actual_balance_minor"]))
+        self.note = QLineEdit(str(snapshot.get("note", "")))
+        self.error = QLabel()
+        self.saved_result: Result | None = None
+        self._build()
+
+    def _build(self) -> None:
+        self.setWindowTitle("編輯盤點")
+        try:
+            observed = datetime.fromisoformat(str(self.snapshot["observed_at"])).astimezone(TAIPEI)
+            self.observed_at.setDate(QDate(observed.year, observed.month, observed.day))
+        except ValueError:
+            pass
+        self.error.setObjectName("errorLabel")
+        fill_combo(self.account, self.controller.account_options(), "name", "account_id")
+        select_data(self.account, self.snapshot.get("account_id"))
+        form = QFormLayout()
+        form.addRow("帳戶", self.account)
+        form.addRow("盤點日期", self.observed_at)
+        form.addRow("目前金額（TWD）", self.amount)
+        form.addRow("備註", self.note)
+        form.addRow("", self.error)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("儲存")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.accepted.connect(self.save)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+
+    def save(self) -> None:
+        result = self.controller.update_balance_snapshot(
+            str(self.snapshot["snapshot_id"]),
+            account_id=str(self.account.currentData()),
+            # 編輯沿用原本的時分秒 —— 只改個備註不該讓它跳到當天最後一筆（同交易的編輯）。
+            observed_at=iso_from_date(
+                self.observed_at, keep_time_from=str(self.snapshot["observed_at"])
+            ),
+            actual_balance=self.amount.text().strip(),
+            note=self.note.text().strip(),
+        )
+        if result.success:
+            self.saved_result = result
+            self.accept()
+        else:
+            self.error.setText(result_message(result))

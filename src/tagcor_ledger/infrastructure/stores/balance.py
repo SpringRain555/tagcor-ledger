@@ -14,7 +14,6 @@ from tagcor_ledger.domain.models import (
     BalanceGap,
     BalanceSnapshot,
     BalanceSnapshotFilter,
-    TransactionRecord,
 )
 from tagcor_ledger.infrastructure.clock import now_iso
 from tagcor_ledger.infrastructure.database import connect_database, database_transaction
@@ -207,40 +206,6 @@ class BalanceStore(StoreBase):
                 )
                 for row in rows
             ]
-
-    def list_transactions_for_balance_gap(
-        self,
-        *,
-        account_id: str,
-        period_start: str | None,
-        period_end: str,
-        limit: int = 200,
-    ) -> list[TransactionRecord]:
-        if not 1 <= limit <= 500:
-            raise ValueError("PAGE_LIMIT_INVALID")
-        conditions = [
-            "t.status = 'active'",
-            """
-            EXISTS (
-                SELECT 1 FROM account_postings gp
-                WHERE gp.transaction_id = t.transaction_id AND gp.account_id = ?
-            )
-            """,
-            "t.occurred_at <= ?",
-        ]
-        parameters: list[Any] = [account_id, period_end]
-        if period_start is not None:
-            conditions.append("t.occurred_at > ?")
-            parameters.append(period_start)
-        where = f"WHERE {' AND '.join(conditions)}"
-        sql = (
-            self._transaction_select()
-            + f" {where} ORDER BY t.occurred_at DESC, t.transaction_id DESC LIMIT ?"
-        )
-        parameters.append(limit)
-        with connect_database(self.paths.database_path) as connection:
-            rows = connection.execute(sql, parameters).fetchall()
-        return [self._row_to_transaction(row) for row in rows]
 
     @staticmethod
     def _balance_snapshot_select() -> str:

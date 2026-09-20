@@ -16,7 +16,6 @@ from uuid import uuid4
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.application.failures import DOMAIN_FAILURES, STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result, new_correlation_id
-from tagcor_ledger.application.transaction_service import transaction_to_dict
 from tagcor_ledger.domain.models import (
     BalanceGap,
     BalanceSnapshot,
@@ -181,36 +180,6 @@ class BalanceSnapshotService:
                 "BALANCE_GAP_LOAD_FAILED",
                 "最近餘額盤點無法載入。請匯出診斷資訊回報。",
                 details={"detail": str(exc)},
-            )
-
-    def list_gap_transactions(
-        self,
-        *,
-        account_id: str,
-        period_start: str | None,
-        period_end: str,
-        limit: int = 200,
-    ) -> Result:
-        try:
-            transactions = self.store.list_transactions_for_balance_gap(
-                account_id=account_id,
-                period_start=period_start,
-                period_end=period_end,
-                limit=limit,
-            )
-            return Result.ok(
-                "差額期間交易已載入。",
-                details={
-                    "transactions": [
-                        transaction_to_dict(transaction) for transaction in transactions
-                    ]
-                },
-            )
-        except STORE_FAILURES as exc:
-            return failure(
-                exc,
-                fallback_code="BALANCE_GAP_TRANSACTIONS_FAILED",
-                fallback_message="差額期間交易無法載入。請匯出診斷資訊回報。",
             )
 
     def export_csv(self, target: Path | None = None) -> Result:

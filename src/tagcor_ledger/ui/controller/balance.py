@@ -69,19 +69,5 @@ class BalanceSection(ControllerBase):
         gap = result.details.get("gap") if result.success else None
         return dict(gap) if isinstance(gap, dict) else None
 
-    def list_balance_gap_transactions(
-        self,
-        *,
-        account_id: str,
-        period_start: str | None,
-        period_end: str,
-    ) -> list[dict[str, Any]]:
-        result = self.balance.list_gap_transactions(
-            account_id=account_id,
-            period_start=period_start,
-            period_end=period_end,
-        )
-        return self._rows(result, "transactions") if result.success else []
-
     def export_balance_snapshots_csv(self) -> Result:
         return self.balance.export_csv()

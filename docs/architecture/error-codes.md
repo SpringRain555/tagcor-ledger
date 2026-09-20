@@ -119,7 +119,7 @@
 | `BALANCE_SNAPSHOT_STATUS_FILTER_INVALID` | 篩選狀態值不合法 | UI 正常操作不會發生 |
 | `BALANCE_SNAPSHOT_VALIDATION_FAILED` | **退路碼**：輸入驗證失敗，認不出是哪一種 | 匯出診斷資訊回報 |
 | `BALANCE_SNAPSHOT_UPDATE_FAILED` / `BALANCE_SNAPSHOT_LIST_FAILED` / `BALANCE_SNAPSHOT_EXPORT_FAILED` | **退路碼**：對應操作失敗 | 匯出診斷資訊回報 |
-| `BALANCE_GAP_LOAD_FAILED` / `BALANCE_GAP_TRANSACTIONS_FAILED` | 差額或期間交易查詢失敗 | 匯出診斷資訊 |
+| `BALANCE_GAP_LOAD_FAILED` | 最近盤點的差額查詢失敗 | 匯出診斷資訊 |
 
 ## 模板
 
