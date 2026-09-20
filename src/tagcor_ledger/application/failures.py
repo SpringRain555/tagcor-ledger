@@ -120,7 +120,7 @@ ERROR_MESSAGES: dict[str, str] = {
     ),
     # ---- 交易 ----
     "TRANSACTION_NOT_FOUND": "找不到這筆交易，它可能已經被刪除。請重新整理交易紀錄。",
-    "TRANSACTION_VOIDED": "這筆交易已經作廢了，不能再修改。要更正就新增一筆。",
+    "TRANSACTION_VOIDED": "這筆交易已經刪除了，不能再修改。要更正就新增一筆。",
     "TRANSACTION_REVISION_CONFLICT": (
         "這筆交易在你編輯的期間被改過了。請重新整理交易紀錄，確認現在的內容之後再改一次。"
     ),
@@ -132,11 +132,11 @@ ERROR_MESSAGES: dict[str, str] = {
     "TRANSFER_SAME_ACCOUNT": "轉出與轉入不能是同一個帳戶。",
     "TRANSFER_DESTINATION_REQUIRED": "請選擇轉入帳戶。",
     "TRANSFER_EDIT_NOT_SUPPORTED": (
-        "轉帳不能直接改。請用「替換」—— 它會建一筆新的、作廢舊的，兩件事在同一次"
+        "轉帳不能直接改。請用「替換」—— 它會建一筆新的、刪除舊的，兩件事在同一次"
         "寫入裡完成。"
     ),
     "TRANSFER_NOT_FOUND": "找不到要替換的轉帳。請重新整理交易紀錄。",
-    "TRANSFER_NOT_ACTIVE": "這筆轉帳已經作廢了，不能再替換。",
+    "TRANSFER_NOT_ACTIVE": "這筆轉帳已經刪除了，不能再替換。",
     "CURRENCY_MISMATCH": "兩個帳戶的幣別不同。目前只支援同幣別（TWD）的轉帳。",
     # ---- 餘額盤點 ----
     "BALANCE_SNAPSHOT_NEGATIVE": "盤點金額不能是負數。",
@@ -185,7 +185,7 @@ ERROR_MESSAGES: dict[str, str] = {
     "DEPOSIT_EVENT_NOT_FOUND": "找不到這筆定存項目。請重新整理。",
     "DEPOSIT_EVENT_NOT_PENDING": (
         "這筆定存項目已經確認或略過了，不能再改 —— 兩者都是終點。"
-        "要改結果就去作廢它產生的交易。"
+        "要改結果就去刪除它產生的交易。"
     ),
     "DEPOSIT_CONTRACT_IN_USE": (
         "這個定存已經有入帳紀錄，不能刪除。請改用「結束合約」—— 否則帳本裡那些"

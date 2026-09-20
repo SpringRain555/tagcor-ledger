@@ -196,7 +196,7 @@ class MaintenanceService:
                     "金額": item.money.to_decimal_string(),
                     "幣別": item.money.currency,
                     "備註": item.description,
-                    "狀態": "有效" if item.status == "active" else "作廢",
+                    "狀態": "有效" if item.status == "active" else "已刪除",
                     "交易 ID": item.transaction_id,
                 }
                 for item in page

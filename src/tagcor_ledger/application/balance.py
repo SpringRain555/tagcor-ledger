@@ -121,18 +121,18 @@ class BalanceSnapshotService:
         correlation_id = new_correlation_id()
         try:
             self.store.void_balance_snapshot(snapshot_id, correlation_id)
-            return Result.ok("餘額盤點已作廢。", correlation_id=correlation_id)
+            return Result.ok("餘額盤點已刪除。", correlation_id=correlation_id)
         except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="BALANCE_SNAPSHOT_NOT_FOUND",
-                fallback_message="找不到可作廢的餘額盤點。請重新整理。",
+                fallback_message="找不到可刪除的餘額盤點。請重新整理。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "餘額盤點無法作廢。請匯出診斷資訊回報。",
+                "餘額盤點無法刪除。請匯出診斷資訊回報。",
                 details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )
@@ -259,7 +259,7 @@ class BalanceSnapshotService:
                                 gap.difference_minor,
                                 gap.snapshot.currency,
                             ),
-                            "狀態": "有效" if gap.snapshot.status == "active" else "已作廢",
+                            "狀態": "有效" if gap.snapshot.status == "active" else "已刪除",
                             "備註": gap.snapshot.note,
                             "盤點 ID": gap.snapshot.snapshot_id,
                         }

@@ -32,10 +32,10 @@ def _amount_in_summary(text: str) -> str:
 
 
 def test_voiding_a_transaction_recalculates_the_balance_gap(window, monkeypatch) -> None:
-    """從交易紀錄作廢一筆帳，餘額盤點的未解釋差額要跟著變。
+    """從交易紀錄刪除一筆帳，餘額盤點的未解釋差額要跟著變。
 
     未解釋差額 ＝ 盤點金額 － 期間內 posting 加總，所以任何一筆交易的增減都會改變它。
-    以前 `TransactionsPage` 只重刷自己那張表、不對外發訊號，於是作廢一筆錯帳之後
+    以前 `TransactionsPage` 只重刷自己那張表、不對外發訊號，於是刪掉一筆錯帳之後
     切到餘額盤點，差額還是舊的 —— 而那個數字正是那一頁存在的唯一理由。
 
     **那筆帳要記在昨天，不要用預設的今天。** posting 的納入條件是
@@ -71,5 +71,5 @@ def test_voiding_a_transaction_recalculates_the_balance_gap(window, monkeypatch)
     page.void_selected()
 
     assert _amount_in_summary(window.balance.summary.text()) == before, (
-        "作廢之後差額應該回到記帳前的值 —— 沒回去就代表餘額盤點沒有被通知"
+        "刪除之後差額應該回到記帳前的值 —— 沒回去就代表餘額盤點沒有被通知"
     )

@@ -1,7 +1,11 @@
-"""交易紀錄：組合篩選、雙向 keyset 分頁、編輯與作廢。
+"""交易紀錄：組合篩選、雙向 keyset 分頁、編輯與刪除。
 
-轉帳沒有「編輯」—— 編輯轉帳實際上是建一筆新的、作廢原本那筆（替換轉帳），所以同一顆
+轉帳沒有「編輯」—— 編輯轉帳實際上是建一筆新的、刪除原本那筆（替換轉帳），所以同一顆
 按鈕在轉帳與非轉帳時做的是兩件不同的事，對話框標題也不一樣。
+
+**「刪除」是 `void`，不是真的刪掉。** 那一列的狀態變成 `voided`、不再計入，但紀錄留著，
+篩選「已刪除」看得到、不可復原（`state-machines.md` §1）。2026-09-20 之前叫「作廢」；
+改字的理由與兩個「刪除」怎麼區分見 `glossary.md`。
 """
 
 from __future__ import annotations
@@ -47,8 +51,8 @@ class TransactionsPage(QWidget):
     changed = Signal()
     """這一頁改動了帳務。**餘額盤點的未解釋差額因此要重算。**
 
-    作廢與編輯都會改變 posting，而未解釋差額就是「盤點金額 － 期間 posting 加總」。
-    以前這兩個動作只重刷自己那張表，於是使用者作廢一筆錯帳之後切到餘額盤點，
+    刪除與編輯都會改變 posting，而未解釋差額就是「盤點金額 － 期間 posting 加總」。
+    以前這兩個動作只重刷自己那張表，於是使用者刪掉一筆錯帳之後切到餘額盤點，
     差額還是舊的數字 —— 而那個數字正是那一頁存在的唯一理由。
     """
 
@@ -87,7 +91,7 @@ class TransactionsPage(QWidget):
         self.date_enabled.toggled.connect(self.date_from.setEnabled)
         self.date_enabled.toggled.connect(self.date_to.setEnabled)
         self.status.addItem("有效", "active")
-        self.status.addItem("已作廢", "voided")
+        self.status.addItem("已刪除", "voided")
         self.status.addItem("全部", "all")
         apply_button = QPushButton("套用篩選")
         clear_button = QPushButton("清除篩選")
@@ -118,7 +122,7 @@ class TransactionsPage(QWidget):
         setup_table(self.table, self.model, stretch_column=5)
         edit_button = QPushButton("編輯／替換")
         duplicate_button = QPushButton("複製到記帳")
-        void_button = QPushButton("作廢")
+        void_button = QPushButton("刪除")
         set_button_role(edit_button, "primary")
         set_button_role(void_button, "danger")
         bind_selection(self.table, edit_button, duplicate_button, void_button)
@@ -231,7 +235,11 @@ class TransactionsPage(QWidget):
         item = self.model.selected_item(self.table)
         if item is None or item["status"] != "active":
             return
-        answer = QMessageBox.question(self, "確認作廢", "確定要作廢所選交易嗎？")
+        answer = QMessageBox.question(
+            self,
+            "確認刪除",
+            "確定要刪除所選交易嗎？\n\n紀錄會保留在狀態「已刪除」裡，但不能復原。",
+        )
         if answer != QMessageBox.StandardButton.Yes:
             return
         result = self.controller.void_transaction(str(item["transaction_id"]))
@@ -239,7 +247,7 @@ class TransactionsPage(QWidget):
             self.first_page()
             self.changed.emit()
         else:
-            QMessageBox.warning(self, "無法作廢", result_message(result))
+            QMessageBox.warning(self, "無法刪除", result_message(result))
 
 
 class TransactionEditDialog(QDialog):
@@ -288,7 +296,7 @@ class TransactionEditDialog(QDialog):
             | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.button(QDialogButtonBox.StandardButton.Save).setText(
-            "建立新轉帳並作廢原交易" if transfer else "儲存"
+            "建立新轉帳並刪除原交易" if transfer else "儲存"
         )
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
         buttons.accepted.connect(self.save)

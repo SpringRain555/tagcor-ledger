@@ -230,7 +230,7 @@ class ReplaceTransfer:
                 correlation_id=correlation_id,
             )
             return Result.ok(
-                "轉帳已重新建立，原交易已作廢。",
+                "轉帳已重新建立，原交易已刪除。",
                 details={"transaction": transaction_to_dict(record)},
                 correlation_id=correlation_id,
             )
@@ -258,18 +258,18 @@ class VoidTransaction:
         correlation_id = new_correlation_id()
         try:
             self.store.void_transaction(transaction_id, correlation_id)
-            return Result.ok("交易已作廢。", correlation_id=correlation_id)
+            return Result.ok("交易已刪除。", correlation_id=correlation_id)
         except DOMAIN_FAILURES as exc:
             return failure(
                 exc,
                 fallback_code="TRANSACTION_NOT_FOUND",
-                fallback_message="找不到可作廢的交易。請重新整理交易紀錄。",
+                fallback_message="找不到可刪除的交易。請重新整理交易紀錄。",
                 correlation_id=correlation_id,
             )
         except sqlite3.Error as exc:
             return Result.fail(
                 "DATABASE_WRITE_FAILED",
-                "交易無法作廢，資料庫未變更。請匯出診斷資訊回報。",
+                "交易無法刪除，資料庫未變更。請匯出診斷資訊回報。",
                 details={"detail": str(exc)},
                 correlation_id=correlation_id,
             )

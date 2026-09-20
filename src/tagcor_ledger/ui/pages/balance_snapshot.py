@@ -91,12 +91,12 @@ class BalanceSnapshotPage(QWidget):
         self.result.setWordWrap(True)
         self.summary.setObjectName("hintLabel")
         self.summary.setWordWrap(True)
-        for label, value in (("有效", "active"), ("已作廢", "voided"), ("全部", "all")):
+        for label, value in (("有效", "active"), ("已刪除", "voided"), ("全部", "all")):
             self.status.addItem(label, value)
 
         create_button = QPushButton("新增盤點")
         update_button = QPushButton("更新所選盤點")
-        void_button = QPushButton("作廢所選盤點")
+        void_button = QPushButton("刪除所選盤點")
         export_button = QPushButton("匯出盤點 CSV")
         refresh_button = QPushButton("重新整理")
         quick_button = QPushButton("補記交易")
@@ -123,7 +123,7 @@ class BalanceSnapshotPage(QWidget):
 
         setup_table(self.table, self.model, stretch_column=5)
         setup_table(self.transactions, self.transactions_model, stretch_column=3)
-        # 更新／作廢是對所選盤點動作，沒選就停用。
+        # 更新／刪除是對所選盤點動作，沒選就停用。
         bind_selection(self.table, update_button, void_button)
         layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
@@ -234,7 +234,11 @@ class BalanceSnapshotPage(QWidget):
         item = self.model.selected_item(self.table)
         if item is None or item["status"] != "active":
             return
-        answer = QMessageBox.question(self, "確認作廢", "確定要作廢所選餘額盤點嗎？")
+        answer = QMessageBox.question(
+            self,
+            "確認刪除",
+            "確定要刪除所選餘額盤點嗎？\n\n紀錄會保留在列表狀態「已刪除」裡，但不能復原。",
+        )
         if answer != QMessageBox.StandardButton.Yes:
             return
         result = self.controller.void_balance_snapshot(str(item["snapshot_id"]))

@@ -91,7 +91,7 @@
 | `DATETIME_TIMEZONE_REQUIRED` | 時間字串沒有時區 | 同上。本專案固定 `Asia/Taipei` |
 | `VALIDATION_FAILED` | **退路碼**：輸入驗證失敗，而且認不出是哪一種 | 匯出診斷資訊回報。**這個碼出現代表分類漏了一種情形**，該補一個具體的碼 |
 | `TRANSACTION_NOT_FOUND` | 交易不存在 | 可能已被刪除或資料庫被換過 |
-| `TRANSACTION_VOIDED` | 想編輯一筆已作廢的交易 | 作廢不可復原。要改就新建一筆 |
+| `TRANSACTION_VOIDED` | 想編輯一筆已刪除（`voided`）的交易 | 刪除不可復原。要改就新建一筆 |
 | `TRANSACTION_REVISION_CONFLICT` | 樂觀鎖衝突 —— 這筆在你編輯期間被別處改過 | 重新載入交易紀錄再改一次 |
 | `TRANSACTION_STATUS_FILTER_INVALID` | 篩選的狀態值不合法 | UI 正常操作不會發生 |
 | `TRANSACTION_UPDATE_FAILED` | **退路碼**：更新失敗，原因認不出來 | 匯出診斷資訊回報 |
@@ -104,9 +104,9 @@
 |---|---|---|
 | `TRANSFER_SAME_ACCOUNT` | 來源與目的是同一個帳戶 | 選不同的帳戶 |
 | `TRANSFER_DESTINATION_REQUIRED` | 沒選轉入帳戶 | 選一個 |
-| `TRANSFER_EDIT_NOT_SUPPORTED` | 想就地編輯轉帳 | **這是刻意的。** 轉帳用「替換」流程：建新的、作廢舊的，同一個 SQLite transaction 完成 |
+| `TRANSFER_EDIT_NOT_SUPPORTED` | 想就地編輯轉帳 | **這是刻意的。** 轉帳用「替換」流程：建新的、刪除舊的，同一個 SQLite transaction 完成 |
 | `TRANSFER_NOT_FOUND` | 要替換的轉帳不存在 | 重新載入 |
-| `TRANSFER_NOT_ACTIVE` | 要替換的轉帳已作廢 | 已作廢的不能再替換 |
+| `TRANSFER_NOT_ACTIVE` | 要替換的轉帳已刪除 | 已刪除的不能再替換 |
 | `TRANSFER_REPLACE_FAILED` | **退路碼**：替換流程失敗 | **舊轉帳未變更。** 匯出診斷資訊回報 |
 | `CURRENCY_MISMATCH` | 兩個帳戶幣別不同 | 目前只支援同幣別 TWD 轉帳 |
 
@@ -193,7 +193,7 @@
 | `DEPOSIT_MONTHLY_DEPOSIT_REQUIRED` | 零存整付沒填每月存入金額 | 零存整付就是每月存一筆，這個欄位必填 |
 | `DEPOSIT_INTEREST_DESTINATION_REQUIRED` | 沒指定利息轉入哪個帳戶 | 選一個帳戶。**只有「本息續存」不需要**，因為利息留在定存裡 |
 | `DEPOSIT_CONTRACT_NOT_FOUND` / `DEPOSIT_TERM_NOT_FOUND` / `DEPOSIT_EVENT_NOT_FOUND` | 對應資料不存在 | 重新整理定存頁 |
-| `DEPOSIT_EVENT_NOT_PENDING` | 想處理一件已確認或已略過的項目 | 兩者都是終點。要改結果就去作廢它產生的交易 |
+| `DEPOSIT_EVENT_NOT_PENDING` | 想處理一件已確認或已略過的項目 | 兩者都是終點。要改結果就去刪除它產生的交易 |
 | `DEPOSIT_AMOUNT_REQUIRED` | 確認時沒有金額，而且利率空白算不出建議值 | **照存摺填實際金額。** 或先回定存頁補上年利率 |
 | `DEPOSIT_CONTRACT_IN_USE` | 想刪掉已經有入帳紀錄的定存 | **改用「結束合約」。** 刪除只允許從未入帳過的，否則帳本裡的交易會失去來歷 |
 | `DEPOSIT_TERM_NOT_EDITABLE` | 想修改已續約或已結清的期 | 只有「存續中」的期能改。已經產生過交易的改了會對不起帳 |

@@ -22,7 +22,7 @@ def test_action_buttons_are_disabled_until_a_row_is_selected(window) -> None:
     buttons = [
         button
         for button in window.transactions.findChildren(QPushButton)
-        if button.text() in {"編輯／替換", "複製到記帳", "作廢"}
+        if button.text() in {"編輯／替換", "複製到記帳", "刪除"}
     ]
     assert len(buttons) == 3
     assert all(not button.isEnabled() for button in buttons)
