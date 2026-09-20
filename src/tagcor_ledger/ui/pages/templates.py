@@ -172,8 +172,15 @@ class TemplatesPage(QWidget):
     def edit_selected(self) -> None:
         self.edit(self.model.selected_item(self.table))
 
-    def edit(self, item: dict[str, Any] | None) -> None:
-        dialog = TemplateDialog(self.controller, current=item, parent=self)
+    def edit(
+        self,
+        item: dict[str, Any] | None,
+        *,
+        prefill: dict[str, Any] | None = None,
+    ) -> None:
+        """開模板視窗。`item` 是編輯既有的；`prefill` 是從一筆交易預填一個**新的**
+        （交易紀錄的「建立模板」），兩者不會同時給。使用者按儲存才寫入。"""
+        dialog = TemplateDialog(self.controller, current=item, parent=self, prefill=prefill)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._finish(self.controller.save_template(dialog.saved_value))
 

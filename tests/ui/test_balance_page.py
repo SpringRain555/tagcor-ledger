@@ -31,7 +31,7 @@ def _amount_in_summary(text: str) -> str:
     return text[index:]
 
 
-def test_voiding_a_transaction_recalculates_the_balance_gap(window, monkeypatch) -> None:
+def test_deleting_a_transaction_recalculates_the_balance_gap(window, monkeypatch) -> None:
     """從交易紀錄刪除一筆帳，餘額盤點的未解釋差額要跟著變。
 
     未解釋差額 ＝ 盤點金額 － 期間內 posting 加總，所以任何一筆交易的增減都會改變它。
@@ -62,13 +62,13 @@ def test_voiding_a_transaction_recalculates_the_balance_gap(window, monkeypatch)
     selected = page.model.selected_item(page.table)
     assert selected is not None and selected["status"] == "active"
 
-    # 走真正的按鈕路徑（`void_selected`），不要自己 emit —— 這條測試要驗的正是
+    # 走真正的按鈕路徑（`delete_selected`），不要自己 emit —— 這條測試要驗的正是
     # 「那顆按鈕有沒有通知別人」。
     monkeypatch.setattr(
         "tagcor_ledger.ui.pages.transactions.QMessageBox.question",
         lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
     )
-    page.void_selected()
+    page.delete_selected()
 
     assert _amount_in_summary(window.balance.summary.text()) == before, (
         "刪除之後差額應該回到記帳前的值 —— 沒回去就代表餘額盤點沒有被通知"

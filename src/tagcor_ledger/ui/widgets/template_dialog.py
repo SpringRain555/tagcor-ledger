@@ -5,6 +5,22 @@
 v0.23.0 移除定期收支之後那個旗標永遠是 `False`
 （[ADR-0011](../../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)），
 留著它就是留一個永遠不會走的分支，而那正是下一個人要花時間讀懂再刪掉的東西。
+
+## 三種開法
+
+| 開法 | `current` | `prefill` | 存出來的是 |
+|---|---|---|---|
+| 新增模板 | `None` | `None` | 新的 |
+| 編輯模板 | 那一列 | — | 同一個 id、保住 `sort_order` 與 `status` |
+| 交易紀錄「建立模板」 | `None` | 那筆交易的 dict | **新的**（只是欄位先填好，名稱留白讓使用者取） |
+
+`prefill` 收的是交易的 dict，而**交易與模板的 `category_id` 不是同一層**：交易的
+`category_id` 是類別、`subcategory_id` 才是項目；模板只有一個 `category_id`，存的是項目。
+`_select_category()` 要的是項目 —— 餵父層進去會靜靜選到該類別的第一個項目
+（記帳頁的「複製到記帳」以前就是這樣帶錯的），所以 `_load()` 先看 `subcategory_id`。
+
+**已封存的帳戶／項目帶不進來。** 三個下拉只列使用中的，交易指到已封存的東西時
+下拉會停在第一個選項 —— 儲存前看得到，跟編輯一個帳戶已封存的模板是同一件事，不另外處理。
 """
 
 from __future__ import annotations
@@ -44,10 +60,12 @@ class TemplateDialog(QDialog):
         *,
         current: dict[str, Any] | None,
         parent: QWidget,
+        prefill: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(parent)
         self.controller = controller
         self.current = current
+        self.prefill = prefill
         self.name = QLineEdit()
         self.flow = QComboBox()
         self.account = QComboBox()
@@ -78,19 +96,28 @@ class TemplateDialog(QDialog):
         form.addRow("金額（可留空）", self.amount)
         form.addRow("備註", self.description)
         form.addRow("", self.error)
-        buttons = QDialogButtonBox(
+        self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
             | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("儲存")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
-        buttons.accepted.connect(self.save)
-        buttons.rejected.connect(self.reject)
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setText("儲存")
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        self.buttons.accepted.connect(self.save)
+        self.buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        layout.addWidget(buttons)
+        layout.addWidget(self.buttons)
         self.flow.currentIndexChanged.connect(self._sync_flow)
         self.category.currentIndexChanged.connect(self._reload_details)
+        # 名稱空白時「儲存」停用（同 `SimpleFormDialog._sync_ok`）。以前空名稱會過關、
+        # 對話框關掉之後才在頁面跳「請輸入名稱」—— 填好的其他欄位全丟。從交易紀錄
+        # 「建立模板」進來時名稱本來就是空的，那條路會變成最常走的一條。
+        self.name.textChanged.connect(self._sync_save)
+
+    def _sync_save(self) -> None:
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(
+            bool(self.name.text().strip())
+        )
 
     def _load(self) -> None:
         accounts = self.controller.account_options()
@@ -103,16 +130,23 @@ class TemplateDialog(QDialog):
             "category_id",
         )
         self._reload_details()
-        if self.current:
-            self.name.setText(str(self.current["name"]))
-            select_data(self.flow, self.current["entry_type"])
-            select_data(self.account, self.current["account_id"])
-            select_data(self.destination, self.current.get("destination_account_id"))
-            self._select_category(self.current.get("category_id"))
-            if self.current.get("amount_minor") is not None:
-                self.amount.setText(minor_text(int(self.current["amount_minor"])))
-            self.description.setText(str(self.current.get("description", "")))
+        # 編輯既有模板與從交易預填走同一段：差別只在名稱（交易沒有名稱，留白讓使用者取）
+        # 與存出來的身分（`save()` 只看 `self.current`）。
+        seed = self.current or self.prefill
+        if seed:
+            if self.current:
+                self.name.setText(str(self.current["name"]))
+            select_data(self.flow, seed["entry_type"])
+            select_data(self.account, seed["account_id"])
+            select_data(self.destination, seed.get("destination_account_id"))
+            # 交易的 dict 裡項目叫 `subcategory_id`，模板的 dict 裡項目就是 `category_id`
+            # —— 見模組說明。
+            self._select_category(seed.get("subcategory_id") or seed.get("category_id"))
+            if seed.get("amount_minor") is not None:
+                self.amount.setText(minor_text(int(seed["amount_minor"])))
+            self.description.setText(str(seed.get("description", "")))
         self._sync_flow()
+        self._sync_save()
 
     def save(self) -> None:
         """把表單組成一個 `TransactionTemplate` 放進 `saved_value`，由呼叫端寫入。
@@ -128,13 +162,17 @@ class TemplateDialog(QDialog):
         沒帶回去的欄位都要問一次「新建的預設值蓋掉舊值，對嗎」。
         """
         try:
+            name = self.name.text().strip()
+            if not name:
+                # 「儲存」在名稱空白時本來就停用；這一行守的是程式直接呼叫 `save()` 的路。
+                raise ValueError("TEMPLATE_NAME_REQUIRED")
             amount_minor = (
                 Money.from_decimal_string(self.amount.text().strip()).amount_minor
                 if self.amount.text().strip()
                 else None
             )
             template = self.controller.new_template(
-                name=self.name.text().strip(),
+                name=name,
                 entry_type=str(self.flow.currentData()),
                 account_id=str(self.account.currentData()),
                 destination_account_id=(

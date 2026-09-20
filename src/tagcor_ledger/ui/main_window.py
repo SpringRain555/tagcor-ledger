@@ -120,7 +120,7 @@ class MainWindow(QMainWindow):
         self.inbox.changed.connect(self._ledger_changed)
         self.balance.changed.connect(self._balance_changed)
         self.balance.record_transaction_requested.connect(self._focus_new)
-        self.transactions.duplicate_requested.connect(self._prefill_quick)
+        self.transactions.template_requested.connect(self._create_template)
         self.operation_settings.apply_requested.connect(self._prefill_quick)
         self.operation_settings.changed.connect(self._catalog_changed)
         self.system_settings.restored.connect(self._restored)
@@ -190,6 +190,15 @@ class MainWindow(QMainWindow):
     def _prefill_quick(self, draft: dict[str, Any]) -> None:
         self.entry.apply_draft(draft)
         self.show_page(PageId.ENTRY)
+
+    def _create_template(self, draft: dict[str, Any]) -> None:
+        """交易紀錄的「建立模板」：先切到操作設定，再讓它切到模板分頁開視窗。
+
+        順序不能反 —— 視窗是 modal 的，`exec()` 會停在這裡直到關掉；先換頁，
+        使用者在視窗後面看到的才是它要回到的那一頁。
+        """
+        self.show_page(PageId.OPERATION_SETTINGS)
+        self.operation_settings.create_template_from(draft)
 
     def _ledger_changed(self) -> None:
         """有交易被建立、改變或作廢之後，誰要重算。

@@ -42,11 +42,16 @@ def _dialog(
     window: Any,
     *,
     current: dict[str, Any] | None = None,
+    prefill: dict[str, Any] | None = None,
 ) -> TemplateDialog:
     """`parent` 傳真的視窗 —— `TemplateDialog` 的 `parent` 是必填而且不接受 `None`。"""
-    dialog = TemplateDialog(controller, current=current, parent=window)
+    dialog = TemplateDialog(controller, current=current, parent=window, prefill=prefill)
     qtbot.addWidget(dialog)
     return dialog
+
+
+def _save_button(dialog: TemplateDialog) -> Any:
+    return dialog.buttons.button(dialog.buttons.StandardButton.Save)
 
 
 def _pick_category(dialog: TemplateDialog) -> None:
@@ -128,6 +133,31 @@ def test_a_bad_amount_is_refused_in_the_dialog_not_at_the_store(
     assert "AMOUNT" not in dialog.error.text(), "不准把英文碼印給使用者看"
 
 
+def test_an_empty_name_cannot_be_saved_and_does_not_close_the_dialog(
+    controller: Any, qtbot: Any, window: Any
+) -> None:
+    """名稱空白：「儲存」停用；程式直接呼叫 `save()` 也要在對話框裡被擋下來。
+
+    以前空名稱會過關、對話框關掉之後才在頁面跳「請輸入名稱」—— 填好的其他欄位全丟。
+    從交易紀錄「建立模板」進來時名稱本來就是空的，這條路會變成最常走的一條。
+    """
+    dialog = _dialog(controller, qtbot, window)
+    _pick_category(dialog)
+    dialog.amount.setText("85")
+    assert not _save_button(dialog).isEnabled(), "名稱空白時「儲存」要停用"
+
+    dialog.save()
+    assert dialog.saved_value is None, "空名稱不該存下來"
+    assert dialog.error.text(), "要在對話框上說明哪裡不對"
+    assert "TEMPLATE" not in dialog.error.text(), "不准把英文碼印給使用者看"
+    assert dialog.result() != dialog.DialogCode.Accepted, "對話框不能關掉，剛填的東西會沒了"
+
+    dialog.name.setText("  早餐  ")
+    assert _save_button(dialog).isEnabled()
+    dialog.name.setText("   ")
+    assert not _save_button(dialog).isEnabled(), "只打空白也算沒填"
+
+
 # --------------------------------------------------------------- 轉帳與非轉帳
 
 
@@ -165,6 +195,49 @@ def test_a_non_transfer_draft_carries_a_category_and_no_destination(
     assert saved is not None, dialog.error.text()
     assert saved.category_id is not None
     assert saved.destination_account_id is None, "支出不該帶轉入帳戶"
+
+
+def test_prefilling_from_a_transfer_carries_both_accounts_and_no_category(
+    controller: Any, qtbot: Any, window: Any
+) -> None:
+    """交易紀錄「建立模板」餵進來的是**交易**的 dict：轉帳要帶兩個帳戶、沒有類別，
+    而且存出來的是**新的**模板（不是編輯）。"""
+    assert controller.create_account("郵局", "0").success
+    post_id = next(
+        str(item["account_id"])
+        for item in controller.account_options()
+        if item["name"] == "郵局"
+    )
+    assert controller.submit(
+        occurred_at="2026-08-19T10:00:00+08:00",
+        entry_type="transfer",
+        amount="500",
+        account_id="acct_cash",
+        destination_account_id=post_id,
+        category_id=None,
+        description="每月轉存",
+    ).success
+    transaction = controller.list_transactions().details["transactions"][0]
+    assert transaction["entry_type"] == "transfer"
+
+    dialog = _dialog(controller, qtbot, window, prefill=transaction)
+    assert dialog.current is None
+    assert dialog.name.text() == ""
+    assert str(dialog.flow.currentData()) == "transfer"
+    assert str(dialog.account.currentData()) == "acct_cash"
+    assert str(dialog.destination.currentData()) == post_id
+    assert dialog.amount.text() == "500"
+    assert dialog.description.text() == "每月轉存"
+
+    dialog.name.setText("每月轉存")
+    dialog.save()
+    saved = dialog.saved_value
+    assert saved is not None, dialog.error.text()
+    assert saved.template_id.startswith("tpl_"), "從交易建的是新模板，要有新的識別碼"
+    assert saved.entry_type == "transfer"
+    assert saved.destination_account_id == post_id
+    assert saved.category_id is None
+    assert saved.amount_minor == 500
 
 
 def test_switching_the_flow_swaps_which_rows_are_visible(

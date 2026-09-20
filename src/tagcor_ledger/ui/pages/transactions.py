@@ -6,6 +6,11 @@
 **「刪除」是 `void`，不是真的刪掉。** 那一列的狀態變成 `voided`、不再計入，但紀錄留著，
 篩選「已刪除」看得到、不可復原（`state-machines.md` §1）。2026-09-20 之前叫「作廢」；
 改字的理由與兩個「刪除」怎麼區分見 `glossary.md`。
+
+**「建立模板」不在這一頁做事。** 它只把所選交易的內容送出去（`template_requested`），
+由 `main_window` 帶到「操作設定 → 模板」開一張已經填好的新增視窗，使用者自己取名、自己按儲存。
+2026-09-20 之前這顆按鈕叫「複製到記帳」—— 把同一筆內容帶回記帳頁再存一次；
+那件事模板的「填入記帳頁」本來就會做，而且做得更好（模板記得住、下次不用再找那一筆）。
 """
 
 from __future__ import annotations
@@ -47,7 +52,9 @@ from tagcor_ledger.ui.widgets.table import (
 
 
 class TransactionsPage(QWidget):
-    duplicate_requested = Signal(dict)
+    template_requested = Signal(dict)
+    """所選交易的 dict。接收端拿它去開一張預填好的「新增模板」視窗（見模組說明）。"""
+
     changed = Signal()
     """這一頁改動了帳務。**餘額盤點的未解釋差額因此要重算。**
 
@@ -120,14 +127,23 @@ class TransactionsPage(QWidget):
         bottom_row.addWidget(clear_button)
 
         setup_table(self.table, self.model, stretch_column=5)
-        edit_button = QPushButton("編輯／替換")
-        duplicate_button = QPushButton("複製到記帳")
-        void_button = QPushButton("刪除")
+        # 「編輯」對轉帳其實是「替換」，那個差別在按下去之後的對話框標題與儲存鈕上講
+        # （「替換轉帳」／「建立新轉帳並刪除原交易」），按鈕本身不再寫「編輯／替換」。
+        edit_button = QPushButton("編輯")
+        delete_button = QPushButton("刪除")
+        template_button = QPushButton("建立模板")
         set_button_role(edit_button, "primary")
-        set_button_role(void_button, "danger")
-        bind_selection(self.table, edit_button, duplicate_button, void_button)
+        set_button_role(delete_button, "danger")
+        bind_selection(self.table, edit_button, template_button)
+        # 「刪除」只對有效的交易有意義；「編輯」不綁 —— 對已刪除的交易按下去，
+        # store 會回 TRANSACTION_VOIDED 的中文，那是有用的回饋。從已刪除的交易建模板也合理。
+        bind_selection(
+            self.table,
+            delete_button,
+            enabled_when=lambda item: item["status"] == "active",
+        )
         actions = QHBoxLayout()
-        for action_button in (edit_button, duplicate_button, void_button):
+        for action_button in (edit_button, delete_button, template_button):
             actions.addWidget(action_button)
         actions.addStretch()
         actions.addWidget(self.previous_button)
@@ -144,8 +160,8 @@ class TransactionsPage(QWidget):
         self.previous_button.clicked.connect(self.previous_page)
         self.next_button.clicked.connect(self.next_page)
         edit_button.clicked.connect(self.edit_selected)
-        duplicate_button.clicked.connect(self.duplicate_selected)
-        void_button.clicked.connect(self.void_selected)
+        delete_button.clicked.connect(self.delete_selected)
+        template_button.clicked.connect(self.create_template_from_selected)
 
     def reload_filters(self) -> None:
         fill_combo(
@@ -217,10 +233,10 @@ class TransactionsPage(QWidget):
         self.previous_button.setEnabled(self.page_index > 0)
         self.next_button.setEnabled(self.next_cursor is not None)
 
-    def duplicate_selected(self) -> None:
+    def create_template_from_selected(self) -> None:
         item = self.model.selected_item(self.table)
         if item is not None:
-            self.duplicate_requested.emit(item)
+            self.template_requested.emit(item)
 
     def edit_selected(self) -> None:
         item = self.model.selected_item(self.table)
@@ -231,7 +247,8 @@ class TransactionsPage(QWidget):
             self.first_page()
             self.changed.emit()
 
-    def void_selected(self) -> None:
+    def delete_selected(self) -> None:
+        # 按鈕對已刪除的列本來就停用（`enabled_when`），這一行只是防程式直接呼叫。
         item = self.model.selected_item(self.table)
         if item is None or item["status"] != "active":
             return

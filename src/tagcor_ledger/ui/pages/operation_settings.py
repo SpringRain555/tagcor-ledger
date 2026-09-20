@@ -24,6 +24,8 @@ v0.23.0 之前「會動的」有兩個，另一個是定期收支
 
 from __future__ import annotations
 
+from typing import Any
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QTabWidget, QWidget
 
@@ -67,16 +69,28 @@ class OperationSettingsPage(QWidget):
     def _build(self) -> None:
         title = QLabel("操作設定")
         title.setObjectName("pageTitle")
-        tabs = QTabWidget()
-        tabs.setObjectName("settingsTabs")
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("settingsTabs")
         for page, label in self._tabs():
-            tabs.addTab(page, label)
+            self.tabs.addTab(page, label)
             page.changed.connect(self.changed.emit)
         layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
-        layout.addWidget(tabs)
+        layout.addWidget(self.tabs)
         self.templates.apply_requested.connect(self.apply_requested.emit)
 
     def refresh(self) -> None:
         for page, _label in self._tabs():
             page.refresh()
+
+    def show_tab(self, page: SettingsTabPage) -> None:
+        self.tabs.setCurrentWidget(page)
+
+    def create_template_from(self, draft: dict[str, Any]) -> None:
+        """交易紀錄的「建立模板」：切到模板分頁，開一張已經帶入那筆內容的**新增**視窗。
+
+        先切分頁再開視窗，使用者關掉視窗之後看到的就是模板清單 —— 剛存的那一列在眼前。
+        名稱留白讓使用者取；按儲存才寫入（`TemplatesPage.edit`）。
+        """
+        self.show_tab(self.templates)
+        self.templates.edit(None, prefill=draft)
