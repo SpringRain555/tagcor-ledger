@@ -310,6 +310,75 @@ class CategoryStore(StoreBase):
                 details={"name": clean_name},
             )
 
+    def move_category(self, category_id: str, *, parent_id: str) -> None:
+        """把一個**項目**掛到另一個類別底下（A 類別的 a → B 類別的 a）。
+
+        **歷史交易與模板跟著走，而且不用碰它們。** `category_allocations` 與
+        `transaction_templates` 記的都是項目的 id，類別是查詢時從 `parent_id` 算出來的
+        （`_transaction_select()` 的 `pc` join）—— 改這一列的 `parent_id`，每一筆舊交易在
+        交易紀錄、類別篩選與統計裡就都算在新類別底下了。唯一要重算的是 FTS 索引：
+        它把上層名稱也塞進去了（`_refresh_fts`），所以搬完要對這個項目的交易重建一次。
+
+        四道檢查，每一道自己的碼：不是使用中的項目 → `CATEGORY_NOT_FOUND`（與改名一致，
+        封存的先恢復）；是類別不是項目 → `CATEGORY_NOT_AN_ITEM`；沒換 →
+        `CATEGORY_PARENT_UNCHANGED`；目標不是使用中的第一層 → `CATEGORY_PARENT_INVALID`；
+        目標底下已有同名的使用中項目 → `CATEGORY_ACTIVE_NAME_CONFLICT`
+        （`idx_categories_sibling_name` 那條部分唯一索引在後面兜底）。
+
+        `sort_order` 落在新類別的**最後**（該組最大值 +10）。這是搬家不是新建，
+        所以不沿用 `create_category` 的 100 —— 沿用舊值的話它會照在舊類別裡的位置
+        插進新類別的中間，而那個位置在新的一組裡沒有意義。
+        """
+        with database_transaction(self.paths.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT name, parent_id, level FROM categories
+                WHERE category_id = ? AND status = 'active'
+                """,
+                (category_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("CATEGORY_NOT_FOUND")
+            if int(row["level"]) != 2:
+                raise ValueError("CATEGORY_NOT_AN_ITEM")
+            if row["parent_id"] == parent_id:
+                raise ValueError("CATEGORY_PARENT_UNCHANGED")
+            parent = connection.execute(
+                "SELECT level, status FROM categories WHERE category_id = ?", (parent_id,)
+            ).fetchone()
+            if parent is None or parent["status"] != "active" or int(parent["level"]) != 1:
+                raise ValueError("CATEGORY_PARENT_INVALID")
+            duplicate = connection.execute(
+                """
+                SELECT 1 FROM categories
+                WHERE parent_id = ? AND name = ? COLLATE NOCASE AND status = 'active'
+                """,
+                (parent_id, row["name"]),
+            ).fetchone()
+            if duplicate is not None:
+                raise ValueError("CATEGORY_ACTIVE_NAME_CONFLICT")
+            last = connection.execute(
+                "SELECT COALESCE(MAX(sort_order), 0) AS last FROM categories WHERE parent_id = ?",
+                (parent_id,),
+            ).fetchone()
+            connection.execute(
+                """
+                UPDATE categories SET parent_id = ?, sort_order = ?, updated_at = ?
+                WHERE category_id = ?
+                """,
+                (parent_id, int(last["last"]) + 10, now_iso(), category_id),
+            )
+            # 要在 UPDATE 之後：索引裡的上層名稱是 join 現查的，先重建就還是舊類別。
+            self._refresh_fts_for_category(connection, category_id)
+            self._audit(
+                connection,
+                correlation_id=f"corr_{uuid4().hex}",
+                action="category.move",
+                entity_type="category",
+                entity_id=category_id,
+                details={"from_parent_id": row["parent_id"], "to_parent_id": parent_id},
+            )
+
     def set_category_order(
         self,
         ordered_ids: list[str],

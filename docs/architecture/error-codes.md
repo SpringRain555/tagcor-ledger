@@ -60,16 +60,18 @@
 |---|---|---|
 | `CATEGORY_NAME_REQUIRED` | 名稱空白 | 填名稱 |
 | `CATEGORY_NOT_FOUND` | 指定的類別／項目不存在 | 同 `ACCOUNT_NOT_FOUND` |
-| `CATEGORY_ACTIVE_NAME_CONFLICT` | 同一層已有同名的使用中項目 | 換名字。**同層才會衝突**，不同父類別下可以同名 |
+| `CATEGORY_ACTIVE_NAME_CONFLICT` | 同一層已有同名的使用中項目（新增、恢復，或更改所屬類別時目標類別底下已有） | 換名字。**同層才會衝突**，不同父類別下可以同名。恢復與搬移時該處理的是**另外那一個**，訊息會這樣說 |
 | `CATEGORY_NOT_ACTIVE` | 想用已封存的類別記帳 | 先恢復，或改選別的 |
 | `CATEGORY_PARENT_INVALID` | 指定的父類別不是第一層 | 只有第一層能當父。**沒有第三層** |
 | `CATEGORY_PARENT_NOT_ACTIVE` | 父類別已封存 | 先恢復父類別 |
+| `CATEGORY_NOT_AN_ITEM` | 想把一個**類別**（第一層）搬到別的類別底下 | 只有項目可以更改所屬類別。**沒有第三層** |
+| `CATEGORY_PARENT_UNCHANGED` | 更改所屬類別時選到它現在的類別 | 選一個不同的。UI 在這種情況不會送出，正常操作不會看到 |
 | `CATEGORY_HAS_CHILDREN` | 想刪掉還有子項目的類別 | 先處理掉所有子項目 |
 | `CATEGORY_HAS_ACTIVE_CHILDREN` | 想封存還有使用中子項目的類別 | 先封存子項目。否則會出現「父封存了、子還在選單裡」的矛盾 |
 | `CATEGORY_IN_USE` | 想刪掉已被歷史交易引用的 | **改用封存** |
 | `CATEGORY_REQUIRED` | 收入／支出沒選類別 | 選一個。轉帳不需要類別 |
 | `CATEGORY_CREATE_FAILED` | **預期外**的寫入失敗。名稱空白、上層無效、同層同名這三種都已經有自己的碼，走到這裡表示三道檢查都沒攔到 | 匯出診斷資訊回報。原文在 `details.detail`，**不會印在畫面上** |
-| `CATEGORY_RENAME_FAILED` / `CATEGORY_ARCHIVE_FAILED` / `CATEGORY_RESTORE_FAILED` / `CATEGORY_DELETE_FAILED` / `CATEGORY_REORDER_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
+| `CATEGORY_RENAME_FAILED` / `CATEGORY_ARCHIVE_FAILED` / `CATEGORY_RESTORE_FAILED` / `CATEGORY_DELETE_FAILED` / `CATEGORY_MOVE_FAILED` / `CATEGORY_REORDER_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
 
 ## 自訂順序
 

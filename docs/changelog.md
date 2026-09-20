@@ -8,6 +8,23 @@
 
 ## 未發布
 
+### 新功能：項目可以更改所屬類別（A 類別的 a → B 類別的 a）
+
+操作設定 → 項目多一顆「更改所屬類別」：選一列、在表單裡挑新類別（下拉開在它現在的類別上）、按確定。
+
+- **歷史交易與模板跟著搬，而且不用碰它們。** 交易記的是項目（`category_allocations.category_id`），
+  類別是查詢時從 `parent_id` 算出來的 —— 改這一列的 `parent_id`，a 底下每一筆舊交易在交易紀錄、
+  類別篩選與統計裡就都算在 B 底下了。唯一要重算的是 FTS 索引（它把上層名稱也放進去了）。
+  表單底下有一行提醒，因為這是使用者按下確定之前一定要知道的事。
+- 四道門各自一個碼：不是使用中的項目（`CATEGORY_NOT_FOUND`／新的 `CATEGORY_NOT_AN_ITEM`）、
+  沒換（新的 `CATEGORY_PARENT_UNCHANGED`）、目標不是使用中的第一層（`CATEGORY_PARENT_INVALID`）、
+  目標底下已有同名的使用中項目（`CATEGORY_ACTIVE_NAME_CONFLICT`，訊息指向**另外那一個**）。
+  搬完排在新類別的最後（該組最大 `sort_order` +10，不沿用新建的 100 —— 這是搬家不是新建）。
+- 只有一個類別時直接說「沒有其他類別」，不開一張只能選同一個的表單。
+- `SimpleFormDialog` 多了 `ChoiceField.default` 與 `note`；`CatalogPage` 多了 `_extra_selection_actions()`
+  掛鉤，三個名冊分頁的按鈕列形狀不變。
+- 四層都是 `rename_category` 的形狀；`tests/integration/test_category_move.py` 六條，含 FTS 重建與稽核列。
+
 ### 餘額盤點：拿掉差額期間交易表，按鈕分兩排，「編輯」開視窗
 
 - **「最近盤點差額期間內的交易」那張表拿掉了。** 它佔掉半頁，而要查交易本來就有交易紀錄頁

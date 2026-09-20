@@ -335,6 +335,28 @@ class CategoryService:
                 fallback_message="類別／項目名稱無法更新。請匯出診斷資訊回報。",
             )
 
+    def move(self, category_id: str, *, parent_id: str) -> Result:
+        """把一個項目掛到另一個類別底下。歷史交易與模板跟著走，理由在 store 那邊。
+
+        撞名時該處理的是**目標類別底下那一個**（同 `restore` 的 override 邏輯）——
+        預設說法「同一層裡已經有…請換一個名字」會叫使用者去改手上這一個的名字。
+        """
+        try:
+            self.store.move_category(category_id, parent_id=parent_id)
+            return Result.ok("項目已改到新的類別底下。")
+        except STORE_FAILURES as exc:
+            return failure(
+                exc,
+                fallback_code="CATEGORY_MOVE_FAILED",
+                fallback_message="項目無法更改所屬類別。請匯出診斷資訊回報。",
+                overrides={
+                    "CATEGORY_ACTIVE_NAME_CONFLICT": (
+                        "新的所屬類別底下已經有一個使用中的項目叫這個名字了。"
+                        "請先把那一個改名或封存，再搬這一個。"
+                    )
+                },
+            )
+
     def set_order(
         self,
         ordered_ids: Sequence[str],

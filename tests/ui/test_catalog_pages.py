@@ -7,6 +7,7 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
 from PySide6.QtWidgets import (
     QDialogButtonBox,
     QPushButton,
@@ -355,6 +356,81 @@ def test_the_header_is_no_longer_a_sorting_entry_point(window) -> None:
         assert page.table.isSortingEnabled() is False, (
             "setSortingEnabled(True) 會讓 QTableView 在 Python 裡排序 —— 規則禁止"
         )
+
+
+def test_moving_an_item_to_another_category_from_the_items_tab(window, monkeypatch) -> None:
+    """「項目」分頁的「更改所屬類別」：下拉開在它現在的類別上、表單底下提醒歷史交易會跟著搬，
+    按確定之後那一列的「所屬類別」欄就變了。「類別」分頁沒有這顆按鈕（類別沒有上一層）。
+    """
+    controller = window.controller
+    transport = controller.create_category("交通")
+    assert transport.success
+    transport_id = str(transport.details["category_id"])
+
+    page = window.operation_settings.items
+    page.refresh()
+    move_button = next(
+        button for button in page.findChildren(QPushButton) if button.text() == "更改所屬類別"
+    )
+    assert not move_button.isEnabled(), "沒選取就不能按"
+    assert not any(
+        button.text() == "更改所屬類別"
+        for button in window.operation_settings.categories.findChildren(QPushButton)
+    ), "類別本身沒有上一層，「類別」分頁不該有這顆按鈕"
+
+    rows = [page.model.items[index] for index in range(page.model.rowCount())]
+    row_index = [str(row["category_id"]) for row in rows].index("cat_food_711")
+    page.table.selectRow(row_index)
+    assert move_button.isEnabled()
+
+    asked: list[dict[str, Any]] = []
+
+    def fake_ask(parent: Any, title: str, fields: Any, *, note: str = "") -> dict[str, Any]:
+        asked.append({"title": title, "fields": list(fields), "note": note})
+        return {"parent_id": transport_id}
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.catalog.ask_form", fake_ask)
+    page.move_selected()
+
+    assert len(asked) == 1, "只問一次"
+    assert "7-11" in asked[0]["title"], "標題要念出搬的是哪一個"
+    (field,) = asked[0]["fields"]
+    assert field.label == "所屬類別"
+    assert field.default == "cat_food", "下拉要開在它現在的類別上"
+    assert dict(field.options) == {"伙食": "cat_food", "交通": transport_id}
+    assert "交易" in asked[0]["note"], "要提醒歷史交易會跟著搬"
+
+    moved = {
+        str(item["category_id"]): str(item["name"])
+        for item in controller.category_options(transport_id)
+    }
+    assert moved == {"cat_food_711": "7-11"}
+    shown = {
+        page.model.index(row, 1).data(): page.model.index(row, 0).data()
+        for row in range(page.model.rowCount())
+    }
+    assert shown["7-11"] == "交通", "表格的「所屬類別」欄要跟著變"
+
+
+def test_moving_an_item_with_nowhere_to_go_says_so_instead_of_opening_a_form(
+    window, monkeypatch
+) -> None:
+    """只有一個類別時，開一張只能選同一個的表單是在浪費使用者一次確定。"""
+    page = window.operation_settings.items
+    page.refresh()
+    page.table.selectRow(0)
+
+    told: list[str] = []
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.catalog.QMessageBox.information",
+        lambda parent, title, text: told.append(title),
+    )
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.catalog.ask_form",
+        lambda *args, **kwargs: pytest.fail("沒有別的類別可搬，不該開表單"),
+    )
+    page.move_selected()
+    assert told == ["沒有其他類別"]
 
 
 def test_the_parent_dropdown_keeps_every_category_while_searching(window) -> None:

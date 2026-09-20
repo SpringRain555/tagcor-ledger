@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import Signal
@@ -147,18 +148,28 @@ class CatalogPage(QWidget):
         """
         return None
 
+    def _extra_selection_actions(self) -> tuple[tuple[str, Callable[[], None]], ...]:
+        """這一頁對**所選列**的額外動作：`(按鈕文字, handler)`，排在「重新命名」後面，
+        一樣沒選取就停用。預設沒有；「項目」分頁用它加「更改所屬類別」。"""
+        return ()
+
     # --- 形狀 -------------------------------------------------------------------
 
     def _build(self) -> None:
         add_button = QPushButton(self.ADD_LABEL)
         rename = QPushButton("重新命名")
+        extra_buttons: list[QPushButton] = []
+        for label, handler in self._extra_selection_actions():
+            button = QPushButton(label)
+            button.clicked.connect(handler)
+            extra_buttons.append(button)
         toggle = QPushButton("封存／恢復所選項目")
         delete_button = QPushButton("刪除未使用")
         set_button_role(add_button, "primary")
         set_button_role(delete_button, "danger")
 
         row = QHBoxLayout()
-        for button in (add_button, rename, toggle, delete_button):
+        for button in (add_button, rename, *extra_buttons, toggle, delete_button):
             row.addWidget(button)
         if self.REORDERABLE:
             # **排序是獨立視窗，不是表格上的兩顆按鈕。** 上一版把「上移／下移」放在
@@ -180,8 +191,8 @@ class CatalogPage(QWidget):
             fit_content=True,
             fit_rows=SETTINGS_TABLE_ROWS,
         )
-        # 「新增」與「排序設定」不需要選取，其餘三顆都是對所選項目動作 —— 沒選就停用。
-        bind_selection(self.table, rename, toggle, delete_button)
+        # 「新增」與「排序設定」不需要選取，其餘都是對所選項目動作 —— 沒選就停用。
+        bind_selection(self.table, rename, *extra_buttons, toggle, delete_button)
         layout = QVBoxLayout(self)
         layout.addLayout(row)
         # **篩選列自己一行**，不擠在按鈕列右邊 —— 四顆按鈕加一條搜尋框會把分頁的
@@ -489,11 +500,55 @@ class ItemsPage(CategoryPageBase):
 
     _values = staticmethod(item_values)
 
+    MOVE_LABEL = "更改所屬類別"
+    MOVE_NOTE = "已經記在這個項目底下的交易與模板會一起改到新的類別底下。"
+    """對話框底下那一句。交易記的是項目，類別是從它的上層算出來的，所以搬項目就是
+    搬它的整段歷史 —— 這件事使用者按下確定之前一定要看到。"""
+
     @property
     def parent_filter(self) -> QComboBox:
         """「所屬類別」那個下拉。篩選列自己持有它，這裡只是給頁面與測試一個入口。"""
         assert self.filter_bar is not None and self.filter_bar.parent_filter is not None
         return self.filter_bar.parent_filter
+
+    def _extra_selection_actions(self) -> tuple[tuple[str, Callable[[], None]], ...]:
+        return ((self.MOVE_LABEL, self.move_selected),)
+
+    def move_selected(self) -> None:
+        """把所選項目掛到另一個類別底下（A 類別的 a → B 類別的 a）。
+
+        下拉預設停在它現在的類別，使用者才看得出是從哪裡搬；選到同一個就什麼都不做。
+        使用中的類別只有一個時直接說「沒有其他類別」—— 開一張只能選同一個的表單是
+        在浪費使用者一次確定。
+        """
+        item = self.model.selected_item(self.table)
+        if item is None or item["status"] != "active":
+            return
+        current_parent = str(item["parent_id"])
+        parents = self.controller.category_options()
+        if all(str(parent["category_id"]) == current_parent for parent in parents):
+            QMessageBox.information(
+                self, "沒有其他類別", "請先在「類別」分頁建立另一個類別，才有地方可以搬。"
+            )
+            return
+        values = ask_form(
+            self,
+            f"更改「{item['name']}」的所屬類別",
+            [
+                ChoiceField(
+                    "parent_id",
+                    "所屬類別",
+                    [(str(parent["name"]), str(parent["category_id"])) for parent in parents],
+                    default=current_parent,
+                )
+            ],
+            note=self.MOVE_NOTE,
+        )
+        if values is None or str(values["parent_id"]) == current_parent:
+            return
+        self._finish(
+            self.controller.move_category(str(item["category_id"]), str(values["parent_id"]))
+        )
 
     def refresh(self) -> None:
         """先重填「所屬類別」下拉，再列資料。

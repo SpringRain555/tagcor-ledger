@@ -37,12 +37,13 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QLabel,
     QLineEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from tagcor_ledger.ui.widgets.forms import date_field
+from tagcor_ledger.ui.widgets.forms import date_field, select_data
 
 
 MIN_DIALOG_WIDTH = 420
@@ -70,11 +71,15 @@ class ChoiceField:
 
     以前「新增項目」用 `QInputDialog.getItem()` 拿回顯示文字，再用
     `labels.index(selected)` 反查 id —— 名稱一重複就會挑到錯的那一個。
+
+    `default` 是一開始選的**值**（不是顯示文字）；找不到就停在第一個。
+    「更改所屬類別」用它讓下拉開在項目現在的類別上 —— 使用者才看得出來是從哪裡搬。
     """
 
     key: str
     label: str
     options: Sequence[tuple[str, Any]] = field(default_factory=tuple)
+    default: Any = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,12 +100,24 @@ Field = TextField | ChoiceField | DateField
 
 
 class SimpleFormDialog(QDialog):
-    """幾個欄位 ＋ 確定／取消。填完按一次就好。"""
+    """幾個欄位 ＋ 確定／取消。填完按一次就好。
 
-    def __init__(self, title: str, fields: Sequence[Field], parent: QWidget) -> None:
+    `note` 是欄位底下的一句提醒（`hintLabel`），給「按下確定會連帶發生什麼」用 ——
+    例如更改所屬類別時，已經記過的交易會跟著搬。空的就不放。
+    """
+
+    def __init__(
+        self,
+        title: str,
+        fields: Sequence[Field],
+        parent: QWidget | None,
+        *,
+        note: str = "",
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self._fields = list(fields)
+        self._note = note
         self._widgets: dict[str, QLineEdit | QComboBox | QDateEdit] = {}
         self._build()
 
@@ -112,6 +129,8 @@ class SimpleFormDialog(QDialog):
                 combo = QComboBox()
                 for label, value in spec.options:
                     combo.addItem(label, value)
+                if spec.default is not None:
+                    select_data(combo, spec.default)
                 self._widgets[spec.key] = combo
                 form.addRow(spec.label, combo)
                 continue
@@ -140,6 +159,11 @@ class SimpleFormDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
+        if self._note:
+            note = QLabel(self._note)
+            note.setObjectName("hintLabel")
+            note.setWordWrap(True)
+            layout.addWidget(note)
         layout.addWidget(self.buttons)
         # **輸入格要有可用的寬度。** 沒有這一行時對話框會縮到標籤與內容的自然寬度，
         # 而中文標籤（「實際金額（TWD）」七個全形字）比輸入格寬得多 —— 實機截圖上
@@ -188,10 +212,14 @@ class SimpleFormDialog(QDialog):
 
 
 def ask_form(
-    parent: QWidget, title: str, fields: Sequence[Field]
+    parent: QWidget,
+    title: str,
+    fields: Sequence[Field],
+    *,
+    note: str = "",
 ) -> dict[str, Any] | None:
     """開一張小表單。**取消回傳 `None`** —— 那不是失敗，呼叫端不要跳錯誤訊息。"""
-    dialog = SimpleFormDialog(title, fields, parent)
+    dialog = SimpleFormDialog(title, fields, parent, note=note)
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.values()

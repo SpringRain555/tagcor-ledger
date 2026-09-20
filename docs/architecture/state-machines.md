@@ -124,6 +124,17 @@ stateDiagram-v2
 `CHECK (level IN (1, 2))`，且 `(level=1 AND parent_id IS NULL) OR (level=2 AND parent_id IS NOT NULL)`。
 第一層叫**類別**，第二層叫**項目**。沒有第三層，也不打算有 —— 理由見 `docs/research/market-scan.md` P1。
 
+**項目可以換所屬類別**（`move_category`，2026-09-20 起；操作設定 → 項目 → 「更改所屬類別」）。
+`parent_id` 不是狀態，改它不經過上面的轉移表，但有四道門：只有**使用中的項目**能搬
+（`CATEGORY_NOT_FOUND`／`CATEGORY_NOT_AN_ITEM`）、目標要是**使用中的第一層**
+（`CATEGORY_PARENT_INVALID`）、目標底下不能已有**同名的使用中項目**（`CATEGORY_ACTIVE_NAME_CONFLICT`）、
+而且真的要換（`CATEGORY_PARENT_UNCHANGED`）。
+
+**歷史交易與模板跟著搬，而且不用碰它們。** 交易記的是項目（`category_allocations.category_id`），
+類別是查詢時從 `parent_id` 算出來的 —— 所以「A 類別的 a → B 類別的 a」之後，a 底下每一筆舊交易在
+交易紀錄、類別篩選與統計裡都算在 B 底下。唯一要重算的是 FTS 索引（它把上層名稱也放進去了）。
+這是刻意的：搬的是**同一個項目**，不是「封存舊的、在 B 底下新建一個」。搬完它排在 B 的最後。
+
 ---
 
 ## 3. 待確認項目：`deposit_events`

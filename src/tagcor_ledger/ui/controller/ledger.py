@@ -102,6 +102,10 @@ class LedgerSection(ControllerBase):
     def delete_category(self, category_id: str) -> Result:
         return self.categories.delete(category_id)
 
+    def move_category(self, category_id: str, parent_id: str) -> Result:
+        """把一個項目掛到另一個類別底下。歷史交易與模板跟著走。"""
+        return self.categories.move(category_id, parent_id=parent_id)
+
     # --- 名冊的自訂順序與排序規格 -------------------------------------------
 
     def set_category_order(

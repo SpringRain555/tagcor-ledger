@@ -107,6 +107,8 @@ ERROR_MESSAGES: dict[str, str] = {
         "能當所屬類別，沒有第三層。"
     ),
     "CATEGORY_PARENT_NOT_ACTIVE": "所屬類別已經封存了。請先恢復它，再恢復這個項目。",
+    "CATEGORY_NOT_AN_ITEM": "只有項目可以更改所屬類別，類別本身沒有上一層。",
+    "CATEGORY_PARENT_UNCHANGED": "這個項目已經在這個類別底下了。",
     "CATEGORY_HAS_CHILDREN": "這個類別底下還有項目，不能刪除。請先處理掉所有子項目。",
     "CATEGORY_HAS_ACTIVE_CHILDREN": (
         "這個類別底下還有使用中的項目，不能封存。請先把子項目封存 —— 否則會出現"
