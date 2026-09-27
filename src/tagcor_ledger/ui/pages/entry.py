@@ -4,14 +4,15 @@
 
 1. **金額是主角，但它排在最後面，而且只靠字重說話。** 它是唯一每次都必須手打的欄位，
    所以是粗體、`Ctrl+N` 直接聚焦到它 —— **字級與高度與其他欄位一致**。
-   欄位由上到下照使用者實際填寫的順序：先決定這筆錢的身分（帳戶、類別、項目、哪一天），
-   最後才打金額。那些欄位多半沿用上次或用預設值，一路確認下來，游標最後落在唯一要
+   欄位由上到下照使用者實際填寫的順序：先決定這筆錢的身分（帳戶、哪一天、類別、項目），
+   最後才打金額。日期緊跟在帳戶後面（2026-09-27 使用者指定）—— 補記過去幾天的帳時，
+   「哪個帳戶、哪一天」是一起決定的，之後才一筆一筆換類別。那些欄位多半沿用上次或用預設值，一路確認下來，游標最後落在唯一要
    動手的那一格。（建立順序本來就是這個順序，所以 Qt 的預設 Tab 順序與眼睛看到的
    順序也終於一致。）
 
    **強調的手段與位置是綁在一起的。** 這個欄位曾經同時放大三個維度（15pt、600、
    40px 高），那是它還排在第三列、緊貼著「流向」的年代訂的 —— 在最上面當標題看剛好。
-   搬到日期與備註之間之後，上下都是一般高度的欄位，同樣的對比就從「標題」變成
+   搬到項目與備註之間之後，上下都是一般高度的欄位，同樣的對比就從「標題」變成
    「中間凸一塊」。樣式一個字都沒動，是順序讓它換了個意思。
 2. **流向用三顆分段按鈕，不是下拉選單。** 下拉要「點開、找、再點」三個動作；
    三顆按鈕一下就好。選項永遠只有三個，不會長出第四個。
@@ -103,9 +104,9 @@ class EntryPage(QWidget):
         self.scope_row = QWidget()
         self.account = QComboBox()
         self.destination = QComboBox()
+        self.occurred_at = date_field()
         self.category = QComboBox()
         self.detail = QComboBox()
-        self.occurred_at = date_field()
         self.amount = QLineEdit()
         self.description = QLineEdit()
         self.status = status_label()
@@ -168,15 +169,15 @@ class EntryPage(QWidget):
         form.addRow("轉帳對象", self.scope_row)
         form.addRow("帳戶", self.account)
         form.addRow("轉入帳戶", self.destination)
+        form.addRow("日期", self.occurred_at)
         form.addRow("類別", self.category)
         form.addRow("項目", self.detail)
-        form.addRow("日期", self.occurred_at)
         form.addRow("金額（TWD）", self.amount)
         form.addRow("備註", self.description)
         form.addRow("", self.status)
         # 「清空」跟 Esc 是同一件事（`clear_form()`），只是做成看得到的按鈕。
-        # 它刻意**不**清流向／帳戶／類別 —— 連記幾筆同類的帳時那幾格本來就該留著，
-        # 儲存成功之後的自動清除也是同一個範圍。
+        # 它刻意**不**清流向／帳戶／類別 —— 連記幾筆同類的帳時那幾格本來就該留著。
+        # 儲存成功之後的自動清除範圍再小一格：連日期也留著（`_clear_after_save()`）。
         actions = QHBoxLayout()
         actions.setSpacing(8)
         actions.addWidget(self.save_button)
@@ -294,11 +295,24 @@ class EntryPage(QWidget):
         self.amount.setFocus()
 
     def clear_form(self) -> None:
-        self.saved_message_timer.stop()
+        """「清空」與 Esc：清金額、備註，**日期回今天**。
+
+        儲存成功後**不**走這裡 —— 那條路保留日期，見 `_clear_after_save()`。
+        """
         self.occurred_at.setDate(QDate.currentDate())
+        self._clear_after_save()
+        show_status(self.status, "")
+
+    def _clear_after_save(self) -> None:
+        """儲存成功後清掉的範圍：金額與備註。**日期留著。**
+
+        補記前幾天的帳時，同一天常常連記好幾筆；以前每存一筆日期就跳回今天，
+        下一筆忘了改就記錯天，而且畫面上完全看不出來（2026-09-27 使用者回報）。
+        要回今天就按「清空」。
+        """
+        self.saved_message_timer.stop()
         self.amount.clear()
         self.description.clear()
-        show_status(self.status, "")
         self.amount.setFocus()
 
     def submit(self) -> None:
@@ -319,7 +333,7 @@ class EntryPage(QWidget):
             description=self.description.text().strip(),
         )
         if result.success:
-            self.clear_form()
+            self._clear_after_save()
             show_status(self.status, "交易已儲存。", ok=True)
             self.saved_message_timer.start()
             self.saved.emit()

@@ -61,6 +61,8 @@ def test_entry_page_hides_the_label_together_with_the_field(window) -> None:
 def test_the_entry_form_asks_in_the_order_the_user_fills_it(window) -> None:
     """欄位由上到下＝使用者實際填寫的順序：先決定這筆錢的身分，最後才打金額。
 
+    順序是 帳戶 → 日期 → 類別 → 項目 → 金額 → 備註（2026-09-27 起日期緊跟帳戶）。
+
     **量的是 y 座標，不是 `addRow` 的呼叫順序。** 只在轉帳時出現的那兩列各自要貼著
     自己的第一層（轉帳對象接在流向後面、轉入帳戶接在帳戶後面），而那件事只有排出來
     的版面看得出來。金額靠**字重**當主角（`amountInput` 只留 `font-weight`），
@@ -75,9 +77,9 @@ def test_the_entry_form_asks_in_the_order_the_user_fills_it(window) -> None:
     QApplication.processEvents()
     fields = (
         page.account,
+        page.occurred_at,
         page.category,
         page.detail,
-        page.occurred_at,
         page.amount,
         page.description,
     )
@@ -163,6 +165,27 @@ def test_a_failure_right_after_a_success_is_not_wiped_by_the_timer(window, qtbot
     shown = page.status.text()
     qtbot.wait(200)
     assert page.status.text() == shown, "失敗訊息被上一筆成功的計時器清掉了"
+
+
+def test_saving_keeps_the_date_the_user_picked(window) -> None:
+    """儲存成功後日期**不**跳回今天 —— 補記前幾天時，同一天常連記好幾筆。
+
+    以前 `submit()` 成功後走 `clear_form()`，日期被設回今天，下一筆忘了改就記錯天，
+    而畫面上完全看不出來。金額與備註照樣清掉。
+    """
+    page = window.entry
+    picked = QDate.currentDate().addDays(-3)
+    page.select_entry_type("expense")
+    page.occurred_at.setDate(picked)
+    page.amount.setText("85")
+    page.description.setText("午餐")
+
+    page.submit()
+
+    assert page.status.property("state") == "ok", page.status.text()
+    assert page.occurred_at.date() == picked
+    assert page.amount.text() == ""
+    assert page.description.text() == ""
 
 
 def test_the_clear_button_does_what_escape_does(window) -> None:
@@ -321,6 +344,11 @@ def test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates(qtbot) -> N
     **斷言寫成「文字矩形幾乎等於整格」而不是「放得下 26 這兩個字」**，因為欄寬與字型
     會隨平台改變（offscreen 用的是 fallback 字型），而「有沒有被那圈 padding 吃掉」
     是不變的：壞掉時 33x21 的格子只剩 17x7，修好之後就是整格。
+
+    **選取中的那一格要另外量，而且要帶 `State_Selected`。** 2026-09-27 使用者看到
+    「選到的那一天」顯示成「...」：`QTableView::item:selected { padding: 6px 8px }`
+    比日曆那條 `padding: 0` 多一個偽類，優先度較高，於是只有被選的那格又被擠爆。
+    以前這條測試量的 option 沒有選取狀態，那條規則根本沒有機會套上來。
     """
     # **主題一定要真的套上去，否則這條測試什麼都沒驗到。** 樣式表是掛在 QApplication
     # 上的，只有建過 MainWindow 的測試才會設它 —— 單獨跑這一條時它是空的，於是
@@ -331,7 +359,8 @@ def test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates(qtbot) -> N
         "樣式表裡沒有那條全域的 item padding —— 這條守門失去了它要防的東西"
     )
 
-    field = date_field()
+    # 選在兩位數的日子，選取中的那格才會被下面的迴圈量到。
+    field = date_field(QDate(2026, 9, 27))
     qtbot.addWidget(field)
     calendar = field.calendarWidget()
     assert calendar is not None
@@ -344,6 +373,7 @@ def test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates(qtbot) -> N
     model = view.model()
 
     checked = 0
+    selected_checked = 0
     for row in range(model.rowCount()):
         for column in range(model.columnCount()):
             index = model.index(row, column)
@@ -354,6 +384,9 @@ def test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates(qtbot) -> N
             option.initFrom(view)
             option.rect = view.visualRect(index)
             view.itemDelegate().initStyleOption(option, index)
+            if view.selectionModel().isSelected(index):
+                option.state |= QStyle.StateFlag.State_Selected
+                selected_checked += 1
             text_rect = view.style().subElementRect(
                 QStyle.SubElement.SE_ItemViewItemText, option, view
             )
@@ -368,6 +401,7 @@ def test_calendar_cells_are_wide_and_tall_enough_for_two_digit_dates(qtbot) -> N
             )
             checked += 1
     assert checked >= 10, f"只檢查到 {checked} 個兩位數日期，抓格子的方式有問題"
+    assert selected_checked == 1, "沒量到選取中的那一格，`:selected` 那條規則等於沒被驗到"
 
 
 def test_the_calendar_is_tall_enough_for_six_week_rows(qtbot) -> None:

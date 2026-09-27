@@ -668,6 +668,17 @@ QCalendarWidget QAbstractItemView::item {
     padding: 0;
 }
 
+/* **選取中的那一格要自己再清一次。** 「表格」那一節的 `QTableView::item:selected`
+ * 多一個偽類，優先度比上面那條高，會把 `padding: 6px 8px` 與上下框線套回來 ——
+ * 2026-09-27 使用者看到的就是「只有選到的那一天」變成「...」，底色也跑成表格的灰。
+ * 底色與字色照 view 的 `selection-*`：亮底深字，一眼就找得到是哪一天。 */
+QCalendarWidget QAbstractItemView::item:selected {
+    padding: 0;
+    border: 0;
+    background-color: #E8E8EA;
+    color: #0D0D0F;
+}
+
 QCalendarWidget QAbstractItemView {
     color: #E8E8EA;
     background-color: #16161A;
