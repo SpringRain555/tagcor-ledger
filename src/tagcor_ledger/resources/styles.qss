@@ -160,6 +160,14 @@ QLineEdit#amountInput {
     font-weight: 600;
 }
 
+/* 輸入框內右緣的單位提示（`forms.add_suffix_hint()`）：跟 placeholder 同一個灰，
+ * 不加粗 —— 它是背景資訊，不該跟金額本身搶。 */
+QLabel#inputSuffix {
+    color: #9A9AA5;
+    background-color: transparent;
+    font-weight: 400;
+}
+
 QLineEdit:hover,
 QComboBox:hover,
 QDateEdit:hover,
@@ -365,13 +373,17 @@ QPushButton#dangerButton:disabled {
 }
 
 /* 流向切換：支出／收入／轉帳三顆連在一起，一下就選好，不必展開下拉 */
+/* **高度要跟輸入欄一模一樣**（min-height 30 ＋ 上下 padding 7 ＋ 框線 1 ＝ 46）。
+ * 記帳頁的「轉帳對象」這列按鈕換掉的是一列下拉；以前按鈕高 50（32 ＋ 8×2 ＋ 2），
+ * 切到轉帳底下的金額與備註就往下跳 4 px。要在 QSS 裡對齊 —— 程式裡 setFixedHeight
+ * 沒用，QSS 的 min-height 是 polish 時才套上去的，會蓋掉它。 */
 QPushButton#segmentButton {
     color: #9A9AA5;
     background-color: #16161A;
     border: 1px solid #33333C;
     border-radius: 6px;
-    padding: 8px 20px;
-    min-height: 32px;
+    padding: 7px 20px;
+    min-height: 30px;
     font-weight: 600;
 }
 

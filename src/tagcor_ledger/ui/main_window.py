@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
+from PySide6.QtGui import QAction, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -36,7 +36,6 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.app import window_state
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.app.window_state import WindowGeometry, load_geometry, save_geometry
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.navigation import (
     ALL_PAGES,
@@ -92,7 +91,7 @@ class MainWindow(QMainWindow):
         # 下限寫死是安全的：每一頁都能捲，內容不會被這個下限擠爛，
         # 而它給了版面測試一個固定的最壞情況。
         self.setMinimumSize(window_state.MINIMUM_WIDTH, window_state.MINIMUM_HEIGHT)
-        self._restore_geometry()
+        self._place_at_default_size()
 
         self._page_widgets: dict[PageId, QWidget] = {
             PageId.OVERVIEW: self.overview,
@@ -222,26 +221,25 @@ class MainWindow(QMainWindow):
 
     # --- 視窗幾何 -------------------------------------------------------------
 
-    def _restore_geometry(self) -> None:
-        """回到上次的大小與位置。讀不到就用預設值 —— 這個檔案壞掉不該讓程式開不起來。"""
-        saved = load_geometry(self.controller.paths.config_dir)
-        if saved is None:
-            self.resize(window_state.DEFAULT_WIDTH, window_state.DEFAULT_HEIGHT)
-            return
-        self.setGeometry(saved.x, saved.y, saved.width, saved.height)
+    def _place_at_default_size(self) -> None:
+        """每次啟動都是預設大小、置中在主螢幕 —— **不記上次的大小**（見 `window_state`）。
 
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        geometry = self.normalGeometry() if self.isMaximized() else self.geometry()
-        save_geometry(
-            self.controller.paths.config_dir,
-            WindowGeometry(
-                x=geometry.x(),
-                y=geometry.y(),
-                width=geometry.width(),
-                height=geometry.height(),
-            ),
+        螢幕比預設小（例如 1366×768 再加 125% 縮放）時縮到可用範圍內，
+        不讓標題列或底部跑到螢幕外面。
+        """
+        width, height = window_state.DEFAULT_WIDTH, window_state.DEFAULT_HEIGHT
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            self.resize(width, height)
+            return
+        available = screen.availableGeometry()
+        width = min(width, available.width())
+        height = min(height, available.height())
+        self.resize(width, height)
+        self.move(
+            available.x() + (available.width() - width) // 2,
+            available.y() + (available.height() - height) // 2,
         )
-        super().closeEvent(event)
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)

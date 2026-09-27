@@ -54,13 +54,11 @@ from tagcor_ledger.infrastructure.clock import today_taipei
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import display_date, minor_text, rate_input_text, result_message
 from tagcor_ledger.ui.widgets.forms import date_field, fill_combo, select_data
+from tagcor_ledger.ui.widgets.layout import FORM_WIDTH
 from tagcor_ledger.ui.widgets.simple_form import TextField, ask_form
 
 MAX_TERM_MONTHS = 600
 """期長上限（月）＝ 50 年。比郵局最長的商品還寬，純粹是防手滑。"""
-
-DIALOG_TEXT_WIDTH = 720
-"""會換行的說明文字最寬多寬。見 `__init__` 裡「會換行的 QLabel 一定要給寬度上限」。"""
 
 
 class DepositContractDialog(QDialog):
@@ -119,9 +117,7 @@ class DepositContractDialog(QDialog):
             # `sizeHint()` 走的是「大致方形」的啟發式，於是一段四行的說明會把整個
             # 對話框撐到 1,157 px 寬（2026-08-23 實機截圖）—— 而它是一張表單，
             # 720 px 就是它該有的寬度。同一個坑 v0.22.0 的圓環圖例踩過，見 lessons。
-            # （記帳頁的 `FORM_WIDTH` 2026-09-27 放寬到 880，對話框不跟著放寬 ——
-            # 那次放寬是為了填滿頁面，對話框沒有要填的東西。）
-            label.setMaximumWidth(DIALOG_TEXT_WIDTH)
+            label.setMaximumWidth(FORM_WIDTH)
 
         account_row = QWidget()
         account_layout = QHBoxLayout(account_row)

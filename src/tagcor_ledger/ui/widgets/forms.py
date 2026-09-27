@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, cast
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, QEvent, QObject, Qt
 from PySide6.QtGui import QColor, QTextCharFormat
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QLabel,
     QLayout,
+    QLineEdit,
     QWidget,
 )
 
@@ -39,6 +40,55 @@ FUTURE_YEARS = 60
 定存的期長最長是 600 個月（`deposits.py` 的 `setRange(1, 600)`）＝ 50 年，
 所以下限就是 50；留到 60 是給起存日本身也在未來的情況一點餘裕。
 """
+
+
+SUFFIX_GAP = 10
+"""單位提示與輸入框右緣、以及與使用者打的字之間的距離（px）。"""
+
+
+class _SuffixPinner(QObject):
+    """輸入框改變大小時，把單位提示貼回右緣。parent 是輸入框，跟著它一起消失。"""
+
+    def __init__(self, edit: QLineEdit, label: QLabel) -> None:
+        super().__init__(edit)
+        self._edit = edit
+        self._label = label
+        edit.installEventFilter(self)
+        self.pin()
+
+    def pin(self) -> None:
+        hint = self._label.sizeHint()
+        self._label.resize(hint)
+        self._label.move(
+            self._edit.width() - hint.width() - SUFFIX_GAP,
+            (self._edit.height() - hint.height()) // 2,
+        )
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
+            self.pin()
+        return False
+
+
+def add_suffix_hint(edit: QLineEdit, text: str) -> QLabel:
+    """在輸入框**裡面**的最右邊放一個灰色的單位提示（例如「TWD」）。
+
+    單位寫在標籤上（「金額（TWD）」）會把整欄標籤撐寬；寫成 placeholder 則一開始打字
+    就消失。放在框內右緣、不擋輸入、永遠看得到 —— 右邊用 `setTextMargins` 讓出位置，
+    打再長的數字也不會跑到它底下。
+    """
+    label = QLabel(text, edit)
+    label.setObjectName("inputSuffix")
+    label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    margins = edit.textMargins()
+    edit.setTextMargins(
+        margins.left(),
+        margins.top(),
+        margins.right() + label.sizeHint().width() + SUFFIX_GAP,
+        margins.bottom(),
+    )
+    _SuffixPinner(edit, label)
+    return label
 
 
 def form_panel(form: QLayout, *, max_width: int = FORM_WIDTH) -> QWidget:

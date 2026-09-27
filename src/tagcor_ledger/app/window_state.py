@@ -1,23 +1,15 @@
-"""記住視窗的大小與位置。
+"""視窗的預設大小與下限。
 
-**這是 UI 狀態，不是帳務資料。** 所以它寫在 `config_dir`（跟 `system_paths.json`
-同一層），不進 `ledger.sqlite3` —— 帳務資料庫的每一次 schema 變動都要寫 migration，
-為了「上次視窗多大」付那個代價不划算，而且它也不該出現在備份與還原的語意裡。
-
-讀不到、格式壞掉、數字不合理，一律當成沒有設定過，回退到預設大小。
-**這個檔案壞掉不該讓程式開不起來。**
+**每次啟動都是預設大小，不記上次的大小與位置**（2026-09-27 使用者指定）。
+以前會把大小與位置寫進 `config_dir/window.json`、下次開的時候還原；那個檔案現在
+不讀也不寫。舊版留下的 `window.json` 放著無害，刪掉也無妨。
 """
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
-from pathlib import Path
-
-FILE_NAME = "window.json"
-
 DEFAULT_WIDTH = 1280
 DEFAULT_HEIGHT = 760
+"""每次啟動的大小。螢幕比這個小時，由 `MainWindow` 縮到螢幕可用範圍內。"""
 
 MINIMUM_WIDTH = 360
 MINIMUM_HEIGHT = 480
@@ -26,66 +18,3 @@ MINIMUM_HEIGHT = 480
 2026-09-27 從 1024×680 降到手機寬度：窄視窗改用頂端選單、每一頁自己捲動
 （`ui/widgets/layout.py`），不再需要整個視窗撐到最寬那一頁的寬度。
 360 是常見手機的 CSS 寬度下限。"""
-
-# 螢幕拔掉或解析度變小時，存下來的座標可能落在畫面外。給一個寬鬆的上限擋掉離譜的值。
-_MAX_REASONABLE = 20_000
-
-
-@dataclass(frozen=True)
-class WindowGeometry:
-    x: int
-    y: int
-    width: int
-    height: int
-
-
-def state_path(config_dir: Path) -> Path:
-    return config_dir / FILE_NAME
-
-
-def load_geometry(config_dir: Path) -> WindowGeometry | None:
-    """讀回上次的視窗大小與位置；沒有或不合理就回 `None`。"""
-    try:
-        raw = json.loads(state_path(config_dir).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(raw, dict):
-        return None
-    try:
-        geometry = WindowGeometry(
-            x=int(raw["x"]),
-            y=int(raw["y"]),
-            width=int(raw["width"]),
-            height=int(raw["height"]),
-        )
-    except (KeyError, TypeError, ValueError):
-        return None
-    if not MINIMUM_WIDTH <= geometry.width <= _MAX_REASONABLE:
-        return None
-    if not MINIMUM_HEIGHT <= geometry.height <= _MAX_REASONABLE:
-        return None
-    if abs(geometry.x) > _MAX_REASONABLE or abs(geometry.y) > _MAX_REASONABLE:
-        return None
-    return geometry
-
-
-def save_geometry(config_dir: Path, geometry: WindowGeometry) -> None:
-    """寫入視窗大小與位置。寫不進去就算了 —— 這不值得打斷關閉流程。"""
-    try:
-        config_dir.mkdir(parents=True, exist_ok=True)
-        state_path(config_dir).write_text(
-            json.dumps(
-                {
-                    "x": geometry.x,
-                    "y": geometry.y,
-                    "width": geometry.width,
-                    "height": geometry.height,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-    except OSError:
-        return

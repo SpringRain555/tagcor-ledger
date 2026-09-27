@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QDateTimeEdit,
+    QLabel,
     QStyle,
     QStyleOptionViewItem,
     QTableView,
@@ -101,6 +102,95 @@ def test_the_entry_form_asks_in_the_order_the_user_fills_it(window) -> None:
     transfer_tops = [field.y() for field in transfer_fields]
     assert transfer_tops == sorted(transfer_tops), transfer_tops
     assert len(set(transfer_tops)) == len(transfer_tops)
+
+
+def test_switching_flow_never_moves_the_fields_that_stay(window) -> None:
+    """切流向時，留著的欄位**一格都不動**。
+
+    2026-09-27 使用者回報「支出跟收入欄位一樣，位置卻不一致」。三個原因：
+    1. 列距隨視窗高度重算，切到轉帳多一列就變小，每個欄位都跟著跳；
+    2. 標籤欄寬度＝看得到的最寬標籤，轉帳多了四個字的標籤，所有欄位往右跳；
+    3. 分段按鈕比下拉高 4 px，「轉帳對象」換掉一列下拉，底下就往下跳 4 px。
+
+    支出、收入、轉帳・我的帳戶之間都是七列，所以金額、備註、儲存鈕的 y 要完全一樣；
+    x 則是四種情形都一樣。
+    """
+    page = window.entry
+    window.show_page(PageId.ENTRY)
+    fields = (page.account, page.occurred_at, page.amount, page.description, page.save_button)
+
+    def positions(entry_type: str, scope: str = "internal") -> list[tuple[int, int]]:
+        page.select_entry_type(entry_type)
+        page.select_transfer_scope(scope)
+        QApplication.processEvents()
+        return [(field.x(), field.y()) for field in fields]
+
+    expense = positions("expense")
+    assert positions("income") == expense
+    internal = positions("transfer", "internal")
+    assert internal[2:] == expense[2:], "我的帳戶之間也是七列，金額以下不該移動"
+    inbound = positions("transfer", "inbound")
+    xs = {x for x, _ in expense + internal + inbound}
+    assert len(xs) == 1, f"欄位左緣在切流向時橫移了：{sorted(xs)}"
+    assert positions("expense") == expense
+
+
+def test_labels_hug_their_fields(window) -> None:
+    """標籤的**字**貼著欄位左緣，不是只有標籤那個 widget 貼著。
+
+    標籤欄為了切流向不橫移而撐成同寬（`_pin_label_column()`），之後 `setLabelAlignment`
+    只管得到 widget 放哪，字預設靠左 ——「流向」兩個字就又離欄位一大段
+    （2026-09-27 截圖看到的）。量的是字的右緣，不是 widget 的右緣。
+    """
+    page = window.entry
+    window.show_page(PageId.ENTRY)
+    page.select_entry_type("expense")
+    QApplication.processEvents()
+    for field in (page.account, page.amount):
+        label = page.form.labelForField(field)
+        assert isinstance(label, QLabel)
+        text_right = label.x() + label.contentsRect().right() - (
+            label.contentsRect().width() - label.fontMetrics().horizontalAdvance(label.text())
+        ) * (0 if label.alignment() & Qt.AlignmentFlag.AlignRight else 1)
+        gap = field.x() - text_right
+        assert gap <= page.form.horizontalSpacing() + 2, (
+            f"「{label.text()}」的字離欄位 {gap} px"
+        )
+
+
+def test_the_message_sits_beside_the_clear_button(window) -> None:
+    """訊息在「清空」右邊，不是備註與按鈕之間獨立的一列。
+
+    獨立一列時沒有訊息也佔一列加兩段間距，備註與按鈕之間空一大塊（2026-09-27 使用者回報）。
+    """
+    page = window.entry
+    window.show_page(PageId.ENTRY)
+    page.select_entry_type("expense")
+    page.amount.setText("85")
+    page.submit()
+    QApplication.processEvents()
+
+    assert page.status.text() == "交易已儲存。"
+    assert page.status.x() > page.clear_button.x() + page.clear_button.width()
+    gap = page.save_button.y() - (page.description.y() + page.description.height())
+    assert gap == page.form.verticalSpacing(), (
+        f"備註與按鈕之間空了 {gap} px，比列距 {page.form.verticalSpacing()} 多"
+    )
+
+
+def test_the_currency_is_a_hint_inside_the_amount_field(window) -> None:
+    """「TWD」在金額框內右緣當背景提示，標籤只寫「金額」；打的字不會跑到它底下。"""
+    page = window.entry
+    window.show_page(PageId.ENTRY)
+    QApplication.processEvents()
+
+    label = page.form.labelForField(page.amount)
+    assert isinstance(label, QLabel) and label.text() == "金額"
+    suffix = page.amount.findChild(QLabel, "inputSuffix")
+    assert suffix is not None and suffix.text() == "TWD"
+    right_gap = page.amount.width() - (suffix.x() + suffix.width())
+    assert 0 < right_gap <= 16, f"TWD 沒有貼在右緣（離右邊 {right_gap} px）"
+    assert page.amount.textMargins().right() >= suffix.width(), "打的數字會跑到 TWD 底下"
 
 
 def test_entry_page_reports_success_without_the_error_colour(window) -> None:

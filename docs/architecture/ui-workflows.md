@@ -91,7 +91,8 @@ flowchart LR
 
 | 頁面 | 最大寬度 | 常數 |
 |---|---|---|
-| 記帳 | 880 | `FORM_WIDTH` |
+| 記帳 | 880 | `ENTRY_WIDTH`（外距左右 40，`ENTRY_PAGE_MARGINS`） |
+| 盤點與設定裡的表單區 | 720 | `FORM_WIDTH`（`form_panel()` 的預設） |
 | 資產總覽 | 980 | `SUMMARY_WIDTH` |
 | 其餘（有資料表的） | 1600 | `TABLE_WIDTH` |
 
@@ -106,9 +107,10 @@ flowchart LR
   欄位上方、轉帳對象三顆按鈕改直排（`entry.WRAP_WIDTH`）。窄視窗的外距從 24 收到 12。
 - 捲動區不改變「一般螢幕不該捲」這件事：`tests/ui/test_layout.py` 守住**每一頁**的
   最小尺寸裝得進 1024×880 扣掉側邊欄。
-- **記帳頁的標籤靠右貼著欄位**（窄版面標籤在上方時靠左），列距在高的視窗會把一半的
-  多餘高度分給列（10～22 px，`entry.MAX_ROW_SPACING`），不讓表單全擠在上半部。
-- 視窗大小與位置記在 `config_dir/window.json`。那是 UI 狀態不是帳務資料，**不進資料庫**。
+- **記帳頁的標籤靠右貼著欄位**（窄版面標籤在上方時靠左）。列距固定 16 px ——
+  試過隨視窗高度伸縮，切到轉帳時列距重算、每個欄位都在跳，所以不做。
+- **每次啟動都是預設大小（1280×760，螢幕較小時縮到可用範圍）、置中**，不記上次的
+  大小與位置（2026-09-27 使用者指定）。舊版的 `config_dir/window.json` 不讀也不寫。
 
 ## 視覺主題
 
@@ -151,7 +153,7 @@ flowchart LR
 - **側邊欄裡不得有任何點不動的東西。** 分組不放標題，靠位置表達（日常在上、設定沉底，中間留白）。這條路用「程度差異」試過兩次都失敗，第三次是把標籤整個移除；理由見 `ui/navigation.py` 的模組說明與 `docs/lessons.md`。有測試守著。
 - **側邊欄兩組清單的 current row 必須一直是有效的**，而且「現在是哪一頁」由 `Sidebar._current` 記，不從 widget 狀態反推。把 current row 設成 `-1`，`QAbstractItemView::focusInEvent` 就會自己把它設成第 0 列並發出 `currentRowChanged` —— 焦點一碰到側邊欄，畫面就換頁。**不要把 `currentRowChanged` 當成「使用者選了什麼」。**
 - **導覽用 `PageId`，不得拿顯示文字當 key。** 頁面身分在 `ui/navigation.py` 的 `PageId`，顯示文字在 `LABELS`；改 `LABELS` 不影響任何查表。側邊欄順序的唯一正本是 `DAILY_PAGES` / `SETTINGS_PAGES`，改了要同步 `docs/architecture/ui-workflows.md`（`tests/unit/test_docs_drift.py` 會逐字比對）。
-- **版面走 `widgets/layout.py` 的 `page_layout(self, width=...)`**，不要各頁自己 `QVBoxLayout(self)`。寬度上限：表單 `FORM_WIDTH`、摘要 `SUMMARY_WIDTH`、有資料表的 `TABLE_WIDTH`。
+- **版面走 `widgets/layout.py` 的 `page_layout(self, width=...)`**，不要各頁自己 `QVBoxLayout(self)`。寬度上限：記帳 `ENTRY_WIDTH`、表單 `FORM_WIDTH`、摘要 `SUMMARY_WIDTH`、有資料表的 `TABLE_WIDTH`。
 - **欄位少的表格用 `fit_content=True` 收寬**；操作設定裡的表格另外用 `fit_rows=SETTINGS_TABLE_ROWS` 收高度，而且該分頁最後要有 `addStretch()`，否則 layout 會把多餘高度平均塞進元件之間。
 - **有自由文字欄（名稱、備註）的表要同時指定 `stretch_column`，讓那一欄讓路。** 收寬設的是 `setMaximumWidth`，那是**上限不是保證** —— 名稱一長，`ResizeToContents` 的欄寬總和就超過分頁能給的寬度，欄位照樣溢出、底下冒出橫向捲軸；而這些表是固定高度，捲軸會從那個高度裡扣掉自己的厚度，**最後一列被切掉**，看起來像資料沒載完。指定之後空間夠時 stretch 欄分到的剛好是自己的內容寬度（畫面不變），不夠時只有它被壓縮成 `…`。`setup_table` 另外關掉 `wordWrap` —— 列高釘死成單行，折行只會讓省略看起來像壞掉。
 - **UI 用詞與資料表名稱可以不同**（例如使用者看到「項目」，schema 是 `categories` 的第二層）。已淘汰的 UI 用詞列在 `tests/unit/test_architecture.py` 的 `RETIRED_UI_WORDS`，該測試掃 `ui/` 與 `application/` 的字串常數（docstring 與註解不算）。**已移除的功能名稱也在那份名單上** —— 一顆通往不存在功能的按鈕比錯的用詞更糟。
@@ -254,7 +256,14 @@ flowchart LR
 - **對外轉帳存成收入／支出，不是 `transfer`。** 判準是總資產有沒有變；
   理由與被否決的替代方案見 [ADR-0010](../decisions/ADR-0010-external-transfers.md)。
 - 內部轉帳的**轉入帳戶預設會避開來源帳戶** —— 兩個下拉停在同一個帳戶時按儲存必定失敗。
-- 成功與失敗共用一個訊息位置，但顏色不同（綠／紅）。**「交易已儲存。」三秒後自己消失**
+- **切流向時，留著的欄位一格都不動**：支出、收入、轉帳・我的帳戶之間都是七列，
+  金額以下的位置完全相同；欄位左緣四種情形都相同。三個條件缺一不可 —— 列距固定、
+  標籤欄固定成所有可能標籤裡最寬的（`_pin_label_column()`）、分段按鈕與下拉一樣高
+  （QSS 的 `segmentButton`）。`test_switching_flow_never_moves_the_fields_that_stay` 守著。
+- **幣別在金額框內右緣當背景提示**（灰色「TWD」，`forms.add_suffix_hint()`），
+  標籤只寫「金額」—— 寫在標籤上會把整欄標籤撐寬。
+- 成功與失敗共用一個訊息位置，**在「清空」的右邊**，顏色不同（綠／紅）。
+  不是獨立一列：那樣沒訊息也佔一列，備註與按鈕之間空一大塊。**「交易已儲存。」三秒後自己消失**
   （`entry.SAVED_MESSAGE_MS`）—— 留著不動的話，填第二筆時畫面上還寫著上一筆存了，
   分不出眼前這筆存了沒。失敗訊息不會被清掉，那是要讀完的。
 - 「儲存交易」旁邊有一顆**「清空」**，與 `Esc` 是同一件事：日期回今天、金額與備註清空，

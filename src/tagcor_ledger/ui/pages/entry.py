@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import ENTRY_NAMES, minor_text, result_message
 from tagcor_ledger.ui.widgets.forms import (
+    add_suffix_hint,
     date_field,
     fill_combo,
     iso_from_date,
@@ -64,7 +65,7 @@ from tagcor_ledger.ui.widgets.forms import (
     show_status,
     status_label,
 )
-from tagcor_ledger.ui.widgets.layout import FORM_WIDTH, page_layout
+from tagcor_ledger.ui.widgets.layout import ENTRY_PAGE_MARGINS, ENTRY_WIDTH, page_layout
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 ENTRY_TYPES = ("expense", "income", "transfer")
@@ -95,16 +96,12 @@ SAVED_MESSAGE_MS = 3000
 """
 
 
-ROW_SPACING = 10
-"""欄位之間的最小間距。"""
+ROW_SPACING = 16
+"""欄位之間的間距。**固定值，不隨視窗高度變。**
 
-MAX_ROW_SPACING = 22
-"""視窗很高時，間距最多長到這裡。
-
-表單只有七、八列，高的視窗下全擠在上半部、下面空一大片（2026-09-27 使用者回報
-「下方留白太多」）。所以多出來的高度**分一半**給列距 —— 只分一半，是為了永遠比頁面
-矮一點，捲動區才不會因為列距長大而冒出捲軸；有上限，是因為列距再大，一列的標籤
-與下一列就分不出誰跟誰一組了。"""
+2026-09-27 試過「高的視窗把一半多餘高度分給列距」，結果切到轉帳時多一列、間距跟著
+重算變小，**每一個欄位都換了位置**——支出與收入明明欄位一樣，切來切去卻在跳。
+欄位的位置要穩定，使用者才能不看就點到；下方留白是換來的代價。"""
 
 WRAP_WIDTH = 560
 """頁面窄於這個寬度時，標籤移到欄位上方、轉帳對象的三顆按鈕改成直排。
@@ -121,6 +118,7 @@ class EntryPage(QWidget):
         self.flow_buttons = QButtonGroup(self)
         self.scope_buttons = QButtonGroup(self)
         self.scope_row = QWidget()
+        self._labels: list[QLabel] = []
         self.account = QComboBox()
         self.destination = QComboBox()
         self.occurred_at = date_field()
@@ -178,15 +176,16 @@ class EntryPage(QWidget):
 
         self.amount.setObjectName("amountInput")
         self.amount.setPlaceholderText("0")
+        # 幣別放在框內右緣當背景提示，標籤就只要兩個字 —— 見 `add_suffix_hint()`。
+        add_suffix_hint(self.amount, "TWD")
         self.description.setPlaceholderText("可留空")
 
         self.form = QFormLayout()
         form = self.form
         form.setHorizontalSpacing(16)
         form.setVerticalSpacing(ROW_SPACING)
-        # **標籤靠右，貼著自己的欄位。** 靠左時標籤欄的寬度由最長的「金額（TWD）」決定，
-        # 「流向」「帳戶」這些兩個字的標籤離欄位一百多 px（2026-09-27 使用者回報）。
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # **標籤靠右，貼著自己的欄位**（`_align_labels()`）。靠左時標籤欄的寬度由最長的
+        # 那個標籤決定，「流向」「帳戶」這些兩個字的標籤離欄位一百多 px（2026-09-27 使用者回報）。
         # **順序照使用者實際填寫的順序**，見模組說明的取捨 1。只在轉帳時出現的兩列
         # 各自貼著自己的第一層：轉帳對象是流向的第二層，轉入帳戶是「帳戶」的另一半。
         form.addRow("流向", flow_row)
@@ -196,9 +195,8 @@ class EntryPage(QWidget):
         form.addRow("日期", self.occurred_at)
         form.addRow("類別", self.category)
         form.addRow("項目", self.detail)
-        form.addRow("金額（TWD）", self.amount)
+        form.addRow("金額", self.amount)
         form.addRow("備註", self.description)
-        form.addRow("", self.status)
         # 「清空」跟 Esc 是同一件事（`clear_form()`），只是做成看得到的按鈕。
         # 它刻意**不**清流向／帳戶／類別 —— 連記幾筆同類的帳時那幾格本來就該留著。
         # 儲存成功之後的自動清除範圍再小一格：連日期也留著（`_clear_after_save()`）。
@@ -206,10 +204,15 @@ class EntryPage(QWidget):
         actions.setSpacing(8)
         actions.addWidget(self.save_button)
         actions.addWidget(self.clear_button)
-        actions.addStretch()
+        # **訊息放在「清空」右邊，不是獨立一列。** 獨立一列時沒有訊息也佔著一列加兩段
+        # 間距，備註與按鈕之間空一大塊；出現訊息時它長高，按鈕還會被往下推。
+        # 放在按鈕旁邊、吃掉剩下的寬度，長訊息就在那裡換行，上面的欄位一格都不會動。
+        actions.addSpacing(8)
+        actions.addWidget(self.status, 1)
         form.addRow("", actions)
+        self._pin_label_column()
 
-        layout = page_layout(self, width=FORM_WIDTH)
+        layout = page_layout(self, width=ENTRY_WIDTH, margins=ENTRY_PAGE_MARGINS)
         layout.addWidget(title)
         layout.addLayout(form)
         layout.addStretch()
@@ -236,8 +239,44 @@ class EntryPage(QWidget):
         """標籤是不是在欄位上方（窄版面）。給測試用。"""
         return self.form.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
 
+    def _pin_label_column(self) -> None:
+        """標籤欄固定成「任何流向下最寬的那個標籤」的寬度。
+
+        標籤欄的寬度是**看得到的**標籤裡最寬的那個：支出時全是兩個字，切到轉帳就多了
+        「轉帳對象」「轉出帳戶」四個字 —— 標籤欄一變寬，每個欄位的左緣都往右跳。
+        先把每一個標籤撐到同一個寬度，切流向時欄位就一格都不橫移。
+        """
+        labels: list[QLabel] = []
+        for row in range(self.form.rowCount()):
+            item = self.form.itemAt(row, QFormLayout.ItemRole.LabelRole)
+            label = item.widget() if item is not None else None
+            if isinstance(label, QLabel):
+                labels.append(label)
+        if not labels:
+            return
+        texts = [label.text() for label in labels] + list(SCOPE_ACCOUNT_LABELS.values())
+        metrics = labels[0].fontMetrics()
+        width = max(metrics.horizontalAdvance(text) for text in texts)
+        self._labels = labels
+        for label in labels:
+            label.setMinimumWidth(width)
+        # 標籤撐到同寬之後，`setLabelAlignment` 只管得到「整個標籤放在欄裡哪裡」，
+        # 管不到字在標籤裡靠哪邊 —— 字的對齊要設在每一個標籤自己身上。
+        self._align_labels(wrapped=False)
+
+    def _align_labels(self, *, wrapped: bool) -> None:
+        """標籤在左時靠右貼著欄位；標籤在上方時靠左，跟欄位的左緣對齊。"""
+        horizontal = Qt.AlignmentFlag.AlignLeft if wrapped else Qt.AlignmentFlag.AlignRight
+        self.form.setLabelAlignment(horizontal | Qt.AlignmentFlag.AlignVCenter)
+        # 標籤在左時跟欄位一樣高，`AlignVCenter` 才真的對到欄位中線 —— QFormLayout 把
+        # 標籤放在列的頂端，標籤只有字高時字會比欄位裡的字高出好幾 px。
+        row_height = 0 if wrapped else self.account.sizeHint().height()
+        for label in self._labels:
+            label.setAlignment(horizontal | Qt.AlignmentFlag.AlignVCenter)
+            label.setMinimumHeight(row_height)
+
     def _fit_to_size(self) -> None:
-        """窄的時候標籤移到上方、按鈕直排；高的時候把一部分多出來的高度給列距。"""
+        """窄的時候標籤移到上方、轉帳對象的按鈕直排。"""
         wrap = self.width() < WRAP_WIDTH
         if wrap != self.is_wrapped():
             self.form.setRowWrapPolicy(
@@ -246,25 +285,10 @@ class EntryPage(QWidget):
                 else QFormLayout.RowWrapPolicy.DontWrapRows
             )
             # 標籤在上方時靠左 —— 靠右會讓它飄在欄位右上角，跟欄位對不起來。
-            self.form.setLabelAlignment(
-                Qt.AlignmentFlag.AlignLeft if wrap else Qt.AlignmentFlag.AlignRight
-            )
+            self._align_labels(wrapped=wrap)
             self._scope_layout.setDirection(
                 QBoxLayout.Direction.TopToBottom if wrap else QBoxLayout.Direction.LeftToRight
             )
-
-        visible = sum(
-            1 for row in range(self.form.rowCount()) if self.form.isRowVisible(row)
-        )
-        gaps = max(visible - 1, 1)
-        self.form.setVerticalSpacing(ROW_SPACING)
-        outer = self.layout()
-        if outer is None:
-            return
-        outer.activate()
-        spare = self.height() - outer.sizeHint().height()
-        extra = max(spare, 0) // (2 * gaps)
-        self.form.setVerticalSpacing(min(ROW_SPACING + extra, MAX_ROW_SPACING))
 
     # --- 流向 -----------------------------------------------------------------
 
@@ -433,8 +457,6 @@ class EntryPage(QWidget):
         label = self.form.labelForField(self.account)
         if isinstance(label, QLabel):
             label.setText(SCOPE_ACCOUNT_LABELS[scope] if transfer else "帳戶")
-        # 列數變了，多出來的高度要重新分。
-        self._fit_to_size()
 
     def _reload_details(self) -> None:
         parent_id = self.category.currentData()

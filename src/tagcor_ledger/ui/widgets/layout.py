@@ -7,7 +7,8 @@
 
 | 頁面 | 上限 | 為什麼 |
 |---|---|---|
-| 記帳 | `FORM_WIDTH` 880 | 純表單 |
+| 記帳 | `ENTRY_WIDTH` 880 | 每天用的那一頁，要填滿預設視窗 |
+| 盤點與設定裡的表單區、對話框說明文字 | `FORM_WIDTH` 720 | 純表單 |
 | 資產總覽 | `SUMMARY_WIDTH` 980 | 摘要，一眼掃完比多塞欄位重要 |
 | 交易紀錄、待確認、操作設定、系統設定、餘額盤點、法規參考 | `TABLE_WIDTH` 1600 | 欄位多 |
 
@@ -30,12 +31,16 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
 
-FORM_WIDTH = 880
-"""純表單頁。
+FORM_WIDTH = 720
+"""一般表單（`forms.form_panel()` 的預設、對話框裡會換行的說明文字）。"""
 
-2026-09-27 從 720 放寬：預設大小的視窗（內容區約 830～1050 px）裡，720 會在表單
-左右各留五六十 px 的空，加上外距看起來就是「兩邊空一大塊」。標籤改成靠右對齊之後
-標籤與欄位不會再隔半個螢幕，放寬的代價已經不存在。"""
+ENTRY_WIDTH = 880
+"""記帳頁。
+
+2026-09-27 從 `FORM_WIDTH` 720 分出來放寬：預設大小的視窗（內容區約 830～1050 px）
+裡，720 會在表單左右各留五六十 px 的空。記帳頁的標籤靠右貼著欄位，放寬不會讓標籤
+與欄位隔半個螢幕。**只放寬記帳頁**：第一次是直接改 `FORM_WIDTH`，結果盤點與兩個
+設定分頁的表單區（`form_panel()` 的預設值）也被無聲地放寬了。"""
 
 SUMMARY_WIDTH = 980
 """摘要頁。"""
@@ -55,11 +60,27 @@ NARROW_BREAKPOINT = 720
 值的來由：側邊欄 152 ＋ 記帳表單「標籤在左」的最小寬度約 560。再窄，側邊欄留著
 只會把表單擠成標籤在上，那不如把側邊欄收起來。"""
 
+ENTRY_PAGE_MARGINS = (40, 20, 40, 20)
+"""記帳頁的外距，左右比別頁寬。
+
+記帳頁的欄位一路拉到內容區右緣，而左邊有一整欄標籤墊著 —— 同樣 24 px，右邊看起來
+緊貼視窗邊（2026-09-27 使用者回報「欄位右邊留白太少」）。表格頁不需要：表格本身
+有框線與內距。"""
+
 CONTENT_PANEL_NAME = "pageContent"
 """置中容器的 objectName，測試靠它拿到實際的內容寬度。"""
 
 
-def page_layout(page: QWidget, *, width: int) -> QVBoxLayout:
+_MARGINS_PROPERTY = "pageMargins"
+"""`page_layout()` 把這一頁「寬視窗時」的外距記在面板上，`set_page_compact()` 還原時用。"""
+
+
+def page_layout(
+    page: QWidget,
+    *,
+    width: int,
+    margins: tuple[int, int, int, int] = PAGE_MARGINS,
+) -> QVBoxLayout:
     """建立頁面的內容 layout，回傳的是**內層**（東西加到這裡）。
 
     ```python
@@ -78,9 +99,10 @@ def page_layout(page: QWidget, *, width: int) -> QVBoxLayout:
     panel.setObjectName(CONTENT_PANEL_NAME)
     panel.setLayout(inner)
     panel.setMaximumWidth(width)
+    panel.setProperty(_MARGINS_PROPERTY, list(margins))
 
     outer = QHBoxLayout(page)
-    outer.setContentsMargins(*PAGE_MARGINS)
+    outer.setContentsMargins(*margins)
     outer.setSpacing(0)
     outer.addWidget(panel)
     return inner
@@ -89,9 +111,13 @@ def page_layout(page: QWidget, *, width: int) -> QVBoxLayout:
 def set_page_compact(page: QWidget, compact: bool) -> None:
     """窄視窗時把外距收小。只動 `page_layout()` 建的外層，沒用它的頁不受影響。"""
     outer = page.layout()
-    if outer is None or page.findChild(QWidget, CONTENT_PANEL_NAME) is None:
+    panel = page.findChild(QWidget, CONTENT_PANEL_NAME)
+    if outer is None or panel is None:
         return
-    outer.setContentsMargins(*(COMPACT_PAGE_MARGINS if compact else PAGE_MARGINS))
+    left, top, right, bottom = (
+        COMPACT_PAGE_MARGINS if compact else panel.property(_MARGINS_PROPERTY) or PAGE_MARGINS
+    )
+    outer.setContentsMargins(left, top, right, bottom)
 
 
 def scrollable(page: QWidget) -> QScrollArea:

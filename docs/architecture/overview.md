@@ -216,8 +216,8 @@ service 回傳 `Result`，UI 把錯誤顯示成繁體中文訊息。錯誤碼的
 
 - **系統路徑設定在 SQLite 外部** —— 資料庫路徑本身不能可靠地存放在資料庫內。
   細節見 [`storage-layout.md`](storage-layout.md)。
-- **視窗大小與位置也在 SQLite 外部**（`config_dir/window.json`）。那是 UI 狀態不是
-  帳務資料，不值得為它付一次 migration 的代價，也不該進備份與還原的語意。
+- **視窗大小不記**：每次啟動都是預設大小（`app/window_state.py`）。2026-09-27 之前
+  記在 `config_dir/window.json`，那個檔案現在不讀也不寫。
 - **payee 已移除**：「項目」描述具體收支，「備註」補充說明。
 - **備份只由明確的手動操作觸發**，沒有背景程序也沒有 Windows 工作排程。
 - **App 永遠不發網路請求。** 法規庫是專案裡的靜態資料，抓取工具在 `tools/law_sync/`，
