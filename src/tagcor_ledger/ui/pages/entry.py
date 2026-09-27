@@ -40,8 +40,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QDate, QTimer, Signal
+from PySide6.QtCore import QDate, Qt, QTimer, Signal
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QButtonGroup,
     QComboBox,
     QFormLayout,
@@ -91,6 +93,23 @@ SAVED_MESSAGE_MS = 3000
 而那句話講的是**上一筆** —— 使用者分不出眼前這一筆到底存了沒。成功訊息只需要被看到一眼，
 三秒夠了；**失敗訊息不會被清掉**（`submit()` 失敗時會先停掉計時器），那是要讀完的。
 """
+
+
+ROW_SPACING = 10
+"""欄位之間的最小間距。"""
+
+MAX_ROW_SPACING = 22
+"""視窗很高時，間距最多長到這裡。
+
+表單只有七、八列，高的視窗下全擠在上半部、下面空一大片（2026-09-27 使用者回報
+「下方留白太多」）。所以多出來的高度**分一半**給列距 —— 只分一半，是為了永遠比頁面
+矮一點，捲動區才不會因為列距長大而冒出捲軸；有上限，是因為列距再大，一列的標籤
+與下一列就分不出誰跟誰一組了。"""
+
+WRAP_WIDTH = 560
+"""頁面窄於這個寬度時，標籤移到欄位上方、轉帳對象的三顆按鈕改成直排。
+
+手機寬度下「標籤在左」會讓欄位只剩兩百出頭 px，而三顆轉帳對象按鈕並排要四百多 px。"""
 
 
 class EntryPage(QWidget):
@@ -143,6 +162,7 @@ class EntryPage(QWidget):
         # 轉帳對象也用分段按鈕，跟流向同一套視覺 —— 它們是同一個問題的兩層，
         # 一個用按鈕一個用下拉會讓第二層看起來像次要設定。
         scope_layout = QHBoxLayout(self.scope_row)
+        self._scope_layout = scope_layout
         scope_layout.setContentsMargins(0, 0, 0, 0)
         scope_layout.setSpacing(8)
         for index, (key, label) in enumerate(TRANSFER_SCOPES):
@@ -162,7 +182,11 @@ class EntryPage(QWidget):
 
         self.form = QFormLayout()
         form = self.form
-        form.setSpacing(10)
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(ROW_SPACING)
+        # **標籤靠右，貼著自己的欄位。** 靠左時標籤欄的寬度由最長的「金額（TWD）」決定，
+        # 「流向」「帳戶」這些兩個字的標籤離欄位一百多 px（2026-09-27 使用者回報）。
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         # **順序照使用者實際填寫的順序**，見模組說明的取捨 1。只在轉帳時出現的兩列
         # 各自貼著自己的第一層：轉帳對象是流向的第二層，轉入帳戶是「帳戶」的另一半。
         form.addRow("流向", flow_row)
@@ -201,6 +225,46 @@ class EntryPage(QWidget):
         self.amount.returnPressed.connect(self.submit)
         self.description.returnPressed.connect(self.submit)
         self._sync_flow()
+
+    # --- 版面 -----------------------------------------------------------------
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._fit_to_size()
+
+    def is_wrapped(self) -> bool:
+        """標籤是不是在欄位上方（窄版面）。給測試用。"""
+        return self.form.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
+
+    def _fit_to_size(self) -> None:
+        """窄的時候標籤移到上方、按鈕直排；高的時候把一部分多出來的高度給列距。"""
+        wrap = self.width() < WRAP_WIDTH
+        if wrap != self.is_wrapped():
+            self.form.setRowWrapPolicy(
+                QFormLayout.RowWrapPolicy.WrapAllRows
+                if wrap
+                else QFormLayout.RowWrapPolicy.DontWrapRows
+            )
+            # 標籤在上方時靠左 —— 靠右會讓它飄在欄位右上角，跟欄位對不起來。
+            self.form.setLabelAlignment(
+                Qt.AlignmentFlag.AlignLeft if wrap else Qt.AlignmentFlag.AlignRight
+            )
+            self._scope_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom if wrap else QBoxLayout.Direction.LeftToRight
+            )
+
+        visible = sum(
+            1 for row in range(self.form.rowCount()) if self.form.isRowVisible(row)
+        )
+        gaps = max(visible - 1, 1)
+        self.form.setVerticalSpacing(ROW_SPACING)
+        outer = self.layout()
+        if outer is None:
+            return
+        outer.activate()
+        spare = self.height() - outer.sizeHint().height()
+        extra = max(spare, 0) // (2 * gaps)
+        self.form.setVerticalSpacing(min(ROW_SPACING + extra, MAX_ROW_SPACING))
 
     # --- 流向 -----------------------------------------------------------------
 
@@ -369,6 +433,8 @@ class EntryPage(QWidget):
         label = self.form.labelForField(self.account)
         if isinstance(label, QLabel):
             label.setText(SCOPE_ACCOUNT_LABELS[scope] if transfer else "帳戶")
+        # 列數變了，多出來的高度要重新分。
+        self._fit_to_size()
 
     def _reload_details(self) -> None:
         parent_id = self.category.currentData()

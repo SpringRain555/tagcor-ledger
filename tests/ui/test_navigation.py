@@ -48,7 +48,7 @@ def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(window) -> None:
         (PageId.SYSTEM_SETTINGS, window.system_settings),
     ):
         window.show_page(page)
-        assert window.pages.currentWidget() is widget, page
+        assert window.current_page_widget() is widget, page
 
     assert window.windowTitle() == "TagCor Ledger"
 
@@ -91,7 +91,7 @@ def test_selecting_one_group_clears_the_other(window) -> None:
     window.show_page(PageId.SYSTEM_SETTINGS)
     assert selected() == [LABELS[PageId.SYSTEM_SETTINGS]]
     assert window.sidebar.current_page() is PageId.SYSTEM_SETTINGS
-    assert window.pages.currentWidget() is window.system_settings
+    assert window.current_page_widget() is window.system_settings
 
 
 def test_focus_landing_on_the_sidebar_does_not_navigate(window) -> None:
@@ -110,7 +110,7 @@ def test_focus_landing_on_the_sidebar_does_not_navigate(window) -> None:
     for widget in (window.sidebar.daily, window.sidebar.settings):
         widget.setFocus(Qt.FocusReason.TabFocusReason)
         QApplication.processEvents()
-        assert window.pages.currentWidget() is window.overview, (
+        assert window.current_page_widget() is window.overview, (
             "啟動後焦點碰到側邊欄就離開了首頁"
         )
         widget.clearFocus()
@@ -128,9 +128,9 @@ def test_focus_landing_on_the_sidebar_does_not_navigate(window) -> None:
             # focusInEvent 是**送出去**的，不處理事件佇列就等於沒有發生 ——
             # 少了這一行，這條測試在壞掉的版本上照樣是綠的。
             QApplication.processEvents()
-            assert window.pages.currentWidget() is window.operation_settings, (
+            assert window.current_page_widget() is window.operation_settings, (
                 f"焦點以 {reason.name} 落到側邊欄就把畫面帶走了 —— "
-                f"現在停在 {window.pages.currentWidget()}"
+                f"現在停在 {window.current_page_widget()}"
             )
             assert window.sidebar.current_page() is PageId.OPERATION_SETTINGS
 
@@ -147,7 +147,7 @@ def test_tabbing_through_a_settings_tab_never_changes_the_page(window) -> None:
     for step in range(40):
         window.focusNextPrevChild(True)
         QApplication.processEvents()
-        assert window.pages.currentWidget() is window.operation_settings, (
+        assert window.current_page_widget() is window.operation_settings, (
             f"按了 {step + 1} 次 Tab 就換頁了"
         )
 
@@ -169,7 +169,7 @@ def test_clicking_the_current_page_again_still_works(window) -> None:
     assert item is not None
     window.sidebar.daily.itemClicked.emit(item)
 
-    assert window.pages.currentWidget() is window.overview
+    assert window.current_page_widget() is window.overview
     assert window.sidebar.current_page() is PageId.OVERVIEW
 
 
@@ -309,5 +309,5 @@ def test_the_app_opens_on_the_overview(window) -> None:
     """
 
     assert DAILY_PAGES[0] is PageId.OVERVIEW
-    assert window.pages.currentWidget() is window.overview
+    assert window.current_page_widget() is window.overview
     assert window.sidebar.current_page() is PageId.OVERVIEW

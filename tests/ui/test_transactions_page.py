@@ -261,7 +261,7 @@ def test_creating_a_template_from_a_transaction_keeps_the_original_item(
 
     assert len(opened) == 1, "視窗要開，而且只開一次"
     settings = window.operation_settings
-    assert window.pages.currentWidget() is settings
+    assert window.current_page_widget() is settings
     assert settings.tabs.currentWidget() is settings.templates, "要停在模板分頁"
     saved = [row for row in controller.list_templates() if row["name"] == "早餐"]
     assert len(saved) == 1, "使用者按了儲存，模板要真的存進去"

@@ -32,8 +32,37 @@ QWidget#appShell {
 }
 
 QStackedWidget#contentStack,
-QWidget#pageSurface {
+QWidget#pageSurface,
+QScrollArea#pageScroll,
+QScrollArea#pageScroll > QWidget#qt_scrollarea_viewport {
     background-color: #0D0D0F;
+    border: 0;
+}
+
+/* 窄視窗的頂端列：取代側邊欄，底下一條跟側邊欄右框同色的分隔線。 */
+QFrame#narrowNav {
+    background-color: #0D0D0F;
+    border: 0;
+    border-bottom: 1px solid #33333C;
+    border-radius: 0;
+}
+
+QToolButton#pageMenuButton {
+    color: #E8E8EA;
+    background-color: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12pt;
+    font-weight: 600;
+}
+
+QToolButton#pageMenuButton:hover {
+    background-color: #1F1F25;
+}
+
+QToolButton#pageMenuButton::menu-indicator {
+    image: none;
 }
 
 QLabel,

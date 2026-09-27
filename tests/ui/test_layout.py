@@ -14,7 +14,9 @@ import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QTableView, QTabWidget, QWidget
+from PySide6.QtWidgets import QApplication, QScrollArea, QTableView, QTabWidget, QWidget
+
+from tagcor_ledger.app import window_state
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.app.window_state import (
@@ -42,6 +44,8 @@ from tagcor_ledger.ui.widgets.layout import (
 # 它攔不到純粹因為字變寬造成的增加：測試跑在 offscreen，中文是 fallback 字型，
 # 寬度比實機窄。所以餘裕看起來比實際多，不要拿它當「還可以再加東西」的依據。
 SCREEN_BUDGET = (1024, 880)
+PAGE_BUDGET = (SCREEN_BUDGET[0] - sidebar_module.COMPACT_WIDTH, SCREEN_BUDGET[1])
+"""一頁在 `SCREEN_BUDGET` 的螢幕上、扣掉側邊欄之後能用的空間。"""
 
 pytestmark = pytest.mark.geometry
 
@@ -114,7 +118,9 @@ def test_entry_form_is_much_narrower_than_the_transactions_table(qtbot, tmp_path
     assert available > FORM_WIDTH, "視窗窄到連表單上限都放不下，這條測試等於沒作用"
     assert form_panel_widget.width() == FORM_WIDTH
     assert table_panel.width() == min(available, TABLE_WIDTH)
-    assert TABLE_WIDTH > FORM_WIDTH * 2
+    # 2026-09-27 從「兩倍」放到 1.5 倍：記帳表單的標籤改成靠右貼著欄位之後，
+    # 表單變寬不再讓標籤與欄位隔半個螢幕，720 → 880 是為了填滿預設視窗的內容區。
+    assert TABLE_WIDTH > FORM_WIDTH * 1.5
 
 
 def test_short_tables_stop_at_their_columns(qtbot, tmp_path: Path) -> None:
@@ -315,26 +321,86 @@ def test_the_minimum_width_does_not_depend_on_where_the_project_lives(
     assert not deep.exists(), "這條測試要的正是「檔案不存在」那個分支"
 
     window = _open(qtbot, tmp_path)
-    hint = window.minimumSizeHint()
-    assert (hint.width(), hint.height()) <= SCREEN_BUDGET, (
+    hint = window.reference.minimumSizeHint()
+    assert (hint.width(), hint.height()) <= PAGE_BUDGET, (
         f"法規庫路徑長度洩漏到版面上了：最小尺寸 {hint.width()}×{hint.height()}，"
         f"而那條路徑有 {len(str(deep))} 個字元。完整路徑要放 tooltip，不是標籤本文。"
     )
 
 
-def test_the_whole_app_fits_a_small_screen(qtbot, tmp_path: Path) -> None:
-    """視窗的自然最小尺寸必須裝得進 `SCREEN_BUDGET`。
+def test_every_page_fits_a_small_screen_without_scrolling(qtbot, tmp_path: Path) -> None:
+    """每一頁的自然最小尺寸必須裝得進 `PAGE_BUDGET`。
 
-    **不寫死 `setMinimumSize`。** 硬設一個比內容還小的下限只會讓版面被擠爛；
-    正確的做法是讓內容決定下限，然後守住那個下限不要失控。
+    2026-09-27 之前量的是整個視窗的 `minimumSizeHint()`。現在每一頁包在自己的捲動區裡，
+    視窗的最小尺寸永遠很小，那樣量會永遠通過 —— 所以改量**頁面本身**：在一般的小螢幕上
+    它仍然不該需要捲動，多了一排按鈕或一個不會換行的長標籤照樣會被攔下來。
     """
     window = _open(qtbot, tmp_path)
-    hint = window.minimumSizeHint()
-    assert (hint.width(), hint.height()) <= SCREEN_BUDGET, (
-        f"視窗最小尺寸 {hint.width()}×{hint.height()} 超過預算 "
-        f"{SCREEN_BUDGET[0]}×{SCREEN_BUDGET[1]}；"
-        "通常是某一頁多了一排按鈕或一個不會換行的長標籤。"
+    for page, widget in window._page_widgets.items():
+        hint = widget.minimumSizeHint()
+        assert (hint.width(), hint.height()) <= PAGE_BUDGET, (
+            f"{page} 的最小尺寸 {hint.width()}×{hint.height()} 超過預算 "
+            f"{PAGE_BUDGET[0]}×{PAGE_BUDGET[1]}；"
+            "通常是某一頁多了一排按鈕或一個不會換行的長標籤。"
+        )
+
+
+def test_the_window_can_shrink_to_phone_width(qtbot, tmp_path: Path) -> None:
+    """下限寫死在 `window_state`，而且真的拖得到那麼小。"""
+    window = _open(qtbot, tmp_path)
+    assert (window.minimumWidth(), window.minimumHeight()) == (
+        window_state.MINIMUM_WIDTH,
+        window_state.MINIMUM_HEIGHT,
     )
+    assert window.minimumSizeHint().width() <= window_state.MINIMUM_WIDTH, (
+        "內容的最小寬度比下限還寬 —— 某個東西沒有包進捲動區"
+    )
+
+
+def test_a_narrow_window_swaps_the_sidebar_for_a_page_menu(qtbot, tmp_path: Path) -> None:
+    """窄視窗：側邊欄收起、頂端選單出現，選單換頁跟側邊欄是同一件事；拉寬後復原。"""
+    window = _open(qtbot, tmp_path, size=(1280, 800))
+    assert not window.is_narrow()
+    assert not window.sidebar.isHidden() and window.narrow_nav.isHidden()
+
+    _relayout(window, 390, 800)
+    assert window.is_narrow()
+    assert window.sidebar.isHidden() and not window.narrow_nav.isHidden()
+
+    window._page_actions[PageId.ENTRY].trigger()
+    QApplication.processEvents()
+    assert window.current_page_widget() is window.entry
+    assert window.sidebar.current_page() is PageId.ENTRY, "選單換頁要讓側邊欄的正本跟著變"
+    assert "記帳" in window.page_menu_button.text()
+
+    _relayout(window, 1280, 800)
+    assert not window.is_narrow()
+    assert not window.sidebar.isHidden() and window.narrow_nav.isHidden()
+    assert window.current_page_widget() is window.entry
+
+
+def test_the_entry_page_fits_phone_width_without_sideways_scrolling(
+    qtbot, tmp_path: Path
+) -> None:
+    """記帳是每天最常用的一頁，手機寬度下不可以橫向捲動 —— 表格頁可以，這頁不行。
+
+    **轉帳要一起量**：三顆轉帳對象按鈕並排要四百多 px，是這頁最寬的一列。
+    """
+    window = _open(qtbot, tmp_path, size=(window_state.MINIMUM_WIDTH, 800))
+    window.show_page(PageId.ENTRY)
+    for entry_type in ("expense", "transfer"):
+        window.entry.select_entry_type(entry_type)
+        QApplication.processEvents()
+        scroll = window.pages.currentWidget()
+        assert isinstance(scroll, QScrollArea)
+        assert window.entry.is_wrapped(), "窄版面的標籤應該在欄位上方"
+        assert window.entry.width() <= scroll.viewport().width(), (
+            f"{entry_type}：記帳頁 {window.entry.width()} px 比可視範圍 "
+            f"{scroll.viewport().width()} px 寬，會橫向捲動"
+        )
+
+    _relayout(window, 1280, 800)
+    assert not window.entry.is_wrapped()
 
 
 def test_window_size_survives_a_restart(qtbot, tmp_path: Path) -> None:
@@ -375,6 +441,7 @@ def test_window_state_rejects_values_that_make_no_sense(tmp_path: Path) -> None:
     for bad in (
         {"x": 0, "y": 0, "width": 200, "height": 800},
         {"x": 0, "y": 0, "width": 1400, "height": 100},
+        {"x": 0, "y": 0, "width": window_state.MINIMUM_WIDTH - 1, "height": 800},
         {"x": 999_999, "y": 0, "width": 1400, "height": 820},
         {"x": 0, "y": 0, "width": "寬", "height": 820},
         {"x": 0, "y": 0},

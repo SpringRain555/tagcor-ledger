@@ -10,6 +10,10 @@
 **資產總覽是唯一的例外**：它不靠 `_..._changed` 通知，而是**切過去就重算**。
 它讀的東西橫跨帳戶、定存、定期收支與盤點，要在每個 `_..._changed` 各記一筆的話，
 遲早會漏掉一項 —— 而漏掉的症狀是總資產停在舊數字，看起來像算錯帳。
+
+**窄視窗（< `NARROW_BREAKPOINT`）沒有側邊欄**，換成頂端一顆「☰ 目前頁名」的選單按鈕。
+兩者是同一份導覽的兩種外觀：選單裡的項目、分組與待確認的數字都從同一個來源來，
+而「現在是哪一頁」的正本仍然是 `Sidebar` —— 它只是藏起來，沒有被拆掉。
 """
 
 from __future__ import annotations
@@ -19,9 +23,14 @@ from typing import Any, cast
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QHBoxLayout,
     QMainWindow,
+    QMenu,
+    QScrollArea,
     QStackedWidget,
+    QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -29,7 +38,14 @@ from tagcor_ledger.app import window_state
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.app.window_state import WindowGeometry, load_geometry, save_geometry
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.navigation import ALL_PAGES, LANDING_PAGE, PageId
+from tagcor_ledger.ui.navigation import (
+    ALL_PAGES,
+    DAILY_PAGES,
+    LABELS,
+    LANDING_PAGE,
+    SETTINGS_PAGES,
+    PageId,
+)
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.entry import EntryPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
@@ -39,6 +55,7 @@ from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
 from tagcor_ledger.ui.pages.transactions import TransactionsPage
 from tagcor_ledger.ui.theme import apply_dark_theme
+from tagcor_ledger.ui.widgets.layout import NARROW_BREAKPOINT, scrollable, set_page_compact
 from tagcor_ledger.ui.widgets.sidebar import Sidebar
 
 
@@ -72,6 +89,9 @@ class MainWindow(QMainWindow):
 
     def _build(self, paths: AppPaths) -> None:
         self.setWindowTitle("TagCor Ledger")
+        # 下限寫死是安全的：每一頁都能捲，內容不會被這個下限擠爛，
+        # 而它給了版面測試一個固定的最壞情況。
+        self.setMinimumSize(window_state.MINIMUM_WIDTH, window_state.MINIMUM_HEIGHT)
         self._restore_geometry()
 
         self._page_widgets: dict[PageId, QWidget] = {
@@ -85,10 +105,13 @@ class MainWindow(QMainWindow):
             PageId.SYSTEM_SETTINGS: self.system_settings,
         }
         self.pages.setObjectName("contentStack")
+        # 每一頁包自己的捲動區，不要包在堆疊外面 —— 理由見 `widgets/layout.py`。
+        self._page_scrolls: dict[PageId, QWidget] = {}
         for page in ALL_PAGES:
             widget = self._page_widgets[page]
             widget.setObjectName("pageSurface")
-            self.pages.addWidget(widget)
+            self._page_scrolls[page] = scrollable(widget)
+            self.pages.addWidget(self._page_scrolls[page])
 
         # 側邊欄的高度是照 QSS 的項目內距算出來的，所以要在主題套用之後才建 ——
         # 現在整個 `__init__` 都在主題之後，這條自然成立（見 `_apply_theme` 那段說明）。
@@ -98,15 +121,25 @@ class MainWindow(QMainWindow):
 
         # 外框不留邊，側邊欄的右框線才會是一條**通到底**的分隔線；內容自己的外距
         # 由 `page_layout` 負責。間距也是 0 —— 那條線就是分隔，不需要再空一段。
+        self.narrow_nav = self._build_narrow_nav()
+
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        column.addWidget(self.narrow_nav)
+        column.addWidget(self.pages, 1)
+
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.sidebar)
-        layout.addWidget(self.pages, 1)
+        layout.addLayout(column, 1)
         content = QWidget()
         content.setObjectName("appShell")
         content.setLayout(layout)
         self.setCentralWidget(content)
+        self._narrow: bool | None = None
+        self._adapt_to_width(self.width())
         self.show_page(LANDING_PAGE)
 
         self.overview.inbox_requested.connect(lambda: self.show_page(PageId.INBOX))
@@ -127,6 +160,52 @@ class MainWindow(QMainWindow):
         self.system_settings.saved.connect(self._settings_changed)
         self.system_settings.paths_changed.connect(self._restored)
         self._add_shortcuts()
+
+    def _build_narrow_nav(self) -> QFrame:
+        """窄視窗的頂端列：一顆按鈕，點開是跟側邊欄一模一樣的頁面清單。
+
+        **是 `QFrame` 不是 `QWidget`**，理由同側邊欄 —— 底下那條分隔線要畫得出來。
+        """
+        self._inbox_count = 0
+        """待確認的數字。只在 `refresh_pending_badge()` 算，換頁不重查。"""
+        self.page_menu = QMenu(self)
+        self._page_actions: dict[PageId, QAction] = {}
+        for group in (DAILY_PAGES, SETTINGS_PAGES):
+            if self._page_actions:
+                self.page_menu.addSeparator()
+            for page in group:
+                action = self.page_menu.addAction(LABELS[page])
+                action.triggered.connect(lambda _=False, p=page: self.show_page(p))
+                self._page_actions[page] = action
+
+        self.page_menu_button = QToolButton()
+        self.page_menu_button.setObjectName("pageMenuButton")
+        self.page_menu_button.setMenu(self.page_menu)
+        self.page_menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
+        bar = QFrame()
+        bar.setObjectName("narrowNav")
+        bar_layout = QHBoxLayout(bar)
+        bar_layout.setContentsMargins(8, 6, 8, 6)
+        bar_layout.addWidget(self.page_menu_button)
+        bar_layout.addStretch()
+        return bar
+
+    def _adapt_to_width(self, width: int) -> None:
+        """側邊欄 ↔ 頂端選單、外距大 ↔ 小。只有跨過門檻時才真的動，拖曳視窗時不抖。"""
+        self.sidebar.adapt_to(width)
+        narrow = width < NARROW_BREAKPOINT
+        if narrow == self._narrow:
+            return
+        self._narrow = narrow
+        self.sidebar.setVisible(not narrow)
+        self.narrow_nav.setVisible(narrow)
+        for widget in self._page_widgets.values():
+            set_page_compact(widget, narrow)
+
+    def is_narrow(self) -> bool:
+        """現在是不是窄視窗版面。給測試用。"""
+        return bool(self._narrow)
 
     def _add_shortcuts(self) -> None:
         new_action = QAction("新增交易", self)
@@ -166,7 +245,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        self.sidebar.adapt_to(event.size().width())
+        self._adapt_to_width(event.size().width())
 
     # --- 導覽 -----------------------------------------------------------------
 
@@ -176,7 +255,28 @@ class MainWindow(QMainWindow):
             # **切過去就重算**，不在每個 `_..._changed` 各記一筆 —— 那種清單一定會漏掉
             # 一項，而漏掉的症狀是總資產停在舊數字，看起來像算錯帳。
             self.overview.refresh()
-        self.pages.setCurrentWidget(self._page_widgets[page])
+        self.pages.setCurrentWidget(self._page_scrolls[page])
+        self._sync_page_menu()
+
+    def current_page_widget(self) -> QWidget | None:
+        """堆疊**真正**顯示著的那一頁（捲動區裡面那個）。
+
+        讀的是 `QStackedWidget`，不是側邊欄 —— 測試要驗的正是兩者有沒有一致。
+        """
+        scroll = self.pages.currentWidget()
+        return scroll.widget() if isinstance(scroll, QScrollArea) else scroll
+
+    def _sync_page_menu(self) -> None:
+        """頂端選單按鈕寫著目前是哪一頁；待確認有事時選單裡帶著數字。"""
+        current = self.sidebar.current_page()
+        count = self._inbox_count
+        for page, action in self._page_actions.items():
+            label = LABELS[page]
+            if page is PageId.INBOX and count:
+                label = f"{label}（{count}）"
+            action.setText(label)
+        if current is not None:
+            self.page_menu_button.setText(f"☰  {LABELS[current]}")
 
     def show_page(self, page: PageId) -> None:
         """跳到某一頁。走側邊欄，讓選取狀態與畫面永遠是同一個真相。"""
@@ -249,4 +349,6 @@ class MainWindow(QMainWindow):
         走 `controller.inbox_count()`，與資產總覽同一個來源 —— 兩邊各自算就會出現
         「側邊欄說 2、總覽說 3」，而使用者沒有辦法知道哪一個才對。
         """
-        self.sidebar.set_badge(PageId.INBOX, self.controller.inbox_count())
+        self._inbox_count = self.controller.inbox_count()
+        self.sidebar.set_badge(PageId.INBOX, self._inbox_count)
+        self._sync_page_menu()

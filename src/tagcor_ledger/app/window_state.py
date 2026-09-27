@@ -19,9 +19,13 @@ FILE_NAME = "window.json"
 DEFAULT_WIDTH = 1280
 DEFAULT_HEIGHT = 760
 
-MINIMUM_WIDTH = 1024
-MINIMUM_HEIGHT = 680
-"""再小就不給拖。有下限，版面才有一個可以被驗證的最壞情況。"""
+MINIMUM_WIDTH = 360
+MINIMUM_HEIGHT = 480
+"""再小就不給拖。有下限，版面才有一個可以被驗證的最壞情況。
+
+2026-09-27 從 1024×680 降到手機寬度：窄視窗改用頂端選單、每一頁自己捲動
+（`ui/widgets/layout.py`），不再需要整個視窗撐到最寬那一頁的寬度。
+360 是常見手機的 CSS 寬度下限。"""
 
 # 螢幕拔掉或解析度變小時，存下來的座標可能落在畫面外。給一個寬鬆的上限擋掉離譜的值。
 _MAX_REASONABLE = 20_000

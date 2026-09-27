@@ -210,4 +210,4 @@ def test_the_gap_reminder_lives_on_the_page_not_the_status_bar(window) -> None:
     assert window.statusBar().currentMessage() == ""
 
     page.gap_button.click()
-    assert window.pages.currentWidget() is window.balance
+    assert window.current_page_widget() is window.balance
