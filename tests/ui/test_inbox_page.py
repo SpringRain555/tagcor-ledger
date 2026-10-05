@@ -263,28 +263,33 @@ def test_refreshing_the_inbox_is_not_a_ledger_change(window, make_deposit) -> No
 def test_go_handle_lands_on_the_pending_items_under_the_balance_page(
     window, qtbot, make_deposit
 ) -> None:
-    """資產總覽的「去處理」：切到餘額盤點，而且**那一塊要在畫面裡**。
+    """資產總覽的「去處理」：切到餘額盤點，而且**待確認的清單要在畫面裡**，不只是標題。
 
-    待確認在盤點頁最底下；視窗矮的時候只切頁不捲動，使用者看到的是盤點表單，
-    還得自己往下找。視窗刻意縮矮，讓這一頁非捲不可。
+    第一版用 `ensureWidgetVisible(標題)`：預設視窗大小下標題剛好露在畫面底緣，於是判定
+    「已經看得到」而不捲 —— 清單還在畫面外（2026-10-05 實機截圖抓到的；那時這條測試用的是
+    一個很矮的視窗，標題整個在外面，才看起來是對的）。所以兩種高度都量。
     """
     make_deposit(window.controller)
     window.balance.refresh()
     window.refresh_pending_badge()
-    window.resize(1024, 520)
-    window.show_page(PageId.OVERVIEW)
-    window.overview.refresh()
 
-    window.overview.inbox_button.click()
+    for height in (760, 520):
+        window.resize(1280, height)
+        window.show_page(PageId.OVERVIEW)
+        window.overview.refresh()
 
-    assert window.current_page_widget() is window.balance
-    scroll = window.pages.currentWidget()
-    title = window.balance.pending_title
+        window.overview.inbox_button.click()
 
-    def title_in_view() -> bool:
-        top = title.mapTo(scroll.viewport(), QPoint(0, 0)).y()
-        return 0 <= top and top + title.height() <= scroll.viewport().height()
+        assert window.current_page_widget() is window.balance
+        scroll = window.pages.currentWidget()
+        viewport = scroll.viewport()
 
-    qtbot.waitUntil(title_in_view, timeout=2000)
-    # 陽性對照：這一頁真的需要捲，否則上面那條等於沒驗。
-    assert scroll.verticalScrollBar().maximum() > 0
+        def in_view(widget: Any, viewport: Any = viewport) -> bool:
+            top = widget.mapTo(viewport, QPoint(0, 0)).y()
+            return 0 <= top and top + min(widget.height(), 80) <= viewport.height()
+
+        qtbot.waitUntil(lambda: in_view(window.balance.pending_title), timeout=2000)
+        qtbot.waitUntil(lambda: in_view(window.inbox.table), timeout=2000)
+        # 陽性對照：這一頁真的需要捲，否則上面那兩條等於沒驗。
+        assert scroll.verticalScrollBar().maximum() > 0, height
+        scroll.verticalScrollBar().setValue(0)

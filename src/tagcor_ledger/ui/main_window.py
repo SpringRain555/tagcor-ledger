@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -289,14 +289,24 @@ class MainWindow(QMainWindow):
         self.entry.amount.setFocus()
 
     def show_pending(self) -> None:
-        """資產總覽的「去處理」：待確認住在餘額盤點頁底下，切過去再捲到那一塊。
+        """資產總覽的「去處理」：待確認住在餘額盤點頁底下，切過去再把那一塊捲到最上面。
 
-        **捲動排到下一輪事件迴圈。** 第一次切到這一頁時版面還沒算過，當下量到的位置
-        都是 0，`ensureWidgetVisible` 等於沒捲。
+        **捲到「補記與待確認」的標題貼著頂端**，不是 `ensureWidgetVisible(標題)`：預設視窗
+        大小下標題剛好露在畫面底緣，那個呼叫判定「已經看得到」就不捲，而真正要處理的清單
+        還在畫面外（2026-10-05 實機截圖抓到的）。頁面不夠長時捲軸自己會停在最底。
+
+        **捲動排到下一輪事件迴圈。** 第一次切到這一頁時版面還沒算過，當下量到的位置都是 0。
         """
         self.show_page(PENDING_PAGE)
         scroll = self._page_scrolls[PENDING_PAGE]
-        QTimer.singleShot(0, lambda: scroll.ensureWidgetVisible(self.balance.pending_title))
+
+        def reveal() -> None:
+            content = scroll.widget()
+            if content is not None:
+                top = self.balance.pending_title.mapTo(content, QPoint(0, 0)).y()
+                scroll.verticalScrollBar().setValue(max(0, top - 12))
+
+        QTimer.singleShot(0, reveal)
 
     def _record_missing_transaction(self, account_id: str) -> None:
         """盤點頁的「補記交易」：切到記帳頁，帳戶先選好盤點頁正在看的那一個。
