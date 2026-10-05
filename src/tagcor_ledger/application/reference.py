@@ -15,12 +15,19 @@
 
 使用者可能永遠沒跑過抓取工具。那時法規頁要顯示「尚未建立」，**不是崩潰**，
 也不是擋住整個程式啟動 —— 記帳不依賴法規庫。
+
+## 每一條連線都要關
+
+`with sqlite3.connect(...)` 只管交易、**不關連線**（`docs/lessons.md` 2026-08-21）。
+連線沒關，程式開著的時候法規庫的檔案就被鎖住，`build_reference_db.py` 重建時第一步
+刪舊檔會 WinError 32。所以每個查詢都包 `contextlib.closing`。
 """
 
 from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -99,28 +106,47 @@ class ReferenceLibrary:
     def available(self) -> bool:
         return self.database_path.exists()
 
+    @property
+    def corpus_dir(self) -> Path:
+        """產生這個庫的條文 corpus。**它在版控裡**，所以缺庫時通常只差最後一步。"""
+        return self.database_path.parent / "corpus"
+
     def _connect(self) -> sqlite3.Connection:
-        """唯讀開啟。寫入會直接失敗，這是刻意的。"""
-        uri = f"file:{self.database_path.as_posix()}?mode=ro"
+        """唯讀開啟。寫入會直接失敗，這是刻意的。**呼叫端要負責關**（包 `closing`）。
+
+        用 `as_uri()` 而不是自己拼 `file:` —— 路徑裡有 `#`、`?`、`%` 時自己拼的會被
+        SQLite 當成 URI 的一部分切掉，`as_uri()` 會逸出它們。
+        """
+        uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
         connection = sqlite3.connect(uri, uri=True)
         connection.row_factory = sqlite3.Row
         return connection
+
+    def _how_to_build(self) -> str:
+        """缺庫時怎麼補。**corpus 在的時候只差最後一步，而且不需要連網。**
+
+        以前這裡一律叫人從抓取開始（要連網、要 research runtime）。2026-09-12 工作樹被
+        重建時實際缺的只有這個產生物 —— corpus 一篇都沒少，照著舊訊息做是在白白重抓。
+        """
+        if any(self.corpus_dir.rglob("*.md")):
+            return (
+                "跑 tools/law_sync/build_reference_db.py 就能從專案裡的條文重建，"
+                "不需要連網；用 start_tagcor-ledger.cmd 啟動時也會自動重建。"
+            )
+        return (
+            "先跑 tools/law_sync/fetch_laws.py 抓取，"
+            "再跑 build_corpus.py 與 build_reference_db.py 產生。"
+        )
 
     def status(self) -> Result:
         if not self.available:
             return Result.fail(
                 "REFERENCE_LIBRARY_MISSING",
                 "尚未建立法規庫。",
-                details={
-                    "path": str(self.database_path),
-                    "how": (
-                        "先跑 tools/law_sync/fetch_laws.py 抓取，"
-                        "再跑 build_corpus.py 與 build_reference_db.py 產生。"
-                    ),
-                },
+                details={"path": str(self.database_path), "how": self._how_to_build()},
             )
         try:
-            with self._connect() as connection:
+            with closing(self._connect()) as connection:
                 meta = {
                     str(row["key"]): str(row["value"])
                     for row in connection.execute("SELECT key, value FROM reference_meta")
@@ -137,7 +163,7 @@ class ReferenceLibrary:
     def topics(self) -> list[dict[str, object]]:
         if not self.available:
             return []
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             rows = connection.execute(
                 """
                 SELECT topic, topic_title, COUNT(*) AS entries
@@ -171,7 +197,7 @@ class ReferenceLibrary:
             "ORDER BY e.law_name, CAST(e.article AS INTEGER)"
         )
         try:
-            with self._connect() as connection:
+            with closing(self._connect()) as connection:
                 rows = connection.execute(sql, parameters).fetchall()
         except sqlite3.Error:
             # 搜尋字串讓 FTS5 語法錯誤時回空清單，不要把例外丟到畫面上。

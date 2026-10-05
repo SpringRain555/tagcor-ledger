@@ -232,7 +232,7 @@
 
 | 錯誤碼 | 成因 | 使用者該怎麼做 |
 |---|---|---|
-| `REFERENCE_LIBRARY_MISSING` | `reference/reference.sqlite3` 不存在 | 依畫面指示跑 `tools/law_sync/` 的三支腳本建立。**不建也可以**，只是法規頁沒東西 |
+| `REFERENCE_LIBRARY_MISSING` | `reference/reference.sqlite3` 不存在 | `reference/corpus/` 在（它進版控，通常都在）就只要跑 `tools/law_sync/build_reference_db.py`，不需要連網；一鍵啟動也會自動重建。連 corpus 都沒有才需要三支腳本從抓取開始。**不建也可以**，只是法規頁沒東西 |
 | `REFERENCE_LIBRARY_UNREADABLE` | 檔案在但讀不開（損毀、權限不足） | 刪掉它重新產生 —— 它是產生物，沒有任何不可重建的內容 |
 
 ## 診斷資訊

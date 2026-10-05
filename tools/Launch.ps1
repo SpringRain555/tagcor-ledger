@@ -167,6 +167,41 @@ try {
 Write-Ok "版本 $($info.version)"
 Write-Ok "資料庫 $($info.database_path)"
 
+# --- 法規參考庫 --------------------------------------------------------------
+# `reference\reference.sqlite3` 是產生物、不進版控；它的來源 `reference\corpus\` 在版控裡。
+# 2026-09-12 工作樹被重建之後缺的就只有這一個檔，法規頁從此只顯示「尚未建立」。
+# 重建只用標準庫、不連網、一秒內做完，所以缺檔就順手補上。**App 本身仍然只唯讀開它**
+# （ADR-0005）—— 寫檔是啟動器這種外掛工具的事。失敗不擋啟動：記帳不依賴法規庫，
+# 法規頁自己會說缺了什麼、怎麼補。
+$referenceDb = Join-Path $ProjectRoot 'reference\reference.sqlite3'
+$referenceCorpus = Join-Path $ProjectRoot 'reference\corpus'
+$hasCorpus = $false
+if (Test-Path -LiteralPath $referenceCorpus) {
+    $hasCorpus = [bool](Get-ChildItem -LiteralPath $referenceCorpus -Recurse -Filter '*.md' |
+        Select-Object -First 1)
+}
+if ($hasCorpus -and -not (Test-Path -LiteralPath $referenceDb)) {
+    Write-Step '重建法規參考庫'
+    $builder = Join-Path $ProjectRoot 'tools\law_sync\build_reference_db.py'
+    $buildOut = Join-Path $env:TEMP "tagcor-reference-$stamp.out"
+    $buildErr = Join-Path $env:TEMP "tagcor-reference-$stamp.err"
+    try {
+        # 路徑自己加引號：5.1 的 Start-Process 把 ArgumentList 用空白接起來、不會替你加。
+        Start-Process -FilePath $python -ArgumentList ('"{0}"' -f $builder) -NoNewWindow -Wait `
+            -RedirectStandardOutput $buildOut -RedirectStandardError $buildErr
+        $buildText = (@((Read-TextFile $buildErr), (Read-TextFile $buildOut)) |
+            Where-Object { $_ }) -join ' '
+    } finally {
+        Remove-Item $buildOut, $buildErr -ErrorAction SilentlyContinue
+    }
+    # 成敗看檔案有沒有出來，不看 ExitCode —— 後者在 5.1 上偶爾是 $null（見下面等視窗那段）。
+    if (Test-Path -LiteralPath $referenceDb) {
+        Write-Ok '已從 reference\corpus 重建'
+    } else {
+        Write-Host "  略過  法規參考庫沒有重建成功，記帳不受影響：$buildText" -ForegroundColor Yellow
+    }
+}
+
 if ($CreateShortcut) {
     Write-Step '建立桌面捷徑'
     $launcher = Join-Path $ProjectRoot 'start_tagcor-ledger.cmd'

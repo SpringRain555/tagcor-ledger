@@ -9,11 +9,15 @@
 
 from __future__ import annotations
 
+import gc
+import importlib.util
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -26,14 +30,36 @@ from tagcor_ledger.application.reference import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-REAL_REFERENCE = PROJECT_ROOT / "reference" / "reference.sqlite3"
+REFERENCE_DIR = PROJECT_ROOT / "reference"
+BUILDER = PROJECT_ROOT / "tools" / "law_sync" / "build_reference_db.py"
+
+
+def _load_builder() -> ModuleType:
+    """`tools/` 不是套件，用檔案路徑載入建置腳本 —— 測的就是使用者會跑的那一支。"""
+    spec = importlib.util.spec_from_file_location("build_reference_db", BUILDER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def built_reference(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """**從版控裡的 corpus 現建一份**，不讀專案底下那個產生物。
+
+    以前這裡讀 `reference/reference.sqlite3`，不存在就 `pytest.skip`。2026-09-12 工作樹
+    被重建之後那個檔案就不在了（它不進版控），於是底下十二個案例**靜靜跳過了三個多星期**
+    —— 守門跟著產生物一起消失，`Verify.ps1` 照樣印「全部通過」，而法規頁是壞的。
+    現建一份，讓這些測試只依賴版控裡的東西。
+    """
+    target = tmp_path_factory.mktemp("reference") / "reference.sqlite3"
+    _load_builder().build(REFERENCE_DIR, target=target)
+    return target
 
 
 @pytest.fixture
-def library() -> ReferenceLibrary:
-    if not REAL_REFERENCE.exists():
-        pytest.skip("尚未建立法規庫；跑 tools/law_sync/ 之後才有")
-    return ReferenceLibrary(REAL_REFERENCE)
+def library(built_reference: Path) -> ReferenceLibrary:
+    return ReferenceLibrary(built_reference)
 
 
 # --- 缺席時的行為 -----------------------------------------------------------
@@ -47,13 +73,54 @@ def test_missing_library_is_reported_not_raised(tmp_path: Path) -> None:
     status = missing.status()
     assert not status.success
     assert status.error_code == "REFERENCE_LIBRARY_MISSING"
-    # 訊息要講怎麼建立，不能只說「找不到」。
-    assert "tools/law_sync" in str(status.details["how"])
+    # 訊息要講怎麼建立，不能只說「找不到」。連 corpus 都沒有，才需要從抓取開始。
+    how = str(status.details["how"])
+    assert "tools/law_sync" in how
+    assert "fetch_laws.py" in how
 
     # 查詢一律回空，不丟例外。
     assert missing.topics() == []
     assert missing.list_entries() == []
     assert missing.list_entries(keyword="贈與") == []
+
+
+def test_missing_library_with_a_corpus_needs_only_the_last_step(tmp_path: Path) -> None:
+    """corpus 在版控裡，缺的只是產生物：**只差最後一步，而且不需要連網。**
+
+    以前這裡一律叫人從 `fetch_laws.py` 抓取開始（要連網、要 research runtime），
+    而 2026-09-12 那次實際缺的只有 `reference.sqlite3` —— corpus 一篇都沒少。
+    """
+    topic = tmp_path / "corpus" / "postal-savings"
+    topic.mkdir(parents=True)
+    (topic / "K0050015-3.md").write_text("---\n---\n", encoding="utf-8")
+
+    how = str(ReferenceLibrary(tmp_path / "reference.sqlite3").status().details["how"])
+    assert "build_reference_db.py" in how
+    assert "不需要連網" in how
+    assert "fetch_laws.py" not in how, "corpus 在的時候不該叫人重抓"
+
+
+def test_every_query_closes_its_connection(built_reference: Path, tmp_path: Path) -> None:
+    """查完之後檔案刪得掉 —— 連線真的關了。
+
+    `with sqlite3.connect(...)` 只管交易、**不關連線**（lessons 2026-08-21）。法規庫的連線
+    沒關的話，程式開著、法規頁看過一眼，`build_reference_db.py` 重建時第一步刪舊檔就會
+    WinError 32。**關掉 GC 再量**：沒關的連線卡在參考循環裡，等 GC 哪天剛好跑到才放手，
+    開著 GC 這條測試會時好時壞。
+    """
+    copy = tmp_path / "reference.sqlite3"
+    shutil.copyfile(built_reference, copy)
+    library = ReferenceLibrary(copy)
+    gc.disable()
+    try:
+        assert library.status().success
+        assert library.topics()
+        assert library.list_entries()
+        assert library.list_entries(keyword="贈與")
+        copy.unlink()
+    finally:
+        gc.enable()
+    assert not copy.exists()
 
 
 def test_corrupt_library_is_reported(tmp_path: Path) -> None:
@@ -84,8 +151,8 @@ def test_read_only_open_creates_no_side_files(library: ReferenceLibrary) -> None
         connection.execute("SELECT COUNT(*) FROM reference_entries").fetchone()
     finally:
         connection.close()
-    assert not REAL_REFERENCE.with_suffix(".sqlite3-wal").exists()
-    assert not REAL_REFERENCE.with_suffix(".sqlite3-shm").exists()
+    assert not library.database_path.with_suffix(".sqlite3-wal").exists()
+    assert not library.database_path.with_suffix(".sqlite3-shm").exists()
 
 
 # --- 內容與出處 -------------------------------------------------------------

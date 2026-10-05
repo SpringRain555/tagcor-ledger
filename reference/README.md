@@ -45,6 +45,11 @@ python tools\law_sync\build_reference_db.py
 
 解析邏輯改了但不想重抓別人的伺服器時：`fetch_laws.py --reparse`，它一個網路請求都不會發。
 
+**只缺 `reference.sqlite3` 的時候只要第 3 步。** `corpus/` 在版控裡，所以 clone 下來、
+或工作樹被重建之後（2026-09-12 那次就是這樣，法規頁因此只剩「尚未建立」），
+缺的只有這個產生物。第 3 步只用標準庫、不連網、一秒內做完；一鍵啟動
+（`start_tagcor-ledger.cmd` → `tools\Launch.ps1`）發現它不在會自動跑，失敗也不擋啟動。
+
 ## 抓取紀律
 
 - 同網域間隔 >= 4 秒，收到 429／503 **立即全停不重試**

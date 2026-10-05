@@ -163,23 +163,32 @@ class ReferencePage(QWidget):
         )
         if entry is None:
             return
-        stale_note = (
-            "<p><b>需複查</b>：這一篇超過半年沒有複查過，數字與條文可能已經修正。</p>"
-            if is_stale(entry.reviewed_at)
-            else ""
-        )
-        self.detail.setHtml(
-            f"<h2>{entry.heading}　{entry.title}</h2>"
-            f"{stale_note}"
-            f"<p><b>白話摘要</b><br>{_html(entry.plain)}</p>"
-            f"<p><b>對這個帳本的意義</b><br>{_html(entry.ledger_note)}</p>"
-            f"<p><b>條文原文</b>（摘要與原文有出入時，以原文為準）</p>"
-            f"<pre>{_escape(entry.body)}</pre>"
-            f"<hr><p>主管機關：{entry.agency}　版本：{entry.amended_date}　"
-            f"法律狀態：{entry.legal_status}</p>"
-            f"<p>來源：{_escape(entry.source_url)}<br>"
-            f"抓取時間：{entry.fetched_at}　複查日期：{entry.reviewed_at}</p>"
-        )
+        self.detail.setHtml(entry_html(entry, stale=is_stale(entry.reviewed_at)))
+
+
+def entry_html(entry: ReferenceEntry, *, stale: bool) -> str:
+    """一篇條文的說明頁。**每一個從資料庫來的欄位都逸出**，只有兩段摘要的 `**粗體**` 轉成 HTML。
+
+    以前只逸出了條文原文與網址，標題、主管機關、日期直接插進 HTML。法規庫是自己產生的、
+    內容可信，但「哪些欄位可以不逸出」不該靠逐一判斷 —— 下一個加進來的欄位就會漏。
+    """
+    stale_note = (
+        "<p><b>需複查</b>：這一篇超過半年沒有複查過，數字與條文可能已經修正。</p>"
+        if stale
+        else ""
+    )
+    return (
+        f"<h2>{_escape(entry.heading)}　{_escape(entry.title)}</h2>"
+        f"{stale_note}"
+        f"<p><b>白話摘要</b><br>{_html(entry.plain)}</p>"
+        f"<p><b>對這個帳本的意義</b><br>{_html(entry.ledger_note)}</p>"
+        f"<p><b>條文原文</b>（摘要與原文有出入時，以原文為準）</p>"
+        f"<pre>{_escape(entry.body)}</pre>"
+        f"<hr><p>主管機關：{_escape(entry.agency)}　版本：{_escape(entry.amended_date)}　"
+        f"法律狀態：{_escape(entry.legal_status)}</p>"
+        f"<p>來源：{_escape(entry.source_url)}<br>"
+        f"抓取時間：{_escape(entry.fetched_at)}　複查日期：{_escape(entry.reviewed_at)}</p>"
+    )
 
 
 def _escape(text: str) -> str:
