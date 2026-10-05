@@ -309,3 +309,16 @@ def test_an_unknown_sort_field_falls_back_instead_of_reaching_sql(
     assert rows, "跳過不認得的那一層之後應該照樣列得出東西"
     # 表還在，而且內容沒變。
     assert store.list_categories(), "categories 被動到了"
+
+
+def test_pending_deposit_events_are_sorted_and_counted_in_sql(store: LedgerStore) -> None:
+    """待確認的清單與筆數都在 SQL 裡做，而且走 `(status, due_date)` 索引。
+
+    筆數以前是 `len(list_inbox())`、順序是撈回 Python 再 `sort()` 一次 —— 每次重算
+    側邊欄徽章都把每一列撈出來、組好、再丟掉。`deposit_events` 會長大：一份按月領息的
+    定存一年就是十二列，確認過的也都留著。
+    """
+    list_steps = _assert_no_growing_table_scan(store, store.list_pending_events)
+    assert any("idx_deposit_events_status_due" in step for step in list_steps), list_steps
+    count_steps = _assert_no_growing_table_scan(store, store.count_pending_events)
+    assert any("idx_deposit_events_status_due" in step for step in count_steps), count_steps

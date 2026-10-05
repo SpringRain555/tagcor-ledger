@@ -57,11 +57,25 @@ class DepositEventStore(StoreBase):
             return cursor.rowcount > 0
 
     def list_pending_events(self) -> list[DepositEvent]:
+        """待確認的事件，照到期日排。
+
+        **第二順位是 `event_id`**，同一天的項目每次重整才排在同一個位置。以前這裡排
+        `event_type`，controller 再撈進 Python 用 `event_id` 重排一次 —— 兩份排序規則，
+        而且違反「排序在 SQL 裡做」。
+        """
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
-                _EVENT_SELECT + " WHERE e.status = 'pending' ORDER BY e.due_date, e.event_type"
+                _EVENT_SELECT + " WHERE e.status = 'pending' ORDER BY e.due_date, e.event_id"
             ).fetchall()
         return [_row_to_event(row) for row in rows]
+
+    def count_pending_events(self) -> int:
+        """待確認有幾件。側邊欄徽章與資產總覽都讀這個數 —— **在 SQL 裡數**，不撈清單算長度。"""
+        with connect_database(self.paths.database_path) as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS pending FROM deposit_events WHERE status = 'pending'"
+            ).fetchone()
+        return int(row["pending"]) if row is not None else 0
 
     def get_event(self, event_id: str) -> DepositEvent:
         with connect_database(self.paths.database_path) as connection:

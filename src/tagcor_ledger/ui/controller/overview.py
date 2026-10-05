@@ -94,17 +94,16 @@ class OverviewSection(LedgerSection, TemplateSection, DepositSection, BalanceSec
         概念（「有哪些草稿等我確認」），今天它剛好只由定存供應。頁面問的是
         「待確認有什麼」，不是「定存有什麼待處理」。
 
-        排序的第二順位是 `event_id` —— 只用到期日排的話，同一天的項目每次重整
-        順序都可能不一樣。
+        **排序在 SQL 裡**（到期日，第二順位 `event_id`，見
+        `DepositEventStore.list_pending_events()`）。以前這裡撈回來再 `sort()` 一次，
+        跟 store 的 `ORDER BY` 是兩份規則，也違反「排序在 SQL 裡做」。
         """
-        rows = list(self.list_deposit_pending())
-        rows.sort(key=lambda item: (str(item["due_date"]), str(item.get("event_id") or "")))
-        return rows
+        return self.list_deposit_pending()
 
     def inbox_count(self) -> int:
-        """待確認的總筆數。
+        """待確認的總筆數，**在 SQL 裡數**（以前是 `len(self.list_inbox())`）。
 
         側邊欄的數字與資產總覽的數字都走這一個方法。兩邊各自算就會出現「側邊欄說 2、
         總覽說 3」，而使用者沒有辦法知道哪一個才對。
         """
-        return len(self.list_inbox())
+        return self.count_deposit_pending()

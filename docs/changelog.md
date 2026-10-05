@@ -8,6 +8,13 @@
 
 ## 未發布
 
+### 內部：待確認的排序與筆數改在 SQL 做
+
+`controller.list_inbox()` 以前把清單撈回 Python 再 `sort()`（store 的 `ORDER BY` 是另一份規則），
+`inbox_count()` 用 `len()` 數 —— 每次重算側邊欄徽章都把每一列撈出來組好再丟掉，違反「排序與加總在 SQL」。
+現在 `list_pending_events()` 直接 `ORDER BY due_date, event_id`，筆數是新的 `count_pending_events()`（`COUNT(*)`）。
+`test_query_plans.py` 加一條：兩句都走 `(status, due_date)` 索引。畫面上的順序與數字不變。
+
 ### CI：GITHUB_TOKEN 只給讀取權限
 
 `.github/workflows/verify.yml` 頂層加 `permissions: contents: read`。這個 workflow 只 checkout 與跑測試；

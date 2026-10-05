@@ -54,6 +54,9 @@ class DepositSection(ControllerBase):
     def list_deposit_pending(self) -> list[dict[str, Any]]:
         return self._rows(self.deposits.list_pending(), "events")
 
+    def count_deposit_pending(self) -> int:
+        return int(self.deposits.count_pending().details.get("count", 0))
+
     def confirm_deposit_event(
         self,
         event_id: str,

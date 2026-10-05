@@ -116,3 +116,7 @@ class EventSection(DepositServiceBase):
     def list_pending(self) -> Result:
         events = self.store.list_pending_events()
         return Result.ok(details={"events": [_event_view(item) for item in events]})
+
+    def count_pending(self) -> Result:
+        """待確認有幾件。**在 SQL 裡數** —— `len(list_pending())` 要先把每一列撈出來組好。"""
+        return Result.ok(details={"count": self.store.count_pending_events()})
