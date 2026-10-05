@@ -12,7 +12,7 @@
 
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QTableView
 
 from tagcor_ledger.ui.main_window import MainWindow
@@ -57,7 +57,7 @@ def test_the_inbox_is_one_table_of_deposit_events(window, make_deposit) -> None:
     assert [
         model.headerData(column, Qt.Orientation.Horizontal)
         for column in range(model.columnCount())
-    ] == ["到期日", "定存合約", "類型", "建議金額（TWD）"]
+    ] == ["到期日", "定存合約", "事件", "建議金額（TWD）"]
 
     assert model.rowCount() >= 2, "測試資料沒有產生待確認項目，這條測試等於沒作用"
     # 一張表，不是兩張。
@@ -77,7 +77,7 @@ def test_the_inbox_explains_itself_when_it_is_empty(window, make_deposit) -> Non
 
     空表格加兩顆停用的按鈕說不出任何事情。沒有項目時整組操作收起來，換成說明。
     """
-    window.show_page(PageId.INBOX)
+    window.show_page(PageId.BALANCE)
 
     page = window.inbox
     assert page.model.rowCount() == 0
@@ -112,8 +112,9 @@ def test_confirming_an_inbox_item_refreshes_the_transaction_list(window, make_de
     controller = window.controller
     make_deposit(controller)
     window.inbox.refresh()
+    window.refresh_pending_badge()
 
-    badge_before = window.sidebar.item_for(PageId.INBOX).data(BADGE_ROLE)
+    badge_before = window.sidebar.item_for(PageId.BALANCE).data(BADGE_ROLE)
     assert badge_before, "先要有一件待確認，否則這條測試什麼都沒驗到"
     assert window.transactions.model.rowCount() == 0
 
@@ -241,3 +242,49 @@ def test_skipping_a_maturity_is_refused_in_chinese(window, make_deposit, monkeyp
 
     window.inbox.refresh()
     assert window.inbox.model.rowCount() == before, "被擋下來的略過不該讓那一列消失"
+
+
+def test_refreshing_the_inbox_is_not_a_ledger_change(window, make_deposit) -> None:
+    """重查不是改動。以前 `refresh()` 每次都發 `changed`，於是任何一次重整都連鎖觸發
+    主視窗的 `_ledger_changed()` —— 而那個方法又叫盤點頁重整。現在只有確認入帳或略過才發。"""
+    make_deposit(window.controller)
+    emitted: list[int] = []
+    window.inbox.changed.connect(lambda: emitted.append(1))
+    window.balance.ledger_changed.connect(lambda: emitted.append(2))
+
+    window.inbox.refresh()
+    window.balance.refresh()
+    window.balance.reload_accounts()
+
+    assert window.inbox.model.rowCount() >= 1, "要有東西可以重查，這條測試才有意義"
+    assert emitted == []
+
+
+def test_go_handle_lands_on_the_pending_items_under_the_balance_page(
+    window, qtbot, make_deposit
+) -> None:
+    """資產總覽的「去處理」：切到餘額盤點，而且**那一塊要在畫面裡**。
+
+    待確認在盤點頁最底下；視窗矮的時候只切頁不捲動，使用者看到的是盤點表單，
+    還得自己往下找。視窗刻意縮矮，讓這一頁非捲不可。
+    """
+    make_deposit(window.controller)
+    window.balance.refresh()
+    window.refresh_pending_badge()
+    window.resize(1024, 520)
+    window.show_page(PageId.OVERVIEW)
+    window.overview.refresh()
+
+    window.overview.inbox_button.click()
+
+    assert window.current_page_widget() is window.balance
+    scroll = window.pages.currentWidget()
+    title = window.balance.pending_title
+
+    def title_in_view() -> bool:
+        top = title.mapTo(scroll.viewport(), QPoint(0, 0)).y()
+        return 0 <= top and top + title.height() <= scroll.viewport().height()
+
+    qtbot.waitUntil(title_in_view, timeout=2000)
+    # 陽性對照：這一頁真的需要捲，否則上面那條等於沒驗。
+    assert scroll.verticalScrollBar().maximum() > 0

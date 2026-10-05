@@ -30,7 +30,7 @@
 
 | 症狀 | 主要檔案 | 守著它的測試 |
 |---|---|---|
-| 某一頁的數字沒跟著別頁更新 | `ui/main_window.py::_ledger_changed()` | `tests/ui/test_inbox_page.py::test_confirming_an_inbox_item_refreshes_the_transaction_list` |
+| 某一頁的數字沒跟著別頁更新 | `ui/main_window.py::_ledger_changed()`／`_catalog_changed()` | `tests/ui/test_inbox_page.py::test_confirming_an_inbox_item_refreshes_the_transaction_list`、`tests/ui/test_navigation.py::test_a_catalog_change_reloads_the_transaction_list` |
 | 側邊欄自己跳頁、焦點一碰就換頁 | `ui/widgets/sidebar.py` | `test_focus_landing_on_the_sidebar_does_not_navigate` |
 | 日期欄怪怪的、日曆跑版 | `ui/widgets/forms.py::date_field()` ＋ `styles.qss` 的日曆一節 | `test_clicking_inside_the_date_field_never_changes_the_year` 等五條 |
 | 表格被切掉、欄寬不對 | `ui/widgets/table.py` 的 `fit_to_contents` / `fit_to_rows` | `tests/ui/test_layout.py` |

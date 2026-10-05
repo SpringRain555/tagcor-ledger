@@ -15,7 +15,7 @@
 > 4. **三處計算修正**：存本取息到期不再重複建議整期利息、零存整付到期轉回累積本金
 >    而不是 0、到期項目不能略過。
 
-實作位置：`domain/deposits.py`（列舉與試算）、`infrastructure/stores/deposit_contracts.py`／`deposit_terms.py`／`deposit_events.py`（持久化）、`application/deposits.py`（十二種組合的效果）、`ui/pages/deposits.py`（合約與期）。到期與領息一律走「待確認」頁。
+實作位置：`domain/deposits.py`（列舉與試算）、`infrastructure/stores/deposit_contracts.py`／`deposit_terms.py`／`deposit_events.py`（持久化）、`application/deposits.py`（十二種組合的效果）、`ui/pages/deposits.py`（合約與期）。到期與領息一律走「待確認」（2026-10-05 起在餘額盤點頁底下）。
 
 ## 目標
 
@@ -61,13 +61,14 @@
 
 - 到期**前 7 天**產生待確認項目，讓「不自動轉存」這種需要主動處理的情況來得及反應。
 - **程式不自動入帳。** 到期與每月領息都只產生待確認項目，由使用者確認才成為交易。
-- 待確認項目在**既有的「待確認」頁面**呈現，維持單一收件匣。
+- 待確認項目在**既有的「待確認」**呈現，維持單一收件匣（2026-10-05 起它是餘額盤點頁底下的一塊，
+  不再是獨立一頁 —— [ADR-0016](../decisions/ADR-0016-inbox-under-balance-snapshots.md)）。
   用獨立的 `deposit_events` 表，**不塞進 `recurring_schedules`** ——
   否則排程引擎要懂計息，耦合太深。
   （**這個決定在 v0.23.0 得到回報**：定期收支移除時
   [ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md) 只要砍掉那兩張表，
   定存一行都不用動。`recurring_schedules` 已經不存在，`deposit_events` 現在是
-  「待確認」頁唯一的來源。）
+  「待確認」唯一的來源。）
 - 利息金額算出**建議值**（`Decimal` 運算後轉整數 minor unit），使用者可覆寫為存摺上的實際金額。
 - **定存帳戶不提供類別欄位。** 定存的本金進出與利息沒有「屬於哪個類別」的問題。
 - 允許 `起存日` 早於帳本第一筆交易（既有定存的上線需要）。

@@ -140,7 +140,8 @@ stateDiagram-v2
 ## 3. 待確認項目：`deposit_events`
 
 **一個來源、一張轉移表。** 使用者看到的是一個收件匣（`controller.list_inbox()`），
-今天由定存獨家供應。
+今天由定存獨家供應。它住在餘額盤點頁底下「補記與待確認」那一塊
+（2026-10-05 起，[ADR-0016](../decisions/ADR-0016-inbox-under-balance-snapshots.md)；之前是側邊欄獨立一頁）。
 
 > **v0.23.0 之前有兩個來源。** 定期收支的 `scheduled_occurrences` 走的是一模一樣的
 > 三個狀態，所以兩者寫在同一節；那個功能移除之後

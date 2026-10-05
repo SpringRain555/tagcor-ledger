@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -42,13 +43,13 @@ from tagcor_ledger.ui.navigation import (
     DAILY_PAGES,
     LABELS,
     LANDING_PAGE,
+    PENDING_PAGE,
     SETTINGS_PAGES,
     PageId,
 )
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.entry import EntryPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
-from tagcor_ledger.ui.pages.inbox import InboxPage
 from tagcor_ledger.ui.pages.overview import OverviewPage
 from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
@@ -72,7 +73,9 @@ class MainWindow(QMainWindow):
         self.overview = OverviewPage(self.controller)
         self.entry = EntryPage(self.controller)
         self.balance = BalanceSnapshotPage(self.controller)
-        self.inbox = InboxPage(self.controller)
+        # 待確認是餘額盤點頁底下的一塊（ADR-0016），不再是一頁。留一個名字指著它，
+        # 「待確認在哪」才不必每個地方都知道它住在盤點頁裡。
+        self.inbox = self.balance.inbox
         self.transactions = TransactionsPage(self.controller)
         self.operation_settings = OperationSettingsPage(self.controller)
         self.reference = ReferencePage(self.controller)
@@ -96,7 +99,6 @@ class MainWindow(QMainWindow):
         self._page_widgets: dict[PageId, QWidget] = {
             PageId.OVERVIEW: self.overview,
             PageId.ENTRY: self.entry,
-            PageId.INBOX: self.inbox,
             PageId.TRANSACTIONS: self.transactions,
             PageId.BALANCE: self.balance,
             PageId.REFERENCE: self.reference,
@@ -105,7 +107,7 @@ class MainWindow(QMainWindow):
         }
         self.pages.setObjectName("contentStack")
         # 每一頁包自己的捲動區，不要包在堆疊外面 —— 理由見 `widgets/layout.py`。
-        self._page_scrolls: dict[PageId, QWidget] = {}
+        self._page_scrolls: dict[PageId, QScrollArea] = {}
         for page in ALL_PAGES:
             widget = self._page_widgets[page]
             widget.setObjectName("pageSurface")
@@ -141,17 +143,18 @@ class MainWindow(QMainWindow):
         self._adapt_to_width(self.width())
         self.show_page(LANDING_PAGE)
 
-        self.overview.inbox_requested.connect(lambda: self.show_page(PageId.INBOX))
+        self.overview.inbox_requested.connect(self.show_pending)
         self.overview.balance_requested.connect(lambda: self.show_page(PageId.BALANCE))
         # **每一個會改動帳務的來源都接到同一個 `_ledger_changed`。** 三個來源
-        # （記帳、交易紀錄的作廢／編輯、待確認的確認入帳）做的是同一件事 ——
+        # （記帳、交易紀錄的刪除／編輯、待確認的確認入帳）做的是同一件事 ——
         # 產生或改變交易 —— 所以它們該通知的對象也是同一組。分成三個「差不多」
-        # 的方法，就是下一個「某一頁忘了重刷」的來源。
+        # 的方法，就是下一個「某一頁忘了重刷」的來源。待確認住在盤點頁裡，
+        # 它的確認入帳由盤點頁轉成 `ledger_changed` 發出來。
         self.entry.saved.connect(self._ledger_changed)
         self.transactions.changed.connect(self._ledger_changed)
-        self.inbox.changed.connect(self._ledger_changed)
+        self.balance.ledger_changed.connect(self._ledger_changed)
         self.balance.changed.connect(self._balance_changed)
-        self.balance.record_transaction_requested.connect(self._focus_new)
+        self.balance.record_transaction_requested.connect(self._record_missing_transaction)
         self.transactions.template_requested.connect(self._create_template)
         self.operation_settings.apply_requested.connect(self._prefill_quick)
         self.operation_settings.changed.connect(self._catalog_changed)
@@ -270,7 +273,7 @@ class MainWindow(QMainWindow):
         count = self._inbox_count
         for page, action in self._page_actions.items():
             label = LABELS[page]
-            if page is PageId.INBOX and count:
+            if page is PENDING_PAGE and count:
                 label = f"{label}（{count}）"
             action.setText(label)
         if current is not None:
@@ -283,6 +286,27 @@ class MainWindow(QMainWindow):
 
     def _focus_new(self) -> None:
         self.show_page(PageId.ENTRY)
+        self.entry.amount.setFocus()
+
+    def show_pending(self) -> None:
+        """資產總覽的「去處理」：待確認住在餘額盤點頁底下，切過去再捲到那一塊。
+
+        **捲動排到下一輪事件迴圈。** 第一次切到這一頁時版面還沒算過，當下量到的位置
+        都是 0，`ensureWidgetVisible` 等於沒捲。
+        """
+        self.show_page(PENDING_PAGE)
+        scroll = self._page_scrolls[PENDING_PAGE]
+        QTimer.singleShot(0, lambda: scroll.ensureWidgetVisible(self.balance.pending_title))
+
+    def _record_missing_transaction(self, account_id: str) -> None:
+        """盤點頁的「補記交易」：切到記帳頁，帳戶先選好盤點頁正在看的那一個。
+
+        使用者在看某個帳戶的差額，按下去要補的多半就是那個帳戶的帳。只選帳戶、
+        不動其他欄位 —— 記帳頁上正在打的東西不能因為換頁而消失。
+        """
+        self.show_page(PageId.ENTRY)
+        if account_id:
+            self.entry.prefill_account(account_id)
         self.entry.amount.setFocus()
 
     def _prefill_quick(self, draft: dict[str, Any]) -> None:
@@ -299,11 +323,11 @@ class MainWindow(QMainWindow):
         self.operation_settings.create_template_from(draft)
 
     def _ledger_changed(self) -> None:
-        """有交易被建立、改變或作廢之後，誰要重算。
+        """有交易被建立、改變或刪除之後，誰要重算。
 
         **餘額盤點一定要在這裡。** 未解釋差額是「盤點金額 － 期間 posting 加總」，
         任何一筆交易的增減都會改變它。2026-08 之前只有記帳頁接到這條線，於是從
-        交易紀錄作廢一筆錯帳、或在待確認按下確認入帳之後，餘額盤點的差額都停在舊值。
+        交易紀錄刪除一筆錯帳、或在待確認按下確認入帳之後，餘額盤點的差額都停在舊值。
 
         **資產總覽不在這裡** —— 它走「切過去就重算」（見 `overview.py` 的模組說明）。
         把它加進來就等於同時維護兩套規則，而其中一套遲早會漏。
@@ -316,12 +340,24 @@ class MainWindow(QMainWindow):
         self.balance.refresh()
 
     def _catalog_changed(self) -> None:
+        """操作設定裡的任何改動。
+
+        以前有兩件事是**順帶**發生的：待確認頁重整時一律發 `changed`，連鎖到
+        `_ledger_changed()`，於是交易紀錄跟著重載、待確認的數字跟著更新。那條連鎖拿掉了
+        （見 `InboxSection`），兩件事都得在這裡明講，否則就是「跨頁連動掉了一條線」：
+
+        - **交易紀錄要重載**：類別改名、更改所屬類別會改變交易顯示的名字，
+          定存的中途解約會建立交易。只重填篩選下拉（`reload_filters()`）不會重查清單。
+        - **待確認的數字要重算**：定存頁的「產生」、建立或結束合約都會改變待確認。
+          待確認的清單本身由 `reload_accounts()` 重查。
+        """
         self.entry.reload_options()
         self.balance.reload_accounts()
         self.transactions.reload_filters()
+        self.transactions.first_page()
         self.system_settings.reload()
         self.operation_settings.refresh()
-        self.inbox.refresh()
+        self.refresh_pending_badge()
 
     def _settings_changed(self) -> None:
         self.entry.apply_defaults()
@@ -338,15 +374,16 @@ class MainWindow(QMainWindow):
         self.transactions.reload_filters()
         self.transactions.first_page()
         self.operation_settings.refresh()
-        self.inbox.refresh()
         self.system_settings.reload()
+        self.refresh_pending_badge()
 
     def refresh_pending_badge(self) -> None:
         """待確認的數字直接畫在側邊欄右側，不必點進去才知道有沒有事情要處理。
 
+        **掛在餘額盤點那一列**（`PENDING_PAGE`）：待確認住在那一頁底下（ADR-0016）。
         走 `controller.inbox_count()`，與資產總覽同一個來源 —— 兩邊各自算就會出現
         「側邊欄說 2、總覽說 3」，而使用者沒有辦法知道哪一個才對。
         """
         self._inbox_count = self.controller.inbox_count()
-        self.sidebar.set_badge(PageId.INBOX, self._inbox_count)
+        self.sidebar.set_badge(PENDING_PAGE, self._inbox_count)
         self._sync_page_menu()

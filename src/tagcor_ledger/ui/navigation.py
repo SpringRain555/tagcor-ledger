@@ -30,14 +30,14 @@ from enum import StrEnum
 class PageId(StrEnum):
     """側邊欄一頁的身分。**這是 key，顯示文字不是。**
 
-    `INBOX` 的顯示文字是「待確認」，兩個名字都是刻意的：畫面上要回答使用者的問題
-    （有什麼等我確認），程式裡要講得出結構（兩個來源落在同一個地方）。
+    **沒有 `INBOX` 了**（2026-10-05）：待確認是餘額盤點頁底下的一塊，不再是一頁 ——
+    理由在 `docs/decisions/ADR-0016-inbox-under-balance-snapshots.md`。待確認的數字
+    現在掛在餘額盤點這一列上。「收件匣」（`inbox`）仍然是程式裡描述那個結構的詞，
     對照表在 `docs/architecture/glossary.md`。
     """
 
     OVERVIEW = "overview"
     ENTRY = "entry"
-    INBOX = "inbox"
     TRANSACTIONS = "transactions"
     BALANCE = "balance"
     REFERENCE = "reference"
@@ -48,11 +48,15 @@ class PageId(StrEnum):
 DAILY_PAGES: tuple[PageId, ...] = (
     PageId.OVERVIEW,
     PageId.ENTRY,
-    PageId.INBOX,
     PageId.TRANSACTIONS,
     PageId.BALANCE,
 )
-"""每天會用到的頁，排在側邊欄上半。順序的唯一正本。"""
+"""每天會用到的頁，排在側邊欄上半。順序的唯一正本。
+
+順序是使用者 2026-10-05 定的：看狀況 → 記帳 → 查帳 → 對帳。"""
+
+PENDING_PAGE: PageId = PageId.BALANCE
+"""待確認住在哪一頁 —— 側邊欄的數字掛在這一列，資產總覽的「去處理」也送到這裡。"""
 
 LANDING_PAGE: PageId = PageId.OVERVIEW
 """開啟程式停在哪一頁。
@@ -71,7 +75,6 @@ SETTINGS_PAGES: tuple[PageId, ...] = (
 LABELS: dict[PageId, str] = {
     PageId.OVERVIEW: "資產總覽",
     PageId.ENTRY: "記帳",
-    PageId.INBOX: "待確認",
     PageId.TRANSACTIONS: "交易紀錄",
     PageId.BALANCE: "餘額盤點",
     PageId.REFERENCE: "法規參考",

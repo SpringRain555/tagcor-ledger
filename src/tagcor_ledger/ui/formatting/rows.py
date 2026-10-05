@@ -32,14 +32,18 @@ from tagcor_ledger.ui.formatting.primitives import (
 
 
 def balance_gap_values(item: dict[str, Any]) -> list[str]:
+    """盤點紀錄的一列：盤點日期／實際金額／預期金額／未解釋差額／備註。
+
+    **沒有帳戶與狀態**（2026-10-05 拿掉）：清單本來就照上方選的帳戶篩，每一列的帳戶都一樣；
+    盤點的刪除是真的移除（ADR-0015），剩下的每一筆都有效。兩欄都是每列同值 ——
+    依這個檔案自己的規則（見 `account_values`）那就是雜訊。
+    """
     return [
         display_date(str(item["observed_at"])),
-        str(item["account_name"]),
         group_digits(str(item["actual_balance"])),
         group_digits(str(item["expected_balance"])),
         group_digits(str(item["difference"])),
         str(item["note"]),
-        STATUS_NAMES.get(str(item["status"]), str(item["status"])),
     ]
 
 

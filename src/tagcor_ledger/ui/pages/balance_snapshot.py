@@ -1,19 +1,29 @@
-"""餘額盤點：記錄「現在實際看到多少」，並顯示未解釋差額。
+"""餘額盤點：記錄「現在實際看到多少」、顯示未解釋差額，以及**補上帳本還缺的交易**。
 
 盤點**不建立交易**。差額不為零時的處置是補記交易，不是叫程式生一筆調整。
 
-## 這一頁的形狀（2026-09-20 起）
+## 這一頁的形狀（2026-10-05 起）
 
-上方表單只負責**新增**。表格底下兩排按鈕：第一排是「產生新東西」（新增盤點、補記交易），
-第二排對**所選盤點**動作（編輯、刪除）。「編輯」開對話框（`BalanceSnapshotEditDialog`），
-「刪除」**真的移除**那一筆（2026-10-05 起，ADR-0015；之前是標成已刪除、紀錄留著）。
+1. 上方表單只負責**新增**（帳戶同時是底下清單的篩選）。
+2. **一排**「新增盤點」「編輯」「刪除」—— 使用者 2026-10-05 要求排在同一排。「編輯」「刪除」
+   對所選盤點動作，沒選就停用；「編輯」開對話框（`BalanceSnapshotEditDialog`），
+   「刪除」**真的移除**那一筆（ADR-0015）。
+3. 最近一次盤點的摘要，然後「盤點紀錄」表。一次列 `PAGE_SIZE` 筆，滿了才出現「載入更多」。
+4. **「補記與待確認」**：未解釋差額的兩種處置放在一起 ——「補記交易」去記帳頁補上漏記的
+   （帳戶先選好這一頁正在看的那個），底下是定存產生的待確認草稿（`InboxSection`）。
+   待確認以前是側邊欄獨立的一頁，理由見 ADR-0016 與 `inbox.py` 的模組說明。
 
 以前點表格某一列會把值倒進上方表單，再按「更新所選盤點」寫回。兩個問題：正在打的新盤點
 會被點到的那一列蓋掉；而一顆叫「更新」的按鈕一按就寫入，使用者以為它會先開視窗。
-「重新整理」也拿掉了 —— 換帳戶、換狀態本來就會重查，跨頁的改動由 `main_window` 通知。
+「重新整理」也拿掉了 —— 換帳戶本來就會重查，跨頁的改動由 `main_window` 通知。
 
 **「最近盤點差額期間內的交易」那張表拿掉了。** 它佔掉半頁，而要查交易本來就有交易紀錄頁
 （帳戶、日期區間都篩得到）；連同底下那條只有它在用的查詢一起移除，不留死碼。
+
+## 兩個訊號，兩種改動
+
+`changed` 是**盤點**被新增、編輯或刪除 —— 只有這一頁自己要重算。`ledger_changed` 是待確認
+按下確認入帳或略過 —— 那會建立交易，交易紀錄、徽章都要跟著動，主視窗把它接到 `_ledger_changed()`。
 """
 
 from __future__ import annotations
@@ -46,6 +56,7 @@ from tagcor_ledger.ui.formatting import (
     minor_text,
     result_message,
 )
+from tagcor_ledger.ui.pages.inbox import InboxSection
 from tagcor_ledger.ui.widgets.forms import (
     date_field,
     fill_combo,
@@ -62,10 +73,33 @@ from tagcor_ledger.ui.widgets.table import (
     setup_table,
 )
 
+PAGE_SIZE = 50
+"""盤點紀錄一次列幾筆。滿了才出現「載入更多」，每按一次多 `PAGE_SIZE` 筆。
+
+以前寫死 50、沒有下一頁：一個帳戶每月盤點一次，四年多之後最舊的就看不到了。"""
+
+MAX_ROWS = 10_000
+"""「載入更多」的上限，跟 store 的 `list_balance_gaps(limit=...)` 允許的最大值一致。"""
+
+RECORD_TABLE_ROWS = 12
+"""盤點紀錄表最多長到幾列，再多就讓它自己捲 —— 底下還有「補記與待確認」，
+表格長滿整頁的話那一塊會被推到看不見的地方。"""
+
+GAP_HELP = (
+    "未解釋差額不為零，通常是兩種情形：有交易漏記了 —— 按「補記交易」去記帳頁補上；"
+    "或定存的利息、到期本息還沒確認入帳 —— 就在下面確認。兩種做完，差額都會自動重算。"
+)
+
 
 class BalanceSnapshotPage(QWidget):
     changed = Signal()
-    record_transaction_requested = Signal()
+    """盤點被新增、編輯或刪除。"""
+
+    ledger_changed = Signal()
+    """待確認按下確認入帳或略過 —— 帳本本身變了（見模組說明「兩個訊號」）。"""
+
+    record_transaction_requested = Signal(str)
+    """「補記交易」。帶著這一頁正在看的帳戶 id（沒有帳戶時是空字串）。"""
 
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
@@ -77,11 +111,17 @@ class BalanceSnapshotPage(QWidget):
         self.result = QLabel()
         self.summary = QLabel()
         self.table = QTableView()
+        # **沒有「帳戶」與「狀態」兩欄。** 清單本來就照上方選的帳戶篩，每一列的帳戶都一樣；
+        # 盤點的刪除是真的移除（ADR-0015），剩下的每一筆都有效 —— 兩欄都是每列同值的雜訊。
         self.model = RowsModel(
-            ["盤點日期", "帳戶", "實際金額", "預期金額", "未解釋差額", "備註", "狀態"],
+            ["盤點日期", "實際金額", "預期金額", "未解釋差額", "備註"],
             balance_gap_values,
-            amount_column=4,
+            amount_column=3,
         )
+        self.limit = PAGE_SIZE
+        self.more_button = QPushButton("載入更多")
+        self.inbox = InboxSection(controller)
+        self.pending_title = QLabel("補記與待確認")
         self._build()
         self.reload_accounts()
 
@@ -102,67 +142,97 @@ class BalanceSnapshotPage(QWidget):
         self.summary.setWordWrap(True)
 
         create_button = QPushButton("新增盤點")
-        quick_button = QPushButton("補記交易")
         edit_button = QPushButton("編輯")
         delete_button = QPushButton("刪除")
+        record_button = QPushButton("補記交易")
+        record_button.setToolTip("切到記帳頁，帳戶先選好這一頁正在看的那一個。")
         set_button_role(create_button, "primary")
         set_button_role(delete_button, "danger")
 
         form = QFormLayout()
         form.addRow("帳戶", self.account)
         form.addRow("盤點日期", self.observed_at)
-        form.addRow("目前金額（TWD）", self.amount)
+        form.addRow("實際金額（TWD）", self.amount)
         form.addRow("備註", self.note)
         form.addRow("", self.result)
 
-        # 兩排，分的是**動作的對象**：第一排產生新東西，第二排對所選盤點動作。
-        # 「匯出盤點 CSV」2026-10-05 搬到「系統設定 → 備份與還原」。
-        create_row = QHBoxLayout()
-        for button in (create_button, quick_button):
-            create_row.addWidget(button)
-        create_row.addStretch()
-        selected_row = QHBoxLayout()
-        for button in (edit_button, delete_button):
-            selected_row.addWidget(button)
-        selected_row.addStretch()
+        actions = QHBoxLayout()
+        for button in (create_button, edit_button, delete_button):
+            actions.addWidget(button)
+        actions.addStretch()
 
-        setup_table(self.table, self.model, stretch_column=5)
+        setup_table(
+            self.table, self.model, stretch_column=4, fit_rows=RECORD_TABLE_ROWS
+        )
         # 編輯／刪除是對所選盤點動作，沒選就停用。
         bind_selection(self.table, edit_button, delete_button)
+
+        more_row = QHBoxLayout()
+        more_row.addWidget(self.more_button)
+        more_row.addStretch()
+
+        records_title = QLabel("盤點紀錄")
+        records_title.setObjectName("sectionTitle")
+        self.pending_title.setObjectName("sectionTitle")
+        gap_help = QLabel(GAP_HELP)
+        gap_help.setObjectName("hintLabel")
+        gap_help.setWordWrap(True)
+        record_row = QHBoxLayout()
+        record_row.addWidget(record_button)
+        record_row.addStretch()
+
         layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addWidget(help_text)
-        # 表單另外收到 720 —— 這一頁有表單也有表格，整頁用表單寬度會塞不下七欄的表。
+        # 表單另外收到 720 —— 這一頁有表單也有表格，整頁用表單寬度會塞不下那張表。
         layout.addWidget(form_panel(form))
-        layout.addLayout(create_row)
-        layout.addLayout(selected_row)
+        layout.addLayout(actions)
         layout.addWidget(self.summary)
-        records_title = QLabel("盤點紀錄")
-        records_title.setObjectName("sectionTitle")
         layout.addWidget(records_title)
         layout.addWidget(self.table)
+        layout.addLayout(more_row)
+        layout.addWidget(self.pending_title)
+        layout.addWidget(gap_help)
+        layout.addLayout(record_row)
+        layout.addWidget(self.inbox)
+        # 表格都是固定高度（`fit_rows`），多出來的高度留在最底下，不要平均塞進每一塊之間。
+        layout.addStretch()
 
-        self.account.currentIndexChanged.connect(self.refresh)
+        self.account.currentIndexChanged.connect(self._account_changed)
         create_button.clicked.connect(self.create_snapshot)
-        quick_button.clicked.connect(lambda: self.record_transaction_requested.emit())
         edit_button.clicked.connect(self.edit_selected)
         delete_button.clicked.connect(self.delete_selected)
+        self.more_button.clicked.connect(self.load_more)
+        record_button.clicked.connect(
+            lambda: self.record_transaction_requested.emit(self._account_id() or "")
+        )
+        self.inbox.changed.connect(self._inbox_changed)
 
     def reload_accounts(self) -> None:
         fill_combo(self.account, self.controller.account_options(), "name", "account_id")
         self.refresh()
 
     def refresh(self) -> None:
+        """重查盤點紀錄、最近一次的摘要，以及底下的待確認。
+
+        待確認也在這裡重查：它會因為「操作設定 → 定存」產生新的草稿、或還原了一份備份
+        而改變，那兩條路主視窗都會叫到這裡（`reload_accounts()`）。
+        """
+        self.inbox.refresh()
         account_id = self._account_id()
         if account_id is None:
             self.model.replace_rows([])
+            self.more_button.setVisible(False)
             self.summary.setText("尚未建立帳戶。")
             return
-        gaps = self.controller.list_balance_snapshots(account_id=account_id, limit=50)
+        gaps = self.controller.list_balance_snapshots(account_id=account_id, limit=self.limit)
         self.model.replace_rows(gaps)
+        # 回傳滿 `limit` 筆才可能還有更多。剛好整除時多按一次會什麼都沒多出來 ——
+        # 那一次之後按鈕就消失，比為了一顆按鈕多查一次總筆數划算。
+        self.more_button.setVisible(len(gaps) >= self.limit and self.limit < MAX_ROWS)
         latest = self.controller.latest_balance_gap(account_id)
         if latest is None:
-            self.summary.setText("此帳戶尚未盤點。可先輸入目前金額，之後再慢慢補記交易。")
+            self.summary.setText("此帳戶尚未盤點。可先輸入實際金額，之後再慢慢補記交易。")
             return
         difference = int(latest["difference_minor"])
         sign_text = "完全吻合" if difference == 0 else latest["difference"]
@@ -173,6 +243,20 @@ class BalanceSnapshotPage(QWidget):
             f"預期 {latest['expected_balance']} TWD，"
             f"未解釋差額 {sign_text} TWD。"
         )
+
+    def load_more(self) -> None:
+        self.limit = min(self.limit + PAGE_SIZE, MAX_ROWS)
+        self.refresh()
+
+    def _account_changed(self) -> None:
+        """換帳戶就從第一頁重新開始 —— 上一個帳戶載入到第幾頁，跟這一個沒有關係。"""
+        self.limit = PAGE_SIZE
+        self.refresh()
+
+    def _inbox_changed(self) -> None:
+        """確認入帳或略過之後：這一頁的差額要重算，帳本的其他地方交給主視窗。"""
+        self.refresh()
+        self.ledger_changed.emit()
 
     def create_snapshot(self) -> None:
         account_id = self._account_id()
@@ -265,7 +349,7 @@ class BalanceSnapshotEditDialog(QDialog):
         form = QFormLayout()
         form.addRow("帳戶", self.account)
         form.addRow("盤點日期", self.observed_at)
-        form.addRow("目前金額（TWD）", self.amount)
+        form.addRow("實際金額（TWD）", self.amount)
         form.addRow("備註", self.note)
         form.addRow("", self.error)
         buttons = QDialogButtonBox(

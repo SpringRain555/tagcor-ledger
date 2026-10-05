@@ -82,7 +82,7 @@ def test_the_inbox_number_is_the_same_everywhere(window, make_deposit) -> None:
     count = controller.inbox_count()
     assert count >= 1, "測試資料沒有產生待確認項目，這條測試等於沒作用"
     assert count == len(controller.list_deposit_pending())
-    assert window.sidebar.item_for(PageId.INBOX).data(BADGE_ROLE) == count
+    assert window.sidebar.item_for(PageId.BALANCE).data(BADGE_ROLE) == count
     assert f"{count} 筆" in window.overview.inbox_note.text()
 
     # 定存區塊要出現，而且說得出哪一份合約、什麼時候到期。

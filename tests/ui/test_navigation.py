@@ -29,7 +29,6 @@ def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(window) -> None:
     assert [item.text() for item in window.sidebar.all_items()] == [
         "資產總覽",
         "記帳",
-        "待確認",
         "交易紀錄",
         "餘額盤點",
         "法規參考",
@@ -40,7 +39,6 @@ def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(window) -> None:
     for page, widget in (
         (PageId.OVERVIEW, window.overview),
         (PageId.ENTRY, window.entry),
-        (PageId.INBOX, window.inbox),
         (PageId.TRANSACTIONS, window.transactions),
         (PageId.BALANCE, window.balance),
         (PageId.REFERENCE, window.reference),
@@ -207,15 +205,16 @@ def test_pending_badge_is_drawn_beside_the_label_not_inside_it(window, make_depo
     應該是固定不動的錨點。
     """
 
-    item = window.sidebar.item_for(PageId.INBOX)
+    # 待確認住在餘額盤點頁底下（ADR-0016），數字掛在那一列。
+    item = window.sidebar.item_for(PageId.BALANCE)
     assert item is not None
-    assert item.text() == "待確認"
+    assert item.text() == "餘額盤點"
     assert item.data(BADGE_ROLE) is None
 
     controller = window.controller
     make_deposit(controller)
     window.refresh_pending_badge()
-    assert item.text() == "待確認"  # 文字不動
+    assert item.text() == "餘額盤點"  # 文字不動
     assert item.data(BADGE_ROLE) == len(controller.list_inbox())
 
 
@@ -311,3 +310,38 @@ def test_the_app_opens_on_the_overview(window) -> None:
     assert DAILY_PAGES[0] is PageId.OVERVIEW
     assert window.current_page_widget() is window.overview
     assert window.sidebar.current_page() is PageId.OVERVIEW
+
+
+def test_a_catalog_change_reloads_the_transaction_list(window) -> None:
+    """操作設定的改動要讓交易紀錄重載 —— 項目改名之後，交易紀錄要顯示新名字。
+
+    這件事以前是**順帶**發生的：待確認頁重整時一律發 `changed`，連鎖到
+    `_ledger_changed()` 才重載了交易紀錄。2026-10-05 拿掉那條連鎖（待確認併進餘額盤點）
+    時差一點就跟著拿掉了 —— 所以現在 `_catalog_changed()` 明講，這條測試盯著。
+    """
+    controller = window.controller
+    assert controller.submit(
+        occurred_at="2026-08-19T10:00:00+08:00",
+        entry_type="expense",
+        amount="85",
+        account_id="acct_cash",
+        destination_account_id=None,
+        category_id="cat_food_711",
+        description="午餐",
+    ).success
+    window.transactions.first_page()
+
+    def cells() -> list[str]:
+        model = window.transactions.model
+        return [
+            str(model.index(row, column).data())
+            for row in range(model.rowCount())
+            for column in range(model.columnCount())
+        ]
+
+    assert not any("便利商店" in cell for cell in cells())
+    assert controller.rename_category("cat_food_711", "便利商店").success
+    # 走主視窗真正接的那條線：操作設定的分頁做完事都是發這個訊號。
+    window.operation_settings.changed.emit()
+
+    assert any("便利商店" in cell for cell in cells()), cells()

@@ -361,6 +361,15 @@ class EntryPage(QWidget):
                 self.destination.setCurrentIndex(index)
                 return
 
+    def prefill_account(self, account_id: str) -> None:
+        """**只選帳戶**，其他欄位一格都不動。
+
+        給餘額盤點的「補記交易」用：使用者在看某個帳戶的差額，按下去要補的多半就是那個
+        帳戶的帳。不走 `apply_draft()` —— 那會把流向、類別、金額、備註、日期都換掉，
+        記帳頁上正在打的東西會因為換頁而消失。帳戶已封存（不在下拉裡）時什麼都不做。
+        """
+        select_data(self.account, account_id)
+
     def apply_draft(self, draft: dict[str, Any], *, use_current_time: bool = True) -> None:
         self.saved_message_timer.stop()
         self.select_entry_type(draft.get("entry_type"))

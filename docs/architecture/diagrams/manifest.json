@@ -72,7 +72,7 @@
                          "document":  "ui-workflows.md",
                          "index":  1,
                          "svg":  "ui-workflows-1.svg",
-                         "sha256":  "a277b9decb7b615e20177e21ecedc18aa7342c58169c2579da961cd91e11fa20"
+                         "sha256":  "d837550b9fefbe584c009e4e2ff18185af1e7460c70ab427f17f7919f86ab9aa"
                      },
                      {
                          "document":  "ui-workflows.md",
@@ -84,7 +84,7 @@
                          "document":  "ui-workflows.md",
                          "index":  3,
                          "svg":  "ui-workflows-3.svg",
-                         "sha256":  "95f31ae57cf4ef84d6bf0ff56e2a5f74b492b82e2be45c6d0a3b7410ed9c85c0"
+                         "sha256":  "15025aab978487a95f4bc8a47c28d4acf5aafd644edcf6012bdba499b91d5d17"
                      }
                  ]
 }
