@@ -38,7 +38,7 @@ SYSTEM_SETTINGS = (
 
 
 def _settings_tab_labels() -> list[str]:
-    """從 `_tabs()` 的原始碼取出五個分頁名。
+    """從 `_tabs()` 的原始碼取出操作設定的分頁名。
 
     **用 AST 讀原始碼，不 import 之後去建 widget** —— 這個測試在 `tests/unit`，
     不該需要 QApplication。
@@ -81,11 +81,12 @@ def _system_tab_labels() -> list[str]:
     return labels
 
 
-def test_the_extractor_finds_the_five_tabs() -> None:
+def test_the_extractor_finds_the_four_tabs() -> None:
     """陽性對照：抽不到名字的話，底下那條會空過。"""
     labels = _settings_tab_labels()
-    assert len(labels) == 5, labels
+    assert len(labels) == 4, labels
     assert "定存" in labels
+    assert "類別與項目" in labels
 
 
 def test_the_extractor_finds_the_four_system_tabs() -> None:
@@ -96,7 +97,7 @@ def test_the_extractor_finds_the_four_system_tabs() -> None:
 
 
 def test_every_page_name_appears_in_the_ui_workflows_doc() -> None:
-    """側邊欄八頁、操作設定五個分頁、系統設定四個分頁，都要逐字出現在頁面地圖那份文件裡。"""
+    """側邊欄七頁、操作設定四個分頁、系統設定四個分頁，都要逐字出現在頁面地圖那份文件裡。"""
     document = UI_WORKFLOWS.read_text(encoding="utf-8")
     expected = (
         [LABELS[page] for page in ALL_PAGES]
@@ -292,5 +293,6 @@ def test_the_stale_count_phrases_would_actually_be_caught() -> None:
     count = len(_settings_tab_labels())
     stale = {f"{numeral}個分頁" for number, numeral in CHINESE_NUMERALS.items() if number != count}
     assert f"{CHINESE_NUMERALS[count]}個分頁" not in stale
-    assert "六個分頁" in stale, "五分頁時代最容易寫錯的就是舊的『六個分頁』"
+    assert "五個分頁" in stale, "四分頁時代最容易寫錯的就是舊的『五個分頁』"
+    assert "六個分頁" in stale
     assert len(stale) == len(CHINESE_NUMERALS) - 1

@@ -33,7 +33,7 @@
 碼不收，那些訊息就在它們自己的呼叫處，收進來會變成同一個碼有兩個講法。
 
 表裡的句子是那個碼的**預設說法**。呼叫端可以用 `overrides` 給更貼近當下情境的
-說法（例如 `CATEGORY_NAME_REQUIRED` 在「類別」與「項目」兩個分頁該說不同的話）。
+說法（例如 `CATEGORY_NAME_REQUIRED` 在「類別」與「項目」兩個窗格該說不同的話）。
 
 加一個新的 `raise ValueError("SOME_CODE")` 卻沒有在這裡加一列，
 `tests/unit/test_failure_messages.py` 會紅。
@@ -103,7 +103,7 @@ ERROR_MESSAGES: dict[str, str] = {
     ),
     "CATEGORY_NOT_ACTIVE": "這個類別／項目已經封存，不能拿來記帳。請先恢復它，或改選別的。",
     "CATEGORY_PARENT_INVALID": (
-        "所屬類別不存在或已封存。請先在「類別」分頁選一個使用中的類別 —— 只有第一層"
+        "所屬類別不存在或已封存。請先在「類別與項目」左邊選一個使用中的類別 —— 只有第一層"
         "能當所屬類別，沒有第三層。"
     ),
     "CATEGORY_PARENT_NOT_ACTIVE": "所屬類別已經封存了。請先恢復它，再恢復這個項目。",

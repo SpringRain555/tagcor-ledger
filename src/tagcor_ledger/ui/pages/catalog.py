@@ -74,6 +74,10 @@ class CatalogPage(QWidget):
     """重新命名時那一格的標籤。三個分頁各自說自己的話 ——「名稱」對「帳戶」與
     「項目」都成立，所以它等於沒說。"""
 
+    NOUN = ""
+    """這一頁管的東西叫什麼（帳戶／類別／項目）。刪除確認框用它 —— 以前那裡寫「設定項」，
+    一個沒有定義、也不在用詞表裡的詞。"""
+
     SORT_FIELDS: tuple[tuple[str, str], ...] = ()
     """排序視窗裡可以選的欄位：`(顯示文字, 白名單 key)`，順序就是下拉裡的順序。
 
@@ -94,9 +98,13 @@ class CatalogPage(QWidget):
     REORDERABLE = False
     """這一頁要不要「排序設定」按鈕。開了就要實作 `edit_order()`。"""
 
-    def __init__(self, controller: LedgerController) -> None:
+    def __init__(self, controller: LedgerController, *, button_rows: int = 1) -> None:
+        """`button_rows=2` 把按鈕分成兩排：上排「新增、重新命名（與額外動作）」，
+        下排「封存／恢復、刪除、排序」。「類別與項目」那一頁兩個窗格並排時用 ——
+        一排放不下（見 `category_items.py`）。"""
         super().__init__()
         self.controller = controller
+        self.button_rows = button_rows
         # **排序規格從設定讀回來**，不是每次開程式都從預設開始。使用者排好了就該
         # 一直是那樣，否則「記得住」這件事等於沒做。沒存過就用這一頁的預設。
         saved = controller.sort_spec(self.SORT_PAGE) if self.SORT_PAGE else ()
@@ -150,7 +158,7 @@ class CatalogPage(QWidget):
 
     def _extra_selection_actions(self) -> tuple[tuple[str, Callable[[], None]], ...]:
         """這一頁對**所選列**的額外動作：`(按鈕文字, handler)`，排在「重新命名」後面，
-        一樣沒選取就停用。預設沒有；「項目」分頁用它加「更改所屬類別」。"""
+        一樣沒選取就停用。預設沒有；項目那一頁用它加「更改所屬類別」。"""
         return ()
 
     # --- 形狀 -------------------------------------------------------------------
@@ -163,14 +171,19 @@ class CatalogPage(QWidget):
             button = QPushButton(label)
             button.clicked.connect(handler)
             extra_buttons.append(button)
-        toggle = QPushButton("封存／恢復所選項目")
+        # **不寫「所選項目」。** 「項目」在這個專案是第二層的專有名詞（用詞表），
+        # 「類別」分頁的按鈕寫「封存／恢復所選項目」等於說錯對象 —— 兩個分頁並排之後更明顯。
+        toggle = QPushButton("封存／恢復")
         delete_button = QPushButton("刪除未使用")
         set_button_role(add_button, "primary")
         set_button_role(delete_button, "danger")
 
         row = QHBoxLayout()
-        for button in (add_button, rename, *extra_buttons, toggle, delete_button):
+        second_row = QHBoxLayout() if self.button_rows > 1 else row
+        for button in (add_button, rename, *extra_buttons):
             row.addWidget(button)
+        for button in (toggle, delete_button):
+            second_row.addWidget(button)
         if self.REORDERABLE:
             # **排序是獨立視窗，不是表格上的兩顆按鈕。** 上一版把「上移／下移」放在
             # 這裡，代價是依欄位排序時必須停用它們 —— 畫面上那一列的鄰居不是儲存
@@ -181,8 +194,10 @@ class CatalogPage(QWidget):
                 "這份順序也會用在記帳頁的下拉選單 —— 常用的排前面。"
             )
             self.order_button.clicked.connect(self.edit_order)
-            row.addWidget(self.order_button)
+            second_row.addWidget(self.order_button)
         row.addStretch()
+        if second_row is not row:
+            second_row.addStretch()
 
         setup_table(
             self.table,
@@ -195,6 +210,8 @@ class CatalogPage(QWidget):
         bind_selection(self.table, rename, *extra_buttons, toggle, delete_button)
         layout = QVBoxLayout(self)
         layout.addLayout(row)
+        if second_row is not row:
+            layout.addLayout(second_row)
         # **篩選列自己一行**，不擠在按鈕列右邊 —— 四顆按鈕加一條搜尋框會把分頁的
         # 最小寬度撐大，而這一頁的表格本來就只有三欄。
         self.filter_bar = self._make_filter_bar()
@@ -238,10 +255,6 @@ class CatalogPage(QWidget):
             self.sort = spec
         return result
 
-    def selected_id(self) -> str | None:
-        item = self.model.selected_item(self.table)
-        return str(item[self.ID_FIELD]) if item is not None else None
-
     def add_item(self) -> None:
         result = self._create()
         if result is not None:
@@ -268,16 +281,19 @@ class CatalogPage(QWidget):
         self._finish(self._archive(identifier) if active else self._restore(identifier))
 
     def delete_selected(self) -> None:
-        identifier = self.selected_id()
-        if identifier is None:
+        """確認框念出**要刪的是哪一個**，並說清楚哪些刪得掉 —— 以前只寫「設定項」。"""
+        item = self.model.selected_item(self.table)
+        if item is None:
             return
         answer = QMessageBox.question(
             self,
             "確認刪除",
-            "只會刪除完全未使用的設定項；已有歷史資料者請改用封存。是否繼續？",
+            f"確定要刪除{self.NOUN}「{item['name']}」嗎？\n\n"
+            f"只有從來沒被用過的{self.NOUN}刪得掉。用過的請改按「封存／恢復」——"
+            "歷史資料會留著，它只是不再出現在選單裡。",
         )
         if answer == QMessageBox.StandardButton.Yes:
-            self._finish(self._delete(identifier))
+            self._finish(self._delete(str(item[self.ID_FIELD])))
 
     def _finish(self, result: Result) -> None:
         if not result.success:
@@ -293,6 +309,7 @@ class AccountsPage(CatalogPage):
     ADD_LABEL = "新增帳戶"
     ID_FIELD = "account_id"
     NAME_LABEL = "帳戶名稱"
+    NOUN = "帳戶"
     REORDERABLE = True
     SORT_PAGE = "accounts"
     SORT_FIELDS = (("自訂順序", "custom"), ("帳戶名稱", "name"), ("狀態", "status"))
@@ -428,6 +445,7 @@ class CategoriesPage(CategoryPageBase):
     HEADERS = ("類別", "項目數", "狀態")
     ADD_LABEL = "新增類別"
     NAME_LABEL = "類別名稱"
+    NOUN = "類別"
     LEVEL = 1
     SORT_PAGE = "categories"
     SORT_FIELDS = (
@@ -481,6 +499,7 @@ class ItemsPage(CategoryPageBase):
 
     ADD_LABEL = "新增項目"
     NAME_LABEL = "項目名稱"
+    NOUN = "項目"
     LEVEL = 2
     WITH_PARENT_FILTER = True
     SORT_PAGE = "items"
@@ -528,7 +547,7 @@ class ItemsPage(CategoryPageBase):
         parents = self.controller.category_options()
         if all(str(parent["category_id"]) == current_parent for parent in parents):
             QMessageBox.information(
-                self, "沒有其他類別", "請先在「類別」分頁建立另一個類別，才有地方可以搬。"
+                self, "沒有其他類別", "請先在左邊的「類別」建立另一個類別，才有地方可以搬。"
             )
             return
         values = ask_form(
@@ -571,10 +590,13 @@ class ItemsPage(CategoryPageBase):
 
         **類別用下拉的 `userData` 帶 id，不用名稱反查。** 舊版是
         `labels.index(selected)` —— 拿顯示文字回頭找位置，名稱一重複就會挑錯。
+
+        **「所屬類別」預設停在目前篩選的那一個**：在「類別與項目」分頁點了左邊的「伙食」，
+        右邊按「新增項目」，要加的多半就是伙食底下的。沒有篩選時停在第一個。
         """
         parents = self.controller.category_options()
         if not parents:
-            QMessageBox.information(self, "沒有類別", "請先在「類別」分頁建立一個類別。")
+            QMessageBox.information(self, "沒有類別", "請先在左邊的「類別」建立一個類別。")
             return None
         values = ask_form(
             self,
@@ -584,6 +606,7 @@ class ItemsPage(CategoryPageBase):
                     "parent_id",
                     "所屬類別",
                     [(str(item["name"]), str(item["category_id"])) for item in parents],
+                    default=self.filter_bar.parent_id() if self.filter_bar else None,
                 ),
                 TextField("name", "項目名稱", placeholder="例如：早餐、捷運"),
             ],

@@ -279,7 +279,7 @@ class CategoryService:
             if parent is None or parent.status != "active" or parent.level != 1:
                 return Result.fail(
                     "CATEGORY_PARENT_INVALID",
-                    "所屬類別不存在或已封存，請先在「類別」分頁選一個使用中的類別。",
+                    "所屬類別不存在或已封存，請先在「類別與項目」左邊選一個使用中的類別。",
                 )
 
         # **先問清楚再寫。** 唯一索引是 `WHERE status = 'active'` 的部分索引，

@@ -62,7 +62,7 @@ class LedgerSection(ControllerBase):
         """兩層類別攤成一份列表，每一列都帶著上層名稱與子項目數。
 
         `tree_filter` 一給就以它為準：層級、所屬類別、狀態、名稱搜尋與排序**都在
-        SQL 裡處理**。「類別」與「項目」兩個分頁各自送自己的 `level`，不再撈回全部
+        SQL 裡處理**。「類別」與「項目」兩個窗格各自送自己的 `level`，不再撈回全部
         再用 Python 濾。
         """
         return self._rows(

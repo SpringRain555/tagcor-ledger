@@ -65,7 +65,7 @@
 | [REQ-0001 穩固核心](requirements/REQ-0001-stable-core.md) | 已實作 |
 | [REQ-0002 核心收尾與模板](requirements/REQ-0002-core-and-templates.md) | 已實作；**週期排程那一段在 v0.23.0 移除**（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
 | [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作；**「今天還沒盤點」那則提醒在 0.25.0 移除**（[ADR-0014](decisions/ADR-0014-drop-daily-snapshot-reminder.md)）；**刪除改成真的移除**（[ADR-0015](decisions/ADR-0015-delete-balance-snapshots-for-real.md)）|
-| [REQ-0004 設定、路徑與用詞](requirements/REQ-0004-settings-paths-terms.md) | 已實作；操作設定現在是**五個**分頁（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
+| [REQ-0004 設定、路徑與用詞](requirements/REQ-0004-settings-paths-terms.md) | 已實作；操作設定現在是**四個**分頁（定期收支移除，[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)；類別與項目 2026-10-05 合成並排的一頁）|
 | [REQ-0005 深色 UI](requirements/REQ-0005-dark-ui-docs.md) | 已實作 |
 | [REQ-0006 資料與程式分離](requirements/REQ-0006-data-program-separation.md) | 已實作 |
 | [REQ-0007 郵局定存](requirements/REQ-0007-time-deposits.md) | 已實作（schema v6–v7、v9–v10）。**v0.23.0 起是「待確認」唯一的來源**（2026-10-05 起待確認住在餘額盤點頁底下，[ADR-0016](decisions/ADR-0016-inbox-under-balance-snapshots.md)）；v0.24.0 補完結束合約與中途解約，並把產生的下界訂在建檔日、建檔改成填存單上那一天（[ADR-0012](decisions/ADR-0012-deposit-events-start-at-record-date.md)）|

@@ -256,7 +256,8 @@ def test_a_long_item_name_never_makes_the_table_scroll_sideways(qtbot, tmp_path:
     window.show_page(PageId.OPERATION_SETTINGS)
     tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
     assert tabs is not None
-    items_tab = [tabs.tabText(i) for i in range(tabs.count())].index("項目")
+    # 2026-10-05 起項目在「類別與項目」分頁的右半邊 —— 跟類別並排，能給它的寬度更少了。
+    items_tab = [tabs.tabText(i) for i in range(tabs.count())].index("類別與項目")
     tabs.setCurrentIndex(items_tab)
     QApplication.processEvents()
     QApplication.processEvents()

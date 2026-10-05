@@ -104,7 +104,7 @@ def overview_account_values(item: dict[str, Any]) -> list[str]:
 
 
 def category_values(item: dict[str, Any]) -> list[str]:
-    """「類別」分頁：類別／項目數／狀態。
+    """「類別與項目」左邊的類別：類別／項目數／狀態。
 
     **每一個類別都有自己的一列，不管它有沒有子項目。** 舊的做法只在沒有子項目時才
     列出類別本身，於是「伙食」永遠沒有自己的列 —— 畫面上那個「伙食」是項目那一列的
@@ -118,7 +118,7 @@ def category_values(item: dict[str, Any]) -> list[str]:
 
 
 def item_values(item: dict[str, Any]) -> list[str]:
-    """「項目」分頁：所屬類別／項目／狀態。"""
+    """「類別與項目」右邊的項目：所屬類別／項目／狀態。"""
     return [
         str(item.get("parent_name") or ""),
         str(item["name"]),

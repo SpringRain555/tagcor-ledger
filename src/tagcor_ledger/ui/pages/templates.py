@@ -85,7 +85,7 @@ class TemplatesPage(QWidget):
         add_button = QPushButton("新增模板")
         edit_button = QPushButton("編輯模板")
         apply_button = QPushButton("填入記帳頁")
-        toggle_button = QPushButton("封存／恢復所選模板")
+        toggle_button = QPushButton("封存／恢復")
         delete_button = QPushButton("刪除模板")
         self.order_button = QPushButton("排序設定")
         self.order_button.setToolTip("開一個視窗，用拖曳排出自己想要的模板順序。")
@@ -223,7 +223,7 @@ class TemplatesPage(QWidget):
             f"確定要刪除模板「{item['name']}」嗎？\n\n"
             "刪掉就沒有了。已經用它記過的交易不受影響 —— 模板只是預填用的，"
             "交易存下來之後就與它無關。\n\n"
-            "只是暫時不想用的話，改按「封存／恢復所選模板」。",
+            "只是暫時不想用的話，改按「封存／恢復」。",
         )
         if answer == QMessageBox.StandardButton.Yes:
             self._finish(self.controller.delete_template(str(item["template_id"])))

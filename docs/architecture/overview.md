@@ -58,7 +58,7 @@ src/tagcor_ledger/
 │   ├── result.py       Result：成功／失敗與錯誤碼
 │   └── failures.py     錯誤碼 → 中文說法。**一個碼的句子只寫在這裡**
 ├── infrastructure/
-│   ├── migrations.py   v1 → v10 的 schema
+│   ├── migrations.py   v1 → v12 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
 │   ├── stores/         一個聚合一個檔：accounts／categories／transactions／
@@ -76,7 +76,8 @@ src/tagcor_ledger/
 │   ├── main_window.py  側邊欄、頁面堆疊，以及頁面之間所有的連動
 │   ├── theme.py        apply_dark_theme：Fusion style、字體、palette、QSS
 │   ├── colors.py       色票的正本
-│   ├── pages/          一個檔案一個畫面
+│   ├── pages/          一個檔案一個畫面（或一頁裡的一塊：inbox.py 是餘額盤點底下的待確認、
+│   │                   category_items.py 是並排類別與項目的那個分頁）
 │   └── widgets/        sidebar、layout、table、forms、filters、simple_form、
 │                       asset_share、template_dialog、deposit_dialog、
 │                       reorder_dialog、sort_editor
@@ -196,7 +197,7 @@ sequenceDiagram
 
 | 檔案 | 為什麼不拆 |
 |---|---|
-| `ui/pages/catalog.py` | 是一個繼承階層（`CatalogPage` 基底 ＋ 帳戶／類別／項目三頁），不是三件事湊在一起。拆開會讓基底與子類分家，讀任何一頁都要開兩個檔案 |
+| `ui/pages/catalog.py` | 是一個繼承階層（`CatalogPage` 基底 ＋ 帳戶／類別／項目三頁），不是三件事湊在一起。拆開會讓基底與子類分家，讀任何一頁都要開兩個檔案。類別與項目並排的那個分頁另外住在 `category_items.py`，它只組合、不繼承 |
 | `infrastructure/stores/base.py` | 裡面是 `_write_transaction()` / `_write_transfer()` —— **「一筆交易長什麼樣」刻意只有一個地方說了算**。拆它等於違反這個檔案存在的理由 |
 | `infrastructure/migrations.py` | migration 是一條有順序的歷史，`migrate_v1` 到 `migrate_v7` 要能一路讀下來。拆成多檔會讓「這個欄位什麼時候加的」變成跨檔案考古 |
 | `infrastructure/stores/categories.py` | 一個聚合一個 class，就是 `stores/` 的規則本身 |

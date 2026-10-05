@@ -1,4 +1,4 @@
-"""帳戶／類別／項目三個名冊分頁：篩選、排序入口、新增與改名對話框。
+"""帳戶與「類別與項目」兩個名冊分頁：篩選、排序入口、新增與改名對話框。
 
 **每個類別都有自己的一列**，不管它有沒有子項目 —— 舊版不是這樣，
 於是改名、封存、刪除對類別全部失效卻看起來有作用。
@@ -8,15 +8,19 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import (
+    QApplication,
     QDialogButtonBox,
+    QMessageBox,
     QPushButton,
     QTabWidget,
 )
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.ui.main_window import MainWindow
-from tagcor_ledger.ui.widgets.simple_form import SimpleFormDialog, TextField
+from tagcor_ledger.ui.navigation import PageId
+from tagcor_ledger.ui.widgets.simple_form import ChoiceField, SimpleFormDialog, TextField
 
 
 def test_a_category_with_items_can_be_selected_and_renamed(window, monkeypatch) -> None:
@@ -72,19 +76,19 @@ def test_a_category_with_items_can_be_selected_and_renamed(window, monkeypatch) 
     assert window.transactions.model.index(0, 3).data() == "伙食費 / 7-11"
 
 
-def test_operation_settings_has_five_tabs_in_the_agreed_order(window) -> None:
-    """**順序本身就是分組**：前四個是記帳會用到的名冊，最後一個是會自己到期的東西。
+def test_operation_settings_has_four_tabs_in_the_agreed_order(window) -> None:
+    """**順序本身就是分組**：前三個是記帳會用到的名冊，最後一個是會自己到期的東西。
 
-    所以這裡連順序一起釘住，不只是「有沒有這五個」。
-    定期收支在 v0.23.0 移除（ADR-0011），分頁從六個變五個。
+    所以這裡連順序一起釘住，不只是「有沒有這四個」。
+    定期收支在 v0.23.0 移除（ADR-0011），分頁從六個變五個；2026-10-05「類別」與「項目」
+    合成一個並排的分頁，變四個。
     """
 
     tabs = window.operation_settings.findChild(QTabWidget, "settingsTabs")
     assert tabs is not None
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
         "帳戶",
-        "類別",
-        "項目",
+        "類別與項目",
         "模板",
         "定存",
     ]
@@ -92,11 +96,13 @@ def test_operation_settings_has_five_tabs_in_the_agreed_order(window) -> None:
     page = window.operation_settings
     assert [tabs.widget(index) for index in range(tabs.count())] == [
         page.accounts,
-        page.categories,
-        page.items,
+        page.category_items,
         page.templates,
         page.deposits,
     ]
+    # `categories`／`items` 兩個名字指向那個分頁裡的兩個窗格，不是另外兩份。
+    assert page.categories is page.category_items.categories
+    assert page.items is page.category_items.items
 
 
 def test_recurring_income_and_expense_is_gone_from_the_ui(window) -> None:
@@ -360,7 +366,7 @@ def test_the_header_is_no_longer_a_sorting_entry_point(window) -> None:
 
 def test_moving_an_item_to_another_category_from_the_items_tab(window, monkeypatch) -> None:
     """「項目」分頁的「更改所屬類別」：下拉開在它現在的類別上、表單底下提醒歷史交易會跟著搬，
-    按確定之後那一列的「所屬類別」欄就變了。「類別」分頁沒有這顆按鈕（類別沒有上一層）。
+    按確定之後那一列的「所屬類別」欄就變了。類別那一邊沒有這顆按鈕（類別沒有上一層）。
     """
     controller = window.controller
     transport = controller.create_category("交通")
@@ -376,7 +382,7 @@ def test_moving_an_item_to_another_category_from_the_items_tab(window, monkeypat
     assert not any(
         button.text() == "更改所屬類別"
         for button in window.operation_settings.categories.findChildren(QPushButton)
-    ), "類別本身沒有上一層，「類別」分頁不該有這顆按鈕"
+    ), "類別本身沒有上一層，類別那一邊不該有這顆按鈕"
 
     rows = [page.model.items[index] for index in range(page.model.rowCount())]
     row_index = [str(row["category_id"]) for row in rows].index("cat_food_711")
@@ -445,3 +451,97 @@ def test_the_parent_dropdown_keeps_every_category_while_searching(window) -> Non
     page.filter_bar.search.setText("7-11")
     after = [page.parent_filter.itemText(i) for i in range(page.parent_filter.count())]
     assert after == before, f"搜尋把下拉也縮掉了：{before} -> {after}"
+
+
+def _rows(page: Any) -> list[dict[str, Any]]:
+    return [page.model.items[index] for index in range(page.model.rowCount())]
+
+
+def test_categories_and_items_sit_side_by_side_in_one_tab(window) -> None:
+    """「類別與項目」：左邊類別、右邊項目，**兩張完整的表**並排（不是併成一張）。
+
+    量的是版面座標，所以先切到操作設定、切到這個分頁（offscreen 上沒顯示的座標都是 0）。
+    """
+    window.show_page(PageId.OPERATION_SETTINGS)
+    page = window.operation_settings
+    page.show_tab(page.category_items)
+    QApplication.processEvents()
+
+    tab = page.category_items
+    left = page.categories.table.mapTo(tab, QPoint(0, 0))
+    right = page.items.table.mapTo(tab, QPoint(0, 0))
+    assert left.x() + page.categories.table.width() <= right.x(), "類別要在項目的左邊，而且不重疊"
+    assert abs(left.y() - right.y()) < 5, "兩張表要並排、頂端對齊"
+    # 每一個類別仍然有自己的一列（拆開那時候的理由，並排之後一樣要守）。
+    assert "cat_food" in [str(row["category_id"]) for row in _rows(page.categories)]
+
+
+def test_choosing_a_category_on_the_left_lists_only_its_items_on_the_right(window) -> None:
+    """點左邊一個類別，右邊只列它底下的項目；右邊的下拉選「全部」又看得到全部（單向）。"""
+    controller = window.controller
+    transport = controller.create_category("交通")
+    assert transport.success
+    transport_id = str(transport.details["category_id"])
+    assert controller.create_category("捷運", transport_id).success
+    page = window.operation_settings
+    page.refresh()
+    all_items = len(_rows(page.items))
+
+    row = [str(item["category_id"]) for item in _rows(page.categories)].index(transport_id)
+    page.categories.table.selectRow(row)
+
+    shown = _rows(page.items)
+    assert [str(item["name"]) for item in shown] == ["捷運"]
+    assert page.items.parent_filter.currentData() == transport_id
+
+    page.items.parent_filter.setCurrentIndex(page.items.parent_filter.findData(None))
+    assert len(_rows(page.items)) == all_items > 1, "選「全部」要回到全部"
+    assert page.categories.model.selected_item(page.categories.table) is not None, (
+        "右邊改篩選不該把左邊的選取清掉"
+    )
+
+
+def test_a_new_item_defaults_to_the_category_being_looked_at(window, monkeypatch) -> None:
+    """在左邊點了「交通」再按「新增項目」，所屬類別預設就是交通。"""
+    controller = window.controller
+    transport = controller.create_category("交通")
+    assert transport.success
+    transport_id = str(transport.details["category_id"])
+    page = window.operation_settings
+    page.refresh()
+    row = [str(item["category_id"]) for item in _rows(page.categories)].index(transport_id)
+    page.categories.table.selectRow(row)
+
+    asked: list[Any] = []
+
+    def capture(_parent: Any, _title: str, fields: list[Any], **_kwargs: Any) -> None:
+        asked.extend(fields)
+        return None
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.catalog.ask_form", capture)
+    page.items.add_item()
+
+    choice = next(field for field in asked if isinstance(field, ChoiceField))
+    assert choice.default == transport_id
+
+
+def test_the_delete_confirmation_names_what_will_be_deleted(window, monkeypatch) -> None:
+    """確認框念出「刪的是哪一個」，用這一頁自己的名詞 —— 以前寫的是「設定項」。
+    按鈕也不再寫「封存／恢復所選項目」：「項目」在這個專案專指第二層。"""
+    page = window.operation_settings.categories
+    page.refresh()
+    row = [str(item["category_id"]) for item in _rows(page)].index("cat_food")
+    page.table.selectRow(row)
+    asked: list[str] = []
+
+    def answer(*args: Any, **_kwargs: Any) -> QMessageBox.StandardButton:
+        asked.append(str(args[2]))
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.catalog.QMessageBox.question", answer)
+    page.delete_selected()
+
+    assert "類別「伙食」" in asked[0], asked[0]
+    assert "設定項" not in asked[0]
+    texts = [button.text() for button in page.findChildren(QPushButton)]
+    assert "封存／恢復" in texts and "封存／恢復所選項目" not in texts
