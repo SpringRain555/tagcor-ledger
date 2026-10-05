@@ -8,6 +8,11 @@
 
 ## 未發布
 
+### CI：GITHUB_TOKEN 只給讀取權限
+
+`.github/workflows/verify.yml` 頂層加 `permissions: contents: read`。這個 workflow 只 checkout 與跑測試；
+沒宣告時 token 的權限看 repo 設定（舊 repo 預設可寫），而 repo 是公開的。
+
 ### 隱私：診斷資訊不再寫出個人資料夾的路徑
 
 「匯出診斷資訊」開頭寫著「可以直接提供給他人」，內容卻有資料根目錄與家目錄（使用者名稱）的

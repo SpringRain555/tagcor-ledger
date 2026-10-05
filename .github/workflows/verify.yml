@@ -26,6 +26,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# **GITHUB_TOKEN 只給讀取。** 這個 workflow 只 checkout 與跑測試，用不到任何寫入權限；
+# 沒宣告的話，token 的權限取決於 repo 設定（舊 repo 的預設是可寫）。repo 是公開的，
+# 一個帶寫入權限的 token 交到測試程式碼與它裝的第三方套件手上，沒有任何好處。
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
