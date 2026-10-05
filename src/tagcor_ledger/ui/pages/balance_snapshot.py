@@ -5,7 +5,7 @@
 ## 這一頁的形狀（2026-09-20 起）
 
 上方表單只負責**新增**。表格底下兩排按鈕：第一排是「產生新東西」（新增盤點、補記交易），
-第二排對**所選盤點**動作（編輯、刪除）加匯出。「編輯」開對話框（`BalanceSnapshotEditDialog`），
+第二排對**所選盤點**動作（編輯、刪除）。「編輯」開對話框（`BalanceSnapshotEditDialog`），
 「刪除」**真的移除**那一筆（2026-10-05 起，ADR-0015；之前是標成已刪除、紀錄留著）。
 
 以前點表格某一列會把值倒進上方表單，再按「更新所選盤點」寫回。兩個問題：正在打的新盤點
@@ -105,7 +105,6 @@ class BalanceSnapshotPage(QWidget):
         quick_button = QPushButton("補記交易")
         edit_button = QPushButton("編輯")
         delete_button = QPushButton("刪除")
-        export_button = QPushButton("匯出盤點 CSV")
         set_button_role(create_button, "primary")
         set_button_role(delete_button, "danger")
 
@@ -116,14 +115,14 @@ class BalanceSnapshotPage(QWidget):
         form.addRow("備註", self.note)
         form.addRow("", self.result)
 
-        # 兩排，分的是**動作的對象**：第一排產生新東西，第二排對所選盤點動作（加匯出）。
-        # 五顆擠一行會把視窗最小寬度撐大。
+        # 兩排，分的是**動作的對象**：第一排產生新東西，第二排對所選盤點動作。
+        # 「匯出盤點 CSV」2026-10-05 搬到「系統設定 → 備份與還原」。
         create_row = QHBoxLayout()
         for button in (create_button, quick_button):
             create_row.addWidget(button)
         create_row.addStretch()
         selected_row = QHBoxLayout()
-        for button in (edit_button, delete_button, export_button):
+        for button in (edit_button, delete_button):
             selected_row.addWidget(button)
         selected_row.addStretch()
 
@@ -148,7 +147,6 @@ class BalanceSnapshotPage(QWidget):
         quick_button.clicked.connect(lambda: self.record_transaction_requested.emit())
         edit_button.clicked.connect(self.edit_selected)
         delete_button.clicked.connect(self.delete_selected)
-        export_button.clicked.connect(self.export_csv)
 
     def reload_accounts(self) -> None:
         fill_combo(self.account, self.controller.account_options(), "name", "account_id")
@@ -224,17 +222,6 @@ class BalanceSnapshotPage(QWidget):
         if result.success:
             self.changed.emit()
             self.refresh()
-
-    def export_csv(self) -> None:
-        result = self.controller.export_balance_snapshots_csv()
-        if result.success:
-            show_status(
-                self.result,
-                f"餘額盤點 CSV 已匯出：{result.details.get('path')}",
-                ok=True,
-            )
-        else:
-            show_status(self.result, result_message(result), ok=False)
 
     def _account_id(self) -> str | None:
         value = self.account.currentData()

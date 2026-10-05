@@ -17,8 +17,9 @@ from tagcor_ledger.infrastructure.clock import TAIPEI
 from tagcor_ledger.ui.navigation import PageId
 from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotEditDialog
 
-BUTTON_ROWS = (("新增盤點", "補記交易"), ("編輯", "刪除", "匯出盤點 CSV"))
-"""兩排按鈕，由上到下、由左到右。第一排產生新東西，第二排對所選盤點動作（加匯出）。"""
+BUTTON_ROWS = (("新增盤點", "補記交易"), ("編輯", "刪除"))
+"""兩排按鈕，由上到下、由左到右。第一排產生新東西，第二排對所選盤點動作。
+「匯出盤點 CSV」2026-10-05 搬到「系統設定 → 備份與還原」。"""
 
 
 def _buttons(window) -> dict[str, QPushButton]:
@@ -45,7 +46,7 @@ def test_balance_snapshot_page_creates_snapshot(window) -> None:
 
 
 def test_the_buttons_sit_in_two_rows_and_there_is_no_refresh_button(window) -> None:
-    """第一排「新增盤點」「補記交易」，第二排「編輯」「刪除」「匯出盤點 CSV」；
+    """第一排「新增盤點」「補記交易」，第二排「編輯」「刪除」；
     「重新整理」拿掉了 —— 換帳戶、換狀態本來就會重查，跨頁改動由主視窗通知。
 
     量的是版面座標（先切到這一頁，否則 offscreen 上每個 widget 的座標都是 0）。

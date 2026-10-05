@@ -57,15 +57,21 @@ class MaintenancePage(QWidget):
         )
         external = QPushButton("選擇外部備份資料夾")
         export = QPushButton("匯出交易 CSV")
+        # 2026-10-05 從餘額盤點頁搬來：匯出是「把資料帶出程式」的事，跟交易的 CSV 放一起，
+        # 盤點頁留給每天會按的那幾顆。
+        self.export_balance_button = QPushButton("匯出盤點 CSV")
+        self.export_balance_button.setToolTip(
+            "所有帳戶的餘額盤點，含程式算出來的預期金額與未解釋差額。"
+        )
         self.diagnostics_button = QPushButton("匯出診斷資訊")
         self.diagnostics_button.setToolTip(
-            "產生一份不含金額與備註的環境報告，出問題時可以直接提供給他人。"
+            "產生一份不含金額、備註與個人資料夾路徑的環境報告，出問題時可以直接提供給他人。"
         )
         set_button_role(create, "primary")
         set_button_role(self.restore_button, "danger")
         set_button_role(self.delete_button, "danger")
-        # 六顆按鈕擠同一行，會把整個視窗的最小寬度撐到 855 px。分成兩行同時也把
-        # 「對備份動作」與「匯出東西出去」分開 —— 它們本來就不是同一類事。
+        # 七顆按鈕擠同一行，會把整個視窗的最小寬度撐得很寬（六顆時就是 855 px）。分成兩行
+        # 同時也把「對備份動作」與「匯出東西出去」分開 —— 它們本來就不是同一類事。
         backup_row = QHBoxLayout()
         for widget in (
             create,
@@ -76,7 +82,7 @@ class MaintenancePage(QWidget):
             backup_row.addWidget(widget)
         backup_row.addStretch()
         export_row = QHBoxLayout()
-        for widget in (external, export, self.diagnostics_button):
+        for widget in (external, export, self.export_balance_button, self.diagnostics_button):
             export_row.addWidget(widget)
         export_row.addStretch()
         self.result.setWordWrap(True)
@@ -93,6 +99,7 @@ class MaintenancePage(QWidget):
         self.delete_button.clicked.connect(self.delete_selected)
         external.clicked.connect(self.restore_external)
         export.clicked.connect(self.export_csv)
+        self.export_balance_button.clicked.connect(self.export_balance_csv)
         self.diagnostics_button.clicked.connect(self.export_diagnostics)
         # 三顆都是對「所選那一份」動作 —— 沒選就停用，不要按了沒反應。
         bind_selection(
@@ -229,11 +236,19 @@ class MaintenancePage(QWidget):
                 error_text(exc, fallback="CSV 無法匯出。請確認匯出資料夾可寫入、磁碟還有空間。"),
             )
 
+    def export_balance_csv(self) -> None:
+        result = self.controller.export_balance_snapshots_csv()
+        if result.success:
+            self.result.setText(f"餘額盤點 CSV 已匯出：{result.details.get('path')}")
+            return
+        QMessageBox.warning(self, "匯出失敗", result_message(result))
+
     def export_diagnostics(self) -> None:
         result = self.controller.export_diagnostics()
         if result.success:
             self.result.setText(
-                f"診斷資訊已匯出：{result.details.get('path')}（不含金額與備註，可直接提供給他人）"
+                f"診斷資訊已匯出：{result.details.get('path')}"
+                "（不含金額、備註與個人資料夾路徑，可直接提供給他人）"
             )
             return
         QMessageBox.warning(self, "診斷資訊匯出失敗", result_message(result))

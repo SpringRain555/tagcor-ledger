@@ -6,11 +6,15 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QMessageBox,
+    QPushButton,
+    QTabWidget,
 )
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.ui.main_window import MainWindow
+from tagcor_ledger.ui.navigation import PageId
 
 
 def test_reset_confirmation_names_what_will_be_lost(window) -> None:
@@ -183,3 +187,32 @@ def test_backup_buttons_are_disabled_until_a_backup_is_selected(
 
     page.list.setCurrentRow(0)
     assert all(button.isEnabled() for button in buttons)
+
+def test_the_balance_csv_export_sits_next_to_the_transaction_export(window) -> None:
+    """「匯出盤點 CSV」2026-10-05 從餘額盤點頁搬來，跟「匯出交易 CSV」同一排。
+
+    匯出是「把資料帶出程式」的事；盤點頁留給每天會按的那幾顆。量的是版面座標，
+    所以先切到這一頁、這個分頁（offscreen 上沒顯示的 widget 座標都是 0）。
+    """
+    window.controller.create_balance_snapshot(
+        account_id="acct_cash",
+        observed_at="2026-08-19T10:00:00+08:00",
+        actual_balance="85",
+        note="",
+    )
+    window.show_page(PageId.SYSTEM_SETTINGS)
+    tabs = window.system_settings.findChild(QTabWidget, "settingsTabs")
+    page = window.system_settings.maintenance
+    tabs.setCurrentWidget(page)
+    QApplication.processEvents()
+
+    by_text = {button.text(): button for button in page.findChildren(QPushButton)}
+    assert by_text["匯出盤點 CSV"].y() == by_text["匯出交易 CSV"].y(), "兩顆匯出要在同一排"
+    balance_texts = [button.text() for button in window.balance.findChildren(QPushButton)]
+    assert "匯出盤點 CSV" not in balance_texts, "盤點頁不該再有匯出"
+
+    page.export_balance_button.click()
+    message = page.result.text()
+    assert message.startswith("餘額盤點 CSV 已匯出："), message
+    exported = Path(message.split("：", 1)[1])
+    assert exported.read_text(encoding="utf-8-sig").startswith("盤點時間,帳戶")
