@@ -107,7 +107,7 @@ class DepositTermStore(StoreBase):
     def list_active_terms(self) -> list[DepositTerm]:
         """存續中、而且合約還沒結束的期。
 
-        **合約那一側也要濾。** 產生待確認項目走的是這個清單，少了那個條件，
+        **合約那一側也要濾。** 產生待確認草稿走的是這個清單，少了那個條件，
         一份已結束的合約仍然會生出到期項目 —— 而它在畫面上預設是看不見的。
         """
         with connect_database(self.paths.database_path) as connection:

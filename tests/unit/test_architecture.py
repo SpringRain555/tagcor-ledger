@@ -555,6 +555,12 @@ RETIRED_UI_WORDS = {
     # 交易紀錄那顆按鈕 2026-09-20 改成「建立模板」：把那一筆的內容帶到「操作設定 → 模板」
     # 開一張新增視窗，而不是帶回記帳頁再存一次（模板的「填入記帳頁」本來就會做那件事）。
     "複製到記帳": "建立模板",
+    # 「項目」在這個專案專指第二層（用詞表）。待確認的一筆是「草稿」，不是「項目」——
+    # 2026-10-05 之前畫面上有十來處「待確認項目」，跟類別底下的項目撞名。
+    "待確認項目": "待確認草稿",
+    # 名冊的刪除確認框以前寫「只會刪除完全未使用的設定項」，而「設定項」從來沒有定義過。
+    # 說出是哪一個（帳戶／類別／項目），見 `CatalogPage.NOUN`。
+    "設定項": "帳戶／類別／項目（說出是哪一個）",
 }
 
 
@@ -628,7 +634,7 @@ def test_no_chinese_sentence_ends_with_a_half_width_period() -> None:
     """中文句子的句號要用全形「。」。
 
     這條守的是一個**只有一處、但會回來**的錯誤：`automation.py` 的
-    「待確認項目已載入.」在整個專案裡是唯一的半形句號，而它就長在一句中文後面。
+    「待確認草稿已載入.」在整個專案裡是唯一的半形句號，而它就長在一句中文後面。
     半形句號在中文字旁邊會貼著上一個字，看起來像雜訊而不是標點。
 
     只認「CJK 字元 ＋ 半形句號 ＋ 結尾」這一種形狀 —— 英文縮寫、副檔名、版本號、
@@ -651,7 +657,7 @@ def _is_cjk(char: str) -> bool:
 def test_the_half_width_period_detector_can_tell_the_difference() -> None:
     """陽性對照：偵測器要抓得到中文句尾的半形句號，又不能誤傷英文與版本號。"""
     assert _is_cjk("載") and not _is_cjk("d") and not _is_cjk("。")
-    caught = "待確認項目已載入."
+    caught = "待確認草稿已載入."
     assert caught.endswith(".") and _is_cjk(caught[-2]), "抓不到目標形狀"
     for innocent in ("0.20.0", "ledger.sqlite3", "e.g.", "已載入。"):
         assert not (innocent.endswith(".") and _is_cjk(innocent[-2])), innocent

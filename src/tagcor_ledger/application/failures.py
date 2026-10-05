@@ -103,9 +103,6 @@ ERROR_MESSAGES: dict[str, str] = {
         "有定存合約用到這個帳戶（存款或利息轉入，已結束的合約也算），不能刪除。"
         "合約從沒入帳過的話，到「操作設定 → 定存」刪掉它就刪得掉；否則請改用「封存」。"
     ),
-    "DESTINATION_ACCOUNT_NOT_ACTIVE": (
-        "轉入帳戶已經封存了。請先恢復那個帳戶，或改掉這筆待確認項目的轉入帳戶。"
-    ),
     # ---- 類別與項目 ----
     "CATEGORY_NAME_REQUIRED": "請輸入名稱。",
     "CATEGORY_NOT_FOUND": "找不到這個類別／項目，它可能已經被刪除。請重新整理後再試一次。",
@@ -209,7 +206,7 @@ ERROR_MESSAGES: dict[str, str] = {
         "交易會失去來歷。"
     ),
     "DEPOSIT_TERM_NOT_EDITABLE": (
-        "只有「存續中」的期可以修改。已續約或已結清的期已經產生過交易，改了會對不起帳。"
+        "只有「存續中」的期可以修改。已續存或已結清的期已經產生過交易，改了會對不起帳。"
     ),
     # `DEPOSIT_TERM_NOT_ACTIVE` 與 `DEPOSIT_MATURITY_CANNOT_BE_SKIPPED` **不在這裡** ——
     # 它們是服務自己 `Result.fail()` 當場回的，訊息就寫在那兩個呼叫處（見本檔開頭

@@ -425,7 +425,7 @@ def migrate_v8(connection: sqlite3.Connection) -> None:
 def migrate_v9(connection: sqlite3.Connection) -> None:
     """`deposit_contracts.recorded_on`：把這份合約記進帳本的那一天。
 
-    **這是產生待確認項目的下界**，見
+    **這是產生待確認草稿的下界**，見
     [ADR-0012](../../../docs/decisions/ADR-0012-deposit-events-start-at-record-date.md)。
     既有定存本來就比開始記帳早，而那段期間的利息已經含在帳戶的期初餘額裡 ——
     v0.24.0 之前一份 2025-02-15 起存的存本取息在 2026-08 記進來，會一次倒 13 筆

@@ -27,9 +27,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = PROJECT_ROOT / "src" / "tagcor_ledger"
 
 RAISED_INDIRECTLY = {
-    # `_occurrence_invalid_reason()` 把它 `return` 出來，呼叫端才
-    # `raise ValueError(invalid)` —— 掃 `raise` 的常數參數看不到它。
-    "DESTINATION_ACCOUNT_NOT_ACTIVE",
+    # 這裡以前還有 `DESTINATION_ACCOUNT_NOT_ACTIVE`，理由是 `_occurrence_invalid_reason()`
+    # 把它 `return` 出來。那個函式 v0.23.0 跟著定期收支一起移除了，而這一列豁免**沒有跟著拿掉**
+    # —— 於是那個碼與它的訊息（叫人「改掉這筆待確認的轉入帳戶」，確認框根本沒有那一格）在表裡
+    # 又活了三個版本，「沒有人丟它」的守門被這一列靜靜擋掉。2026-10-05 一起移除。
+    # **加豁免時寫下是哪個函式在丟它**，那個函式不見了，豁免就該跟著走。
     # `validate_backup()` 把碼放在**回傳的 dict** 裡（`{"error_code": …}`），
     # 由 `restore_backup()` 轉成 `raise ValueError(str(validation["error_code"]))`。
     # 同樣掃不到。這一組會直接印到「還原失敗」對話框上。

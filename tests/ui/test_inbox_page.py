@@ -59,7 +59,7 @@ def test_the_inbox_is_one_table_of_deposit_events(window, make_deposit) -> None:
         for column in range(model.columnCount())
     ] == ["到期日", "定存合約", "事件", "建議金額（TWD）"]
 
-    assert model.rowCount() >= 2, "測試資料沒有產生待確認項目，這條測試等於沒作用"
+    assert model.rowCount() >= 2, "測試資料沒有產生待確認草稿，這條測試等於沒作用"
     # 一張表，不是兩張。
     assert len(window.inbox.findChildren(QTableView)) == 1
 

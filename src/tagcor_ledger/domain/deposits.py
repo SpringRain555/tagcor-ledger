@@ -177,7 +177,7 @@ class DepositContract:
     recorded_on: str = ""
     """把這份合約記進帳本的那一天（ISO 日期）。
 
-    **這是產生待確認項目的下界**，見 `application/deposits/events.py`。既有定存本來就
+    **這是產生待確認草稿的下界**，見 `application/deposits/events.py`。既有定存本來就
     比開始記帳早，而那段期間的利息已經含在帳戶的期初餘額裡 —— 替它們產生草稿就是
     邀請使用者把同一筆錢記第二次。見 ADR-0012。
 

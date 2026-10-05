@@ -18,8 +18,9 @@ from typing import Any
 
 ENTRY_NAMES = {"expense": "支出", "income": "收入", "transfer": "轉帳"}
 STATUS_NAMES = {"active": "有效", "voided": "已刪除"}
-"""交易與盤點的狀態。`voided` 在畫面上叫「已刪除」（2026-09-20 起；之前叫「已作廢」）——
-紀錄還在、篩選「已刪除」看得到、不可復原，只是不再計入。識別字不改，見 `glossary.md`。"""
+"""交易的狀態。`voided` 在畫面上叫「已刪除」（2026-09-20 起；之前叫「已作廢」）——
+紀錄還在、篩選「已刪除」看得到、不能再改回有效，只是不再計入。識別字不改，見 `glossary.md`。
+（盤點以前也用這張表；2026-10-05 起盤點的刪除是真的移除，盤點表不再有狀態欄。）"""
 def minor_text(value: int | str) -> str:
     """給**輸入框**用的純數字字串。不加千分位 —— 它會被原封不動讀回來再解析。"""
     return str(int(value))
@@ -89,7 +90,7 @@ def display_date(value: str) -> str:
 DEPOSIT_TERM_STATUS_NAMES = {
     "active": "存續中",
     "matured": "已到期",
-    "renewed": "已續約",
+    "renewed": "已續存",
     "settled": "已結清",
     "terminated": "已解約",
 }

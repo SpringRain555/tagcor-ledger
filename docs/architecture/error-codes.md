@@ -61,7 +61,6 @@
 > 落到退路碼 `ACCOUNT_DELETE_FAILED`（「請匯出診斷資訊回報」）。CATEGORY_IN_USE 是同一個形狀。
 > 檢查順序就是上面的順序，一次只報第一個擋住的。
 | `ACCOUNT_CREATE_FAILED` / `ACCOUNT_RENAME_FAILED` / `ACCOUNT_ARCHIVE_FAILED` / `ACCOUNT_RESTORE_FAILED` / `ACCOUNT_DELETE_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
-| `DESTINATION_ACCOUNT_NOT_ACTIVE` | 待確認的轉帳，轉入帳戶已封存 | 恢復那個帳戶，或改掉這筆待確認項目的轉入帳戶 |
 
 ## 類別與項目
 

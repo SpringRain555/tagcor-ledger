@@ -139,7 +139,7 @@ stateDiagram-v2
 
 ---
 
-## 3. 待確認項目：`deposit_events`
+## 3. 待確認草稿：`deposit_events`
 
 **一個來源、一張轉移表。** 使用者看到的是一個收件匣（`controller.list_inbox()`），
 今天由定存獨家供應。它住在餘額盤點頁底下「補記與待確認」那一塊
@@ -336,7 +336,7 @@ schema 有 `idx_templates_active_name`（`UNIQUE(name) WHERE status = 'active'`�
 | 狀態 | 定義 |
 |---|---|
 | `使用中` | 還在追蹤 |
-| `已結束` | 不再產生待確認項目，清單上預設收起來（勾「顯示已結束的合約」看得到） |
+| `已結束` | 不再產生待確認草稿，清單上預設收起來（勾「顯示已結束的合約」看得到） |
 
 「結束合約」**不動任何錢** —— 錢在到期或解約那一刻就處理掉了。
 **還有存續中的期就不准結束**（`DEPOSIT_CONTRACT_HAS_ACTIVE_TERM`）：那筆本金會從

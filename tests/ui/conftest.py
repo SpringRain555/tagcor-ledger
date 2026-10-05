@@ -52,13 +52,13 @@ def window(qtbot: Any, tmp_path: Path) -> Iterator[MainWindow]:
 
 @pytest.fixture
 def make_deposit() -> Callable[..., str]:
-    """建一份**確定會產生待確認項目**的定存，回傳 contract_id。
+    """建一份**確定會產生待確認草稿**的定存，回傳 contract_id。
 
     四個檔案都要「有一件待確認」當前提，而它們踩的坑一模一樣，所以收在這裡。
     **是 fixture 不是普通函式** —— `tests/` 底下沒有 `__init__.py`，
     `pythonpath` 也只有 `src`，所以 `from tests.ui.conftest import …` 匯入不到。
 
-    **`recorded_on` 一定要跟著首次起存日往前拉。** 產生待確認項目的下界是合約的建檔日
+    **`recorded_on` 一定要跟著首次起存日往前拉。** 產生待確認草稿的下界是合約的建檔日
     （ADR-0012），預設今天 —— 首次起存日填在很久以前但建檔日是今天的話，那一期在建檔
     之前就到期了，一件項目都不會產生。而 UI 測試沒辦法像 `generate_due(today=...)`
     那樣控制「今天」，它走的是真實時鐘。

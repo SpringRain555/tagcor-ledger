@@ -254,7 +254,7 @@ class PostingSection(DepositServiceBase):
             if term.status != DepositTermStatus.ACTIVE:
                 return Result.fail(
                     "DEPOSIT_TERM_NOT_ACTIVE",
-                    "只有「存續中」的期可以中途解約。這一期已經結清、續約或解約過了。",
+                    "只有「存續中」的期可以中途解約。這一期已經結清、續存或解約過了。",
                 )
             contract = self.store.get_contract(term.contract_id)
             destination = contract.interest_destination_account_id or contract.account_id

@@ -68,7 +68,8 @@ class TransactionsPage(QWidget):
         self.controller = controller
         self.table = QTableView()
         self.model = RowsModel(
-            ["日期", "類型", "帳戶", "類別／項目", "金額（TWD）", "備註", "狀態"],
+            # 「流向」不是「類型」—— 用詞表明文（記帳頁、篩選都叫流向，這個表頭以前是唯一的例外）。
+            ["日期", "流向", "帳戶", "類別／項目", "金額（TWD）", "備註", "狀態"],
             transaction_values,
             amount_column=4,
         )
@@ -255,7 +256,7 @@ class TransactionsPage(QWidget):
         answer = QMessageBox.question(
             self,
             "確認刪除",
-            "確定要刪除所選交易嗎？\n\n紀錄會保留在狀態「已刪除」裡，但不能復原。",
+            "確定要刪除所選交易嗎？\n\n紀錄會保留在狀態「已刪除」裡，但不能再改回有效。",
         )
         if answer != QMessageBox.StandardButton.Yes:
             return

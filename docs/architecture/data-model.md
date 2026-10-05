@@ -19,7 +19,7 @@
 - `balance_snapshots`：餘額盤點。
 - `deposit_contracts`：定存的持續關係 —— 哪個帳戶、怎麼計息、到期怎麼處理、利率是固定還是機動，
   以及兩個日期：`opened_on`（**存單上首次存入那一天**，使用者填的就是它）與
-  `recorded_on`（建檔那天，**產生待確認項目的下界**，也是算滾到第幾期的那個當下）。
+  `recorded_on`（建檔那天，**產生待確認草稿的下界**，也是算滾到第幾期的那個當下）。
   見 [ADR-0012](../decisions/ADR-0012-deposit-events-start-at-record-date.md)。
   **`deposit_terms.start_date` 是第三個日期**：這一期的起存日，由 `current_term()` 算。
 - `deposit_terms`：定存的**每一期**。續存產生新的一期，舊的不改寫，所以歷次利率留得下來。
@@ -100,7 +100,7 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
 
 - v1：核心帳務表、舊 payee schema、FTS、settings、audit。
 - v2：`transactions.replaces_transaction_id`。
-- v3：模板、定期收支（`recurring_schedules`）、待確認項目（`scheduled_occurrences`）。
+- v3：模板、定期收支（`recurring_schedules`）、待確認草稿（`scheduled_occurrences`）。
 - v4：`balance_snapshots`。
 - v5：移除 payee schema、重建 FTS、移除啟動備份設定。
 - v6：`deposit_contracts`、`deposit_terms`、`deposit_events` 三張表與各自的索引。
@@ -110,7 +110,7 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
 - v8：**砍掉** `scheduled_occurrences` 與 `recurring_schedules`（順序不可反 —— 前者有
   外鍵指向後者）。理由見 [ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)。
 - v9：`deposit_contracts.recorded_on`（把這份合約記進帳本的那一天），既有列用
-  `created_at` 的日期部分回填。**它是產生待確認項目的下界** ——
+  `created_at` 的日期部分回填。**它是產生待確認草稿的下界** ——
   見 [ADR-0012](../decisions/ADR-0012-deposit-events-start-at-record-date.md)。
   回填不可省：留空的話它比任何 ISO 日期都小，等於沒有下界。
 - v10：`deposit_contracts.opened_on`（**存單上首次存入那一天**），既有列用第一期的

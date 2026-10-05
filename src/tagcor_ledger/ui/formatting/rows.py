@@ -199,7 +199,7 @@ def deposit_term_values(item: dict[str, Any]) -> list[str]:
 
 
 def deposit_event_values(item: dict[str, Any]) -> list[str]:
-    """待確認那張表的一列：到期日／合約／類型／建議金額。
+    """待確認那張表的一列：到期日／定存合約／事件／建議金額。
 
     **日期要走 `display_date()`。** 這個函式在 v0.23.0 之前沒有任何頁面用它
     （待確認走的是自己的 `inbox_values()`，而那一份有轉格式），所以它印 ISO 字串

@@ -35,7 +35,7 @@ class DepositContractStore(StoreBase):
         recorded_on: str | None = None,
         opened_on: str = "",
     ) -> DepositContract:
-        """`recorded_on` 預設今天，它是產生待確認項目的下界（ADR-0012）。
+        """`recorded_on` 預設今天，它是產生待確認草稿的下界（ADR-0012）。
 
         `opened_on` 是**存單上首次存入的那一天**，與這份合約第一期的起存日不一定相同
         —— 續存類的合約記進來時通常已經滾過好幾輪。**這裡不算那件事**：

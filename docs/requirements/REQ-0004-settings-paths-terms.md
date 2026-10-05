@@ -39,7 +39,7 @@ Schema v5：
 
 - 移除 `payees`。
 - 移除 `transactions.payee_id` 與 `transactions.payee_name_snapshot`。
-- 移除模板、排程與待確認項目的 `payee_name`。
+- 移除模板、排程與待確認草稿的 `payee_name`。
 - 重建 `transaction_fts`，只搜尋備註、類別/項目與帳戶。
 - 移除 `startup_backup` 與 `last_startup_backup_date` 設定使用。
 

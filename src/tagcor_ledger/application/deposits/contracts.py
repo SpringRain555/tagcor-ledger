@@ -51,7 +51,7 @@ class ContractSection(DepositServiceBase):
         中間那幾期不建立資料列（它們的實際利息與當時的牌告利率都不在帳本裡，
         憑空生出空紀錄就是捏造事實）。
 
-        **`recorded_on` 一個參數兩個用途，而且兩者同義**：它是產生待確認項目的下界
+        **`recorded_on` 一個參數兩個用途，而且兩者同義**：它是產生待確認草稿的下界
         （[ADR-0012](../../../../docs/decisions/ADR-0012-deposit-events-start-at-record-date.md)），
         也是「算滾到第幾期」的那個當下 —— 問的都是「你把它記進帳本的那一天」。
         預設今天；參數留著是給測試控制用的，理由同 ADR-0012：
@@ -189,7 +189,7 @@ class ContractSection(DepositServiceBase):
                 fallback_code="DEPOSIT_CONTRACT_CLOSE_FAILED",
                 fallback_message="定存合約無法結束。請匯出診斷資訊回報。",
             )
-        return Result.ok("定存合約已結束。它不會再產生待確認項目。")
+        return Result.ok("定存合約已結束。它不會再產生待確認草稿。")
 
     def delete_contract(self, contract_id: str) -> Result:
         """刪除合約。

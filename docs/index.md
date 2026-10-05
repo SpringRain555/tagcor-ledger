@@ -86,7 +86,7 @@
 - [ADR-0009 UI 維持 PySide6](decisions/ADR-0009-keep-pyside6.md)
 - [ADR-0010 對外轉帳記成收入／支出](decisions/ADR-0010-external-transfers.md)
 - [ADR-0011 移除定期收支](decisions/ADR-0011-drop-recurring-schedules.md)
-- [ADR-0012 定存的待確認項目從建檔那天開始](decisions/ADR-0012-deposit-events-start-at-record-date.md)
+- [ADR-0012 定存的待確認草稿從建檔那天開始](decisions/ADR-0012-deposit-events-start-at-record-date.md)
 - [ADR-0013 AGENTS.md 與 CLAUDE.md 平級](decisions/ADR-0013-peer-agent-docs.md)
 - [ADR-0014 拿掉「今天還沒盤點」](decisions/ADR-0014-drop-daily-snapshot-reminder.md)
 - [ADR-0015 盤點的「刪除」改成真的移除](decisions/ADR-0015-delete-balance-snapshots-for-real.md)

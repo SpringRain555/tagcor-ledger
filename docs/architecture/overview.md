@@ -150,7 +150,7 @@ sequenceDiagram
     C-->>U: 繁中訊息（綠或紅）
 ```
 
-**`_write_transaction()` 收 `connection` 而不是自己開**，所以「確認待確認項目」
+**`_write_transaction()` 收 `connection` 而不是自己開**，所以「確認待確認草稿」
 那條路徑（要在同一個 transaction 裡改 occurrence 狀態）用的是同一份實作。
 
 ## 頁面之間怎麼連動

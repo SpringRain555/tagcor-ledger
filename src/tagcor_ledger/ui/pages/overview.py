@@ -236,7 +236,7 @@ class OverviewPage(QWidget):
             self.inbox_note.setText(f"待確認 {count} 筆。")
             self.inbox_button.setVisible(True)
         else:
-            self.inbox_note.setText("沒有待確認項目。")
+            self.inbox_note.setText("沒有待確認草稿。")
             self.inbox_button.setVisible(False)
 
     def _show_gap(self, gap: object) -> None:

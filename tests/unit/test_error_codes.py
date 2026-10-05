@@ -31,7 +31,7 @@ RAISING_CALLS = {"fail", "_error_code", "StartupFailure"}
 CODE_KEYWORDS = {"error_code", "fallback_code"}
 
 # 模組層的錯誤碼對照表。它的 **key 就是錯誤碼**，而且是使用者真的會看到的那一組 ——
-# 有些碼（例如 `DESTINATION_ACCOUNT_NOT_ACTIVE`）是被 `return` 出來再轉成例外的，
+# 有些碼（例如 `BACKUP_FILES_MISSING`）是放在回傳的 dict 裡、由呼叫端轉成例外的，
 # 只掃 `raise` 抓不到，只有從這裡才看得見。
 CODE_TABLES = {"ERROR_MESSAGES"}
 
@@ -117,11 +117,11 @@ def test_extractor_finds_a_plausible_number_of_codes() -> None:
     assert "DATABASE_SCHEMA_TOO_NEW" in source
     assert "PATH_OUTSIDE_DATA_ROOT" in source
     # 三個抽取路徑各抓一個：`raise`、`fallback_code=`、以及 `ERROR_MESSAGES` 的 key。
-    # 最後這個只出現在對照表裡（`_occurrence_invalid_reason` 是 `return` 不是 `raise`），
+    # 最後這個只出現在對照表裡（`validate_backup()` 把它放在回傳的 dict 裡，不是 `raise`），
     # 少了表格掃描就會漏掉它。
     assert "ACCOUNT_DELETE_FAILED" in source, "fallback_code= 這條路徑沒抓到"
-    assert "DESTINATION_ACCOUNT_NOT_ACTIVE" in source, "ERROR_MESSAGES 的 key 沒抓到"
-    assert "application/failures.py" in source["DESTINATION_ACCOUNT_NOT_ACTIVE"]
+    assert "BACKUP_FILES_MISSING" in source, "ERROR_MESSAGES 的 key 沒抓到"
+    assert "application/failures.py" in source["BACKUP_FILES_MISSING"]
 
 
 def test_every_source_code_is_documented() -> None:

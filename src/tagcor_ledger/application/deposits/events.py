@@ -1,6 +1,6 @@
-"""到期與每月領息的待確認項目怎麼長出來。
+"""到期與每月領息的待確認草稿怎麼長出來。
 
-**只產生待確認項目，不入帳。** 成為交易一定要經過使用者按下確認，
+**只產生待確認草稿，不入帳。** 成為交易一定要經過使用者按下確認，
 見套件 docstring 的第一條。
 
 ## 兩個界線
@@ -52,10 +52,10 @@ class EventSection(DepositServiceBase):
             return failure(
                 exc,
                 fallback_code="DEPOSIT_GENERATE_FAILED",
-                fallback_message="定存待確認項目無法產生。請匯出診斷資訊回報。",
+                fallback_message="定存待確認草稿無法產生。請匯出診斷資訊回報。",
             )
         return Result.ok(
-            f"已產生 {generated} 件定存待確認項目。", details={"generated": generated}
+            f"已產生 {generated} 件定存待確認草稿。", details={"generated": generated}
         )
 
     def _generate_for_term(

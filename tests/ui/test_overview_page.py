@@ -80,7 +80,7 @@ def test_the_inbox_number_is_the_same_everywhere(window, make_deposit) -> None:
     window.show_page(PageId.OVERVIEW)
 
     count = controller.inbox_count()
-    assert count >= 1, "測試資料沒有產生待確認項目，這條測試等於沒作用"
+    assert count >= 1, "測試資料沒有產生待確認草稿，這條測試等於沒作用"
     assert count == len(controller.list_deposit_pending())
     assert window.sidebar.item_for(PageId.BALANCE).data(BADGE_ROLE) == count
     assert f"{count} 筆" in window.overview.inbox_note.text()
@@ -101,7 +101,7 @@ def test_overview_hides_what_it_has_nothing_to_say_about(window) -> None:
     assert not page.archived_note.isVisible()
     assert not page.negative_note.isVisible()
     assert not page.gap_note.isVisible()
-    assert page.inbox_note.text() == "沒有待確認項目。"
+    assert page.inbox_note.text() == "沒有待確認草稿。"
     assert not page.inbox_button.isVisible()
     # 全新的帳本只有一個餘額 0 的「現金」—— 一片都畫不出來，圓環整塊收起來。
     # 一個空的圓框跟一個沒有內容的標題是同一種壞法。

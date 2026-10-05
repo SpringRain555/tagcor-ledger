@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
-# 到期前幾天產生待確認項目。給「不自動轉存」留反應時間 —— 那種情況要本人去郵局處理。
+# 到期前幾天產生待確認草稿。給「不自動轉存」留反應時間 —— 那種情況要本人去郵局處理。
 MATURITY_LEAD_DAYS = 7
 
 

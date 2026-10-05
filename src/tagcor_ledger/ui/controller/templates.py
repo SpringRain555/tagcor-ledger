@@ -3,7 +3,7 @@
 這一段全是轉發 —— 頁面呼叫 controller，controller 呼叫 service，service 回 `Result`。
 **中間不做判斷**：需要判斷的東西屬於 `overview.py`，不屬於這裡。
 
-這個檔案以前叫 `automation.py`，還管著定期收支與待確認項目。v0.23.0 移除定期收支之後
+這個檔案以前叫 `automation.py`，還管著定期收支與待確認草稿。v0.23.0 移除定期收支之後
 剩下的東西沒有一項是自動的（[ADR-0011](../../../../docs/decisions/ADR-0011-drop-recurring-schedules.md)）。
 """
 

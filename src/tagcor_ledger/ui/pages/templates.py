@@ -49,7 +49,7 @@ SORT_PAGE = "templates"
 SORT_FIELDS: tuple[tuple[str, str], ...] = (
     ("自訂順序", "custom"),
     ("模板名稱", "name"),
-    ("類型", "entry_type"),
+    ("流向", "entry_type"),
     ("金額", "amount"),
 )
 """排序視窗裡可以選的欄位。key 必須在 `TEMPLATE_SORT_FIELDS` 白名單裡。
@@ -74,7 +74,9 @@ class TemplatesPage(QWidget):
         # 欄位形狀刻意與交易紀錄一致（日期換成名稱）—— 兩張表講的是同一種東西，
         # 而「這個模板是從哪個帳戶付、記到哪個項目」正是挑模板時要看的。
         self.model = RowsModel(
-            ["模板名稱", "類型", "帳戶", "類別", "金額（TWD）", "備註", "狀態"],
+            # 「流向」與「類別／項目」跟交易紀錄同一個字 —— 內容本來就是同一個形狀
+            # （`entry_target_text()`）；以前這裡寫「類型」「類別」，同一件事兩個名字。
+            ["模板名稱", "流向", "帳戶", "類別／項目", "金額（TWD）", "備註", "狀態"],
             template_values,
             amount_column=4,
         )

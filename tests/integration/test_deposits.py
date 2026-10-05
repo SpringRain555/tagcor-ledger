@@ -56,7 +56,7 @@ def _make_contract(
 ) -> str:
     """`recorded_on` 預設等於首次起存日 —— 「這份定存一存進去就記進帳本了」。
 
-    **不留成預設的今天。** `recorded_on` 是產生待確認項目的下界（ADR-0012），
+    **不留成預設的今天。** `recorded_on` 是產生待確認草稿的下界（ADR-0012），
     而這一整個檔案用的是 2026／2027 的假日期；黏在真實時鐘上的話每一條
     `generate_due(today=...)` 都會變成「什麼都沒產生也算通過」。
     補記歷史那條路自己傳一個晚一點的日期，見
@@ -148,7 +148,7 @@ def test_generating_events_never_writes_a_posting(service: DepositService) -> No
     assert result.success
     assert int(result.details["generated"]) > 0, "什麼都沒產生的話這個測試沒有在檢查東西"
 
-    assert _posting_count(service) == before, "產生待確認項目竟然寫了 posting"
+    assert _posting_count(service) == before, "產生待確認草稿竟然寫了 posting"
 
 
 def test_generate_due_is_idempotent(service: DepositService) -> None:
@@ -530,7 +530,7 @@ def test_the_floor_does_not_swallow_events_after_the_record_date(
 
 
 def test_a_closed_contract_stops_producing_events(service: DepositService) -> None:
-    """結束合約之後不該再長出待確認項目 —— 而它在畫面上預設是看不見的。
+    """結束合約之後不該再長出待確認草稿 —— 而它在畫面上預設是看不見的。
 
     `generate_due()` 走的是 `list_active_terms()`（期層級），少了合約那一側的條件，
     一份已結束的合約仍然會生出到期項目而使用者找不到它是誰生的。
@@ -840,7 +840,7 @@ def test_a_deposit_that_does_not_renew_is_recorded_as_the_term_on_the_passbook(
 ) -> None:
     """不續存的沒有「目前這一期」—— 記進來的就是存單上那一期，期序 1。
 
-    它已經結束了，所以也不會產生任何待確認項目（到期日早於建檔日）。
+    它已經結束了，所以也不會產生任何待確認草稿（到期日早於建檔日）。
     """
     contract_id = _make_contract(
         service,

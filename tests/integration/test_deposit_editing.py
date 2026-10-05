@@ -58,7 +58,7 @@ def _make_contract(
         principal="100000",
         annual_rate_ppm=rate,
         rate_type=rate_type,
-        # 建檔日 = 起存日。`recorded_on` 是產生待確認項目的下界（ADR-0012），
+        # 建檔日 = 起存日。`recorded_on` 是產生待確認草稿的下界（ADR-0012），
         # 留成預設的今天會讓這個檔案的假日期在真實時鐘走過去之後開始漏測。
         recorded_on="2026-02-15",
     )
@@ -192,7 +192,7 @@ def test_changing_the_rate_refreshes_pending_suggestions(service: DepositService
     )
 
     events = service.store.list_pending_events()
-    assert len(events) == 1, "重算不該留下重複的待確認項目"
+    assert len(events) == 1, "重算不該留下重複的待確認草稿"
     assert events[0].suggested_amount_minor == 1_612
 
 

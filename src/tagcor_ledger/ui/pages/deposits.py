@@ -95,7 +95,7 @@ class DepositsPage(QWidget):
             "程式會反推出這一期實際的年利率。\n"
             # **QLabel 不吃 markdown。** 這段字第一版寫成 `**…**`，實機截圖上印出來的
             # 就是兩個星號（2026-08-23）。要強調只能靠斷句與位置。
-            "建檔之前就到期的期數不會產生待確認項目，那段歷史已經含在帳戶的期初餘額裡。"
+            "建檔之前就到期的期數不會產生待確認草稿，那段歷史已經含在帳戶的期初餘額裡。"
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
@@ -105,7 +105,7 @@ class DepositsPage(QWidget):
         self.close_button = QPushButton("結束合約")
         delete_button = QPushButton("刪除所選合約")
         refresh_button = QPushButton("重新整理")
-        self.generate_button = QPushButton("產生到期與領息項目")
+        self.generate_button = QPushButton("產生到期與領息草稿")
         set_button_role(add_button, "primary")
         set_button_role(self.generate_button, "primary")
         set_button_role(delete_button, "danger")
@@ -186,7 +186,7 @@ class DepositsPage(QWidget):
         QMessageBox.information(
             self,
             "產生完成",
-            f"已產生 {int(result.details.get('generated', 0))} 件待確認項目。\n\n"
+            f"已產生 {int(result.details.get('generated', 0))} 件待確認草稿。\n\n"
             "它們不會自動入帳 —— 到「待確認」按確認並照存摺輸入金額。",
         )
         self.changed.emit()
@@ -243,7 +243,7 @@ class DepositsPage(QWidget):
             self,
             "確認結束",
             f"要結束「{item['name']}」嗎？\n"
-            "已經記過的交易與每一期的紀錄都留著，只是它不會再產生待確認項目，"
+            "已經記過的交易與每一期的紀錄都留著，只是它不會再產生待確認草稿，"
             "清單上也會收起來（勾「顯示已結束的合約」還看得到）。\n"
             "還有存續中的期時不能結束 —— 那種情況請用「中途解約」。",
         )
@@ -290,7 +290,7 @@ class DepositsPage(QWidget):
             QMessageBox.warning(
                 self,
                 "無法解約",
-                "只有「存續中」的期可以中途解約。這一期已經結清、續約或解約過了。",
+                "只有「存續中」的期可以中途解約。這一期已經結清、續存或解約過了。",
             )
             return
         contract = self.contract_model.selected_item(self.contracts)

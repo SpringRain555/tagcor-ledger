@@ -343,7 +343,7 @@ class DepositContractDialog(QDialog):
         elif maturity <= today_taipei().isoformat():
             text = (
                 f"這一期在 {display_date(maturity)} 就到期了，而它不自動轉期續存 —— "
-                "這份定存已經結束。記進來只會留下一筆歷史紀錄，不會產生任何待確認項目。"
+                "這份定存已經結束。記進來只會留下一筆歷史紀錄，不會產生任何待確認草稿。"
             )
         else:
             text = f"會建立這一期：{span}（第 1 期）。"
@@ -409,7 +409,7 @@ class DepositTermDialog(QDialog):
         self.error.setWordWrap(True)
 
         hint = QLabel(
-            "只有「存續中」的期可以修改。已續約或已結清的期已經產生過交易，改了會對不起帳。\n"
+            "只有「存續中」的期可以修改。已續存或已結清的期已經產生過交易，改了會對不起帳。\n"
             "零存整付的本金留 0 就是「照每月存入 × 期長推算」；"
             "中間漏存過的話請在這裡填實際累積的本金 —— 到期轉回的就是這個數字。"
         )
