@@ -8,6 +8,20 @@
 
 ## 未發布
 
+### 修正：刪不掉帳戶或類別時，說出是被什麼擋住
+
+以前 `ACCOUNT_IN_USE`／`CATEGORY_IN_USE` 一碼三義，被交易、盤點、模板擋住都說「已經有交易紀錄」——
+那個帳戶可能一筆交易也沒有。**被定存合約引用的帳戶更糟**：引用檢查漏了 `deposit_contracts`，刪除直接撞上
+外鍵，落到退路碼「帳戶無法刪除。請匯出診斷資訊回報。」—— 一件正常的事被講成 bug（新測試先重現過）。
+
+- 帳戶：`ACCOUNT_HAS_TRANSACTIONS`／`ACCOUNT_HAS_SNAPSHOTS`／`ACCOUNT_IN_TEMPLATES`／`ACCOUNT_IN_DEPOSITS`
+  （存款帳戶或利息轉入帳戶都算）。類別：`CATEGORY_HAS_TRANSACTIONS`／`CATEGORY_IN_TEMPLATES`。
+  已封存的模板、已結束的合約一樣算 —— 看不見但還指著它，訊息會這樣講，並說出去哪裡處理。
+- `stores/base.py` 的 `has_any_reference()`（一串表、回一個 True/False）換成 `is_referenced()`（一次一張表），
+  每一張表各自 `raise` 自己的碼 —— 錯誤碼的守門只認得字面值的 `raise`。
+- `tests/integration/test_catalog_deletion.py` 八條：每條只放一種引用；陽性對照是沒被用過的帳戶照樣刪得掉。
+  `error-codes.md`、`state-machines.md` 跟著改。
+
 ### 操作設定：「類別」與「項目」合成一個並排的分頁
 
 使用者：「兩者性質相似，空間也夠同時顯示。」操作設定從五個分頁變四個：帳戶／**類別與項目**／模板／定存。

@@ -110,7 +110,9 @@ stateDiagram-v2
 ### 封存與刪除的分界，是這套設計的核心
 
 **只要被任何一筆歷史資料引用過，就永遠不能刪，只能封存。** 否則報表會出現指向空無的外鍵，
-或者更糟 —— 靜默地少算。相關錯誤碼：`ACCOUNT_IN_USE`、`CATEGORY_IN_USE`。
+或者更糟 —— 靜默地少算。相關錯誤碼：`ACCOUNT_HAS_TRANSACTIONS`／`ACCOUNT_HAS_SNAPSHOTS`／
+`ACCOUNT_IN_TEMPLATES`／`ACCOUNT_IN_DEPOSITS`、`CATEGORY_HAS_TRANSACTIONS`／`CATEGORY_IN_TEMPLATES` ——
+**每一種引用各自一個碼**，訊息才講得出是被什麼擋住（2026-10-05 之前全塌成 `*_IN_USE`）。
 
 另外三條限制：
 
@@ -298,7 +300,7 @@ stateDiagram-v2
 **整份 schema 裡沒有任何一張表指向 `transaction_templates`**，那是查過的結論不是疏漏。
 套用模板產生的是一筆獨立的交易，而那筆交易不記得自己從哪個模板來 —— 所以刪掉模板
 動不到任何歷史資料。對照組是帳戶與類別：它們被 posting、盤點與模板引用，
-所以刪除前一定要檢查（`ACCOUNT_IN_USE` / `CATEGORY_IN_USE`）。
+所以刪除前一定要檢查（`ACCOUNT_*`／`CATEGORY_*` 那一組碼，見上面「封存與刪除的分界」）。
 
 ### 恢復要擋同名
 

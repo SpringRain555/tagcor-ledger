@@ -15,7 +15,7 @@ from tagcor_ledger.infrastructure.database import connect_database, database_tra
 from tagcor_ledger.infrastructure.stores.base import (
     NotFoundError,
     StoreBase,
-    has_any_reference,
+    is_referenced,
     order_by,
 )
 
@@ -437,14 +437,15 @@ class CategoryStore(StoreBase):
             ).fetchone()
             if children is not None:
                 raise ValueError("CATEGORY_HAS_CHILDREN")
-            if has_any_reference(
-                connection,
-                [
-                    ("category_allocations", "category_id = ?", (category_id,)),
-                    ("transaction_templates", "category_id = ?", (category_id,)),
-                ],
+            # 每一種引用各自一個碼（理由同 `delete_account`）。已封存的模板也算。
+            if is_referenced(
+                connection, "category_allocations", "category_id = ?", (category_id,)
             ):
-                raise ValueError("CATEGORY_IN_USE")
+                raise ValueError("CATEGORY_HAS_TRANSACTIONS")
+            if is_referenced(
+                connection, "transaction_templates", "category_id = ?", (category_id,)
+            ):
+                raise ValueError("CATEGORY_IN_TEMPLATES")
             connection.execute("DELETE FROM categories WHERE category_id = ?", (category_id,))
             self._audit(
                 connection,

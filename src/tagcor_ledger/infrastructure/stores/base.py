@@ -444,19 +444,23 @@ class StoreBase:
         )
 
 
-def has_any_reference(
+def is_referenced(
     connection: sqlite3.Connection,
-    checks: list[tuple[str, str, tuple[object, ...]]],
+    table: str,
+    where: str,
+    parameters: tuple[object, ...],
 ) -> bool:
-    """設定項是否被任何歷史資料引用；有引用就只能封存、不能刪除。"""
-    for table, where, parameters in checks:
-        row = connection.execute(
-            f"SELECT 1 FROM {table} WHERE {where} LIMIT 1",
-            parameters,
-        ).fetchone()
-        if row is not None:
-            return True
-    return False
+    """名冊裡的一筆（帳戶、類別、項目）有沒有被 `table` 引用；有就只能封存、不能刪除。
+
+    **一次只問一張表**，呼叫端每一張表各自 `raise` 自己的碼。以前是一次問一串、回一個
+    True/False，於是被交易、盤點、模板擋住都只能說同一句「已經有交易紀錄」—— 那個帳戶
+    可能一筆交易也沒有。`table` 與 `where` 都是呼叫端寫死的字面值，不是使用者輸入。
+    """
+    row = connection.execute(
+        f"SELECT 1 FROM {table} WHERE {where} LIMIT 1",
+        parameters,
+    ).fetchone()
+    return row is not None
 
 
 def build_fts_query(value: str) -> str:

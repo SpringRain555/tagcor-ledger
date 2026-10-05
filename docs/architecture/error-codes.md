@@ -50,7 +50,16 @@
 | `ACCOUNT_ACTIVE_NAME_CONFLICT` | 已有同名的使用中帳戶（新增或恢復時） | **多半是本來就想用那一個** —— 直接在選單裡選它。真要兩個就換名字 |
 | `ACCOUNT_NOT_ACTIVE` | 想用一個已封存的帳戶記帳 | 先恢復該帳戶，或改選別的 |
 | `ACCOUNT_IS_DEFAULT` | 想刪掉預設帳戶 | 先到操作設定改預設帳戶，再刪 |
-| `ACCOUNT_IN_USE` | 想刪掉已被歷史交易引用的帳戶 | **改用封存。** 刪除只允許從未被引用過的 |
+| `ACCOUNT_HAS_TRANSACTIONS` | 想刪掉已有交易（posting）的帳戶 | **改用封存。** 刪除只允許從未被引用過的 |
+| `ACCOUNT_HAS_SNAPSHOTS` | 帳戶沒有交易，但有餘額盤點 | 到餘額盤點刪掉它的盤點（真的刪除，ADR-0015），或改用封存 |
+| `ACCOUNT_IN_TEMPLATES` | 有模板用到這個帳戶（**已封存的模板也算**） | 到「操作設定 → 模板」改掉或刪掉那些模板，或改用封存 |
+| `ACCOUNT_IN_DEPOSITS` | 有定存合約用到這個帳戶（存款帳戶或利息轉入帳戶，**已結束的合約也算**） | 合約從沒入帳過的話到定存頁刪掉它；否則改用封存 |
+
+> **2026-10-05 之前上面四個是同一個碼 ACCOUNT_IN_USE**（已退役，所以不加反引號 —— 這份目錄的守門
+> 把反引號裡的碼當成現役），訊息一律說「已經有交易紀錄」——
+> 被盤點或模板擋住的帳戶一筆交易也沒有。而定存合約根本不在檢查清單裡：刪除直接撞上外鍵，
+> 落到退路碼 `ACCOUNT_DELETE_FAILED`（「請匯出診斷資訊回報」）。CATEGORY_IN_USE 是同一個形狀。
+> 檢查順序就是上面的順序，一次只報第一個擋住的。
 | `ACCOUNT_CREATE_FAILED` / `ACCOUNT_RENAME_FAILED` / `ACCOUNT_ARCHIVE_FAILED` / `ACCOUNT_RESTORE_FAILED` / `ACCOUNT_DELETE_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |
 | `DESTINATION_ACCOUNT_NOT_ACTIVE` | 待確認的轉帳，轉入帳戶已封存 | 恢復那個帳戶，或改掉這筆待確認項目的轉入帳戶 |
 
@@ -68,7 +77,8 @@
 | `CATEGORY_PARENT_UNCHANGED` | 更改所屬類別時選到它現在的類別 | 選一個不同的。UI 在這種情況不會送出，正常操作不會看到 |
 | `CATEGORY_HAS_CHILDREN` | 想刪掉還有子項目的類別 | 先處理掉所有子項目 |
 | `CATEGORY_HAS_ACTIVE_CHILDREN` | 想封存還有使用中子項目的類別 | 先封存子項目。否則會出現「父封存了、子還在選單裡」的矛盾 |
-| `CATEGORY_IN_USE` | 想刪掉已被歷史交易引用的 | **改用封存** |
+| `CATEGORY_HAS_TRANSACTIONS` | 想刪掉已被交易引用的類別／項目 | **改用封存** |
+| `CATEGORY_IN_TEMPLATES` | 沒有交易，但有模板用到它（**已封存的模板也算**） | 到「操作設定 → 模板」改掉或刪掉那些模板，或改用封存 |
 | `CATEGORY_REQUIRED` | 收入／支出沒選類別 | 選一個。轉帳不需要類別 |
 | `CATEGORY_CREATE_FAILED` | **預期外**的寫入失敗。名稱空白、上層無效、同層同名這三種都已經有自己的碼，走到這裡表示三道檢查都沒攔到 | 匯出診斷資訊回報。原文在 `details.detail`，**不會印在畫面上** |
 | `CATEGORY_RENAME_FAILED` / `CATEGORY_ARCHIVE_FAILED` / `CATEGORY_RESTORE_FAILED` / `CATEGORY_DELETE_FAILED` / `CATEGORY_MOVE_FAILED` / `CATEGORY_REORDER_FAILED` | **退路碼**：寫入層失敗，而且原因不是上面任何一個 | 匯出診斷資訊回報。原文在 `details.detail` |

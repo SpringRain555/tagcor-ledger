@@ -13,7 +13,7 @@ from tagcor_ledger.infrastructure.database import connect_database, database_tra
 from tagcor_ledger.infrastructure.stores.base import (
     NotFoundError,
     StoreBase,
-    has_any_reference,
+    is_referenced,
     order_by,
 )
 
@@ -223,19 +223,28 @@ class AccountStore(StoreBase):
             ).fetchone()
             if default_row is not None and str(default_row["value"]) == account_id:
                 raise ValueError("ACCOUNT_IS_DEFAULT")
-            if has_any_reference(
+            # **每一種引用各自一個碼**，訊息才講得出是被什麼擋住、該去哪裡處理。
+            # `deposit_contracts` 是 2026-10-05 才補上的：以前漏了它，刪除直接撞上外鍵，
+            # 使用者看到「請匯出診斷資訊回報」—— 一件正常的事被講成 bug。
+            # 已封存的模板、已結束的合約一樣算：它們看不見，但還指著這個帳戶。
+            if is_referenced(connection, "account_postings", "account_id = ?", (account_id,)):
+                raise ValueError("ACCOUNT_HAS_TRANSACTIONS")
+            if is_referenced(connection, "balance_snapshots", "account_id = ?", (account_id,)):
+                raise ValueError("ACCOUNT_HAS_SNAPSHOTS")
+            if is_referenced(
                 connection,
-                [
-                    ("account_postings", "account_id = ?", (account_id,)),
-                    ("balance_snapshots", "account_id = ?", (account_id,)),
-                    (
-                        "transaction_templates",
-                        "account_id = ? OR destination_account_id = ?",
-                        (account_id, account_id),
-                    ),
-                ],
+                "transaction_templates",
+                "account_id = ? OR destination_account_id = ?",
+                (account_id, account_id),
             ):
-                raise ValueError("ACCOUNT_IN_USE")
+                raise ValueError("ACCOUNT_IN_TEMPLATES")
+            if is_referenced(
+                connection,
+                "deposit_contracts",
+                "account_id = ? OR interest_destination_account_id = ?",
+                (account_id, account_id),
+            ):
+                raise ValueError("ACCOUNT_IN_DEPOSITS")
             connection.execute("DELETE FROM accounts WHERE account_id = ?", (account_id,))
             self._audit(
                 connection,

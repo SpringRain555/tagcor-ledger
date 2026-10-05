@@ -167,7 +167,7 @@ def test_an_archived_template_no_longer_traps_its_account(window, monkeypatch) -
     assert controller.archive_template(str(template.template_id)).success
     blocked = controller.delete_account(account_id)
     assert not blocked.success
-    assert blocked.error_code == "ACCOUNT_IN_USE"
+    assert blocked.error_code == "ACCOUNT_IN_TEMPLATES"
 
     # 但現在使用者看得見那個模板，也刪得掉它。
     page.refresh()
