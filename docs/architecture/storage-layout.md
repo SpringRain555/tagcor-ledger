@@ -101,3 +101,9 @@ root/
 - `integrity_check`
 
 還原前必須驗證 checksum、`PRAGMA integrity_check` 與 schema version。
+
+**備份只讀不寫。** 驗證、列出、還原都用 `mode=ro&immutable=1` 開那一份 `ledger.sqlite3`
+（`maintenance._open_backup()`）：不取鎖、不留 `-wal`／`-shm`／`-journal`，連線沒有能力寫它。
+**備份的定義就是那一個檔** —— manifest 的 SHA-256 只算它，所以旁邊就算躺著一個別處來的
+`-wal` 也不會被套用（讀寫模式會）。備份本身是 WAL 格式，要改它的人（例如測試）寫完一定要
+關連線，變更才會落進主檔。

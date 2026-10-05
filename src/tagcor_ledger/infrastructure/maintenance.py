@@ -44,6 +44,12 @@ class MaintenanceService:
     所以這個檔案裡每一個 `sqlite3.connect()` 都包 `contextlib.closing`。
     `tests/integration/test_backup_deletion.py` 守著這件事：拿掉 `closing`，
     十條裡有八條會紅。
+
+    ## 備份只讀不寫
+
+    驗證、列出、還原都只**讀**一份備份，所以一律走 `_open_backup()`（唯讀、immutable）。
+    以前是讀寫模式開 —— 維護頁每次 refresh 都對每一份備份這樣開一次，而備份正是
+    「最不該被碰到」的那份檔案。
     """
 
     def __init__(self, paths: AppPaths) -> None:
@@ -87,7 +93,7 @@ class MaintenanceService:
         database_copy = backup_dir / "ledger.sqlite3"
         if create_backup_first:
             self.create_backup(reason="before_restore")
-        with closing(sqlite3.connect(database_copy)) as source:
+        with _open_backup(database_copy) as source:
             with closing(sqlite3.connect(self.paths.database_path)) as destination:
                 source.backup(destination)
         initialize_database(self.paths)
@@ -153,7 +159,7 @@ class MaintenanceService:
         if integrity != "ok":
             return {"valid": False, "error_code": "BACKUP_INTEGRITY_FAILED"}
         try:
-            with closing(sqlite3.connect(database_copy)) as connection:
+            with _open_backup(database_copy) as connection:
                 row = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
             schema_version = int(row[0] or 0) if row is not None else 0
         except sqlite3.Error:
@@ -231,8 +237,19 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _open_backup(path: Path) -> closing[sqlite3.Connection]:
+    """唯讀、不取鎖、不留旁檔地開一份備份。
+
+    `mode=ro` 讓寫入當場失敗；`immutable=1` 告訴 SQLite 這個檔案不會被別人改 ——
+    不取鎖，也不建 `-wal`／`-shm`／`-journal`。**備份的定義就是那一個檔**（manifest
+    的 SHA-256 只算它），所以旁邊就算躺著一個別處來的 `-wal`，也不該被套用進來。
+    """
+    uri = f"{path.resolve().as_uri()}?mode=ro&immutable=1"
+    return closing(sqlite3.connect(uri, uri=True))
+
+
 def _integrity_check(path: Path) -> str:
-    with closing(sqlite3.connect(path)) as connection:
+    with _open_backup(path) as connection:
         row = connection.execute("PRAGMA integrity_check").fetchone()
     return str(row[0]) if row is not None else "unknown"
 

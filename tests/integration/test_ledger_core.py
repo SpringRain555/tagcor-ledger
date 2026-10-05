@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
@@ -312,7 +313,10 @@ def test_backup_validation_restore_and_newer_schema_rejection(tmp_path: Path) ->
 
     newer = maintenance.create_backup()
     database = newer / "ledger.sqlite3"
-    with sqlite3.connect(database) as connection:
+    # **一定要關連線**：備份是 WAL 模式，沒關的話這一列只寫進 `-wal`，主檔沒變，
+    # 下面算的雜湊就是舊內容的。以前驗證用讀寫模式開、會順手套用那個 `-wal`，
+    # 這個錯才被蓋住；現在驗證只讀主檔（immutable），跟 manifest 的雜湊算的是同一個東西。
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (99, 'future')"
         )
