@@ -116,10 +116,11 @@ class BalanceSnapshotService:
                 correlation_id=correlation_id,
             )
 
-    def void(self, snapshot_id: str) -> Result:
+    def delete(self, snapshot_id: str) -> Result:
+        """真的刪掉一筆盤點（ADR-0015）。2026-10-05 之前這裡叫 `void()`，只標成已刪除。"""
         correlation_id = new_correlation_id()
         try:
-            self.store.void_balance_snapshot(snapshot_id, correlation_id)
+            self.store.delete_balance_snapshot(snapshot_id, correlation_id)
             return Result.ok("餘額盤點已刪除。", correlation_id=correlation_id)
         except DOMAIN_FAILURES as exc:
             return failure(
@@ -136,16 +137,10 @@ class BalanceSnapshotService:
                 correlation_id=correlation_id,
             )
 
-    def list(
-        self,
-        *,
-        account_id: str | None = None,
-        status: str = "active",
-        limit: int = 50,
-    ) -> Result:
+    def list(self, *, account_id: str | None = None, limit: int = 50) -> Result:
         try:
             gaps = self.store.list_balance_gaps(
-                snapshot_filter=BalanceSnapshotFilter(account_id=account_id, status=status),
+                snapshot_filter=BalanceSnapshotFilter(account_id=account_id),
                 limit=limit,
             )
             return Result.ok(
@@ -190,9 +185,11 @@ class BalanceSnapshotService:
                 )
             target.parent.mkdir(parents=True, exist_ok=True)
             gaps = self.store.list_balance_gaps(
-                snapshot_filter=BalanceSnapshotFilter(status="all"),
+                snapshot_filter=BalanceSnapshotFilter(),
                 limit=10000,
             )
+            # 沒有「狀態」欄：盤點的刪除是真的移除（ADR-0015），剩下的每一筆都有效，
+            # 一欄永遠寫「有效」只是雜訊。
             fieldnames = [
                 "盤點時間",
                 "帳戶",
@@ -200,7 +197,6 @@ class BalanceSnapshotService:
                 "預期金額",
                 "期間交易合計",
                 "未解釋差額",
-                "狀態",
                 "備註",
                 "盤點 ID",
             ]
@@ -228,7 +224,6 @@ class BalanceSnapshotService:
                                 gap.difference_minor,
                                 gap.snapshot.currency,
                             ),
-                            "狀態": "有效" if gap.snapshot.status == "active" else "已刪除",
                             "備註": gap.snapshot.note,
                             "盤點 ID": gap.snapshot.snapshot_id,
                         }

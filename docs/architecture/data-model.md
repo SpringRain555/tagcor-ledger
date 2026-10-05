@@ -117,6 +117,12 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
   起存日回填。使用者填的是這一欄，該建立哪一期與期序由
   `domain.deposits.current_term()` 算 —— 見
   [ADR-0012](../decisions/ADR-0012-deposit-events-start-at-record-date.md) 的「第二次修正」。
+- v11：刪掉 `settings` 裡沒有人再讀的 `balance_snapshot_reminder`。理由見
+  [ADR-0014](../decisions/ADR-0014-drop-daily-snapshot-reminder.md)。
+  （這一列 2026-10-05 才補進來 —— 0.25.0 加了 v11，這份清單當時沒跟上。）
+- v12：**刪掉 `status = 'voided'` 的餘額盤點**，盤點的「刪除」從這一版起是真的移除。
+  `status` 欄與 CHECK 留著（拿掉要重建整張表），之後只會是 `active`。理由見
+  [ADR-0015](../decisions/ADR-0015-delete-balance-snapshots-for-real.md)。
 
 **每一版都是新的一版，不改舊的那一版**，因為使用者的資料庫已經跑過了 —— migration
 記錄下來就不會再跑第二次，改舊版的內容對既有資料庫毫無效果。所以 v3 建的兩張表由

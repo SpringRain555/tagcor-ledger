@@ -228,4 +228,3 @@ class CreateBalanceSnapshotRequest:
 @dataclass(frozen=True, slots=True)
 class BalanceSnapshotFilter:
     account_id: str | None = None
-    status: str = "active"

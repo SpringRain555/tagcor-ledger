@@ -6,7 +6,7 @@
 
 上方表單只負責**新增**。表格底下兩排按鈕：第一排是「產生新東西」（新增盤點、補記交易），
 第二排對**所選盤點**動作（編輯、刪除）加匯出。「編輯」開對話框（`BalanceSnapshotEditDialog`），
-「刪除」是 `void` —— 紀錄留著、列表狀態「已刪除」看得到、不可復原。
+「刪除」**真的移除**那一筆（2026-10-05 起，ADR-0015；之前是標成已刪除、紀錄留著）。
 
 以前點表格某一列會把值倒進上方表單，再按「更新所選盤點」寫回。兩個問題：正在打的新盤點
 會被點到的那一列蓋掉；而一顆叫「更新」的按鈕一按就寫入，使用者以為它會先開視窗。
@@ -71,7 +71,6 @@ class BalanceSnapshotPage(QWidget):
         super().__init__()
         self.controller = controller
         self.account = QComboBox()
-        self.status = QComboBox()
         self.observed_at = date_field()
         self.amount = QLineEdit()
         self.note = QLineEdit()
@@ -101,8 +100,6 @@ class BalanceSnapshotPage(QWidget):
         self.result.setWordWrap(True)
         self.summary.setObjectName("hintLabel")
         self.summary.setWordWrap(True)
-        for label, value in (("有效", "active"), ("已刪除", "voided"), ("全部", "all")):
-            self.status.addItem(label, value)
 
         create_button = QPushButton("新增盤點")
         quick_button = QPushButton("補記交易")
@@ -117,7 +114,6 @@ class BalanceSnapshotPage(QWidget):
         form.addRow("盤點日期", self.observed_at)
         form.addRow("目前金額（TWD）", self.amount)
         form.addRow("備註", self.note)
-        form.addRow("列表狀態", self.status)
         form.addRow("", self.result)
 
         # 兩排，分的是**動作的對象**：第一排產生新東西，第二排對所選盤點動作（加匯出）。
@@ -132,14 +128,8 @@ class BalanceSnapshotPage(QWidget):
         selected_row.addStretch()
 
         setup_table(self.table, self.model, stretch_column=5)
-        # 編輯／刪除是對所選盤點動作，沒選就停用；選到已刪除的那一列也停用 ——
-        # 以前對那種列是靜默 return，跟沒選取時一樣「按了沒反應」。
-        bind_selection(
-            self.table,
-            edit_button,
-            delete_button,
-            enabled_when=lambda item: item["status"] == "active",
-        )
+        # 編輯／刪除是對所選盤點動作，沒選就停用。
+        bind_selection(self.table, edit_button, delete_button)
         layout = page_layout(self, width=TABLE_WIDTH)
         layout.addWidget(title)
         layout.addWidget(help_text)
@@ -154,7 +144,6 @@ class BalanceSnapshotPage(QWidget):
         layout.addWidget(self.table)
 
         self.account.currentIndexChanged.connect(self.refresh)
-        self.status.currentIndexChanged.connect(self.refresh)
         create_button.clicked.connect(self.create_snapshot)
         quick_button.clicked.connect(lambda: self.record_transaction_requested.emit())
         edit_button.clicked.connect(self.edit_selected)
@@ -171,11 +160,7 @@ class BalanceSnapshotPage(QWidget):
             self.model.replace_rows([])
             self.summary.setText("尚未建立帳戶。")
             return
-        gaps = self.controller.list_balance_snapshots(
-            account_id=account_id,
-            status=str(self.status.currentData()),
-            limit=50,
-        )
+        gaps = self.controller.list_balance_snapshots(account_id=account_id, limit=50)
         self.model.replace_rows(gaps)
         latest = self.controller.latest_balance_gap(account_id)
         if latest is None:
@@ -211,9 +196,8 @@ class BalanceSnapshotPage(QWidget):
             self.refresh()
 
     def edit_selected(self) -> None:
-        # 按鈕對已刪除的列本來就停用（`enabled_when`），這一行只是防程式直接呼叫。
         item = self.model.selected_item(self.table)
-        if item is None or item["status"] != "active":
+        if item is None:
             return
         dialog = BalanceSnapshotEditDialog(self.controller, item, self)
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.saved_result is None:
@@ -223,17 +207,19 @@ class BalanceSnapshotPage(QWidget):
         self.refresh()
 
     def delete_selected(self) -> None:
+        """**真的刪掉**（ADR-0015）。確認框講兩件事：找不回來，以及後面那次盤點會怎樣。"""
         item = self.model.selected_item(self.table)
-        if item is None or item["status"] != "active":
+        if item is None:
             return
         answer = QMessageBox.question(
             self,
             "確認刪除",
-            "確定要刪除所選餘額盤點嗎？\n\n紀錄會保留在列表狀態「已刪除」裡，但不能復原。",
+            f"確定要刪除 {display_date(str(item['observed_at']))} 那一次盤點嗎？\n\n"
+            "刪掉之後就找不回來了。後面那一次盤點的未解釋差額，會改拿再前一次的盤點重算。",
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        result = self.controller.void_balance_snapshot(str(item["snapshot_id"]))
+        result = self.controller.delete_balance_snapshot(str(item["snapshot_id"]))
         show_status(self.result, result_message(result), ok=result.success)
         if result.success:
             self.changed.emit()

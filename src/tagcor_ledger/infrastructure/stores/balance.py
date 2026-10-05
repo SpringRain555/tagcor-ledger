@@ -119,25 +119,35 @@ class BalanceStore(StoreBase):
             )
         return self.get_balance_gap(snapshot_id)
 
-    def void_balance_snapshot(self, snapshot_id: str, correlation_id: str) -> None:
+    def delete_balance_snapshot(self, snapshot_id: str, correlation_id: str) -> None:
+        """**真的刪掉**一筆盤點。2026-10-05 之前「刪除」只把它標成 `voided`。
+
+        盤點不是錢的進出：沒有交易指向它，差額也是每次現算的 —— 刪掉一筆，後面那一筆
+        自然往前找上一筆盤點當基準。標成 `voided` 的那些既不可復原、又一直擋著帳戶刪除
+        （引用檢查不看狀態），留著只有代價。理由見 ADR-0015。
+
+        稽核表留一列 `balance_snapshot.delete`，只記帳戶與日期、不記金額。
+        """
         with database_transaction(self.paths.database_path) as connection:
-            changed = connection.execute(
-                """
-                UPDATE balance_snapshots
-                SET status = 'voided', updated_at = ?
-                WHERE snapshot_id = ? AND status = 'active'
-                """,
-                (now_iso(), snapshot_id),
-            ).rowcount
-            if changed == 0:
+            row = connection.execute(
+                "SELECT account_id, observed_at FROM balance_snapshots WHERE snapshot_id = ?",
+                (snapshot_id,),
+            ).fetchone()
+            if row is None:
                 raise NotFoundError("BALANCE_SNAPSHOT_NOT_FOUND")
+            connection.execute(
+                "DELETE FROM balance_snapshots WHERE snapshot_id = ?", (snapshot_id,)
+            )
             self._audit(
                 connection,
                 correlation_id=correlation_id,
-                action="balance_snapshot.void",
+                action="balance_snapshot.delete",
                 entity_type="balance_snapshot",
                 entity_id=snapshot_id,
-                details={},
+                details={
+                    "account_id": str(row["account_id"]),
+                    "observed_at": str(row["observed_at"]),
+                },
             )
 
     def get_balance_gap(self, snapshot_id: str) -> BalanceGap:
@@ -180,18 +190,14 @@ class BalanceStore(StoreBase):
         if not 1 <= limit <= 10000:
             raise ValueError("PAGE_LIMIT_INVALID")
         filters = snapshot_filter or BalanceSnapshotFilter()
-        conditions: list[str] = []
+        # `status` 從 v12 起只剩 `active`，這個條件留著是給索引用的：沒有帳戶篩選時
+        # （匯出 CSV），`(status, observed_at)` 索引讓 ORDER BY 不必整張表撈出來排。
+        conditions: list[str] = ["bs.status = 'active'"]
         parameters: list[Any] = []
         if filters.account_id:
             conditions.append("bs.account_id = ?")
             parameters.append(filters.account_id)
-        if filters.status == "active":
-            conditions.append("bs.status = 'active'")
-        elif filters.status == "voided":
-            conditions.append("bs.status = 'voided'")
-        elif filters.status != "all":
-            raise ValueError("BALANCE_SNAPSHOT_STATUS_FILTER_INVALID")
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where = f"WHERE {' AND '.join(conditions)}"
         sql = (
             self._balance_snapshot_select()
             + f" {where} ORDER BY bs.observed_at DESC, bs.snapshot_id DESC LIMIT ?"

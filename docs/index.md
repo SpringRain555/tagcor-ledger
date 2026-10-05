@@ -64,7 +64,7 @@
 |---|---|
 | [REQ-0001 穩固核心](requirements/REQ-0001-stable-core.md) | 已實作 |
 | [REQ-0002 核心收尾與模板](requirements/REQ-0002-core-and-templates.md) | 已實作；**週期排程那一段在 v0.23.0 移除**（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
-| [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作；**「今天還沒盤點」那則提醒在 0.25.0 移除**（[ADR-0014](decisions/ADR-0014-drop-daily-snapshot-reminder.md)）|
+| [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作；**「今天還沒盤點」那則提醒在 0.25.0 移除**（[ADR-0014](decisions/ADR-0014-drop-daily-snapshot-reminder.md)）；**刪除改成真的移除**（[ADR-0015](decisions/ADR-0015-delete-balance-snapshots-for-real.md)）|
 | [REQ-0004 設定、路徑與用詞](requirements/REQ-0004-settings-paths-terms.md) | 已實作；操作設定現在是**五個**分頁（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
 | [REQ-0005 深色 UI](requirements/REQ-0005-dark-ui-docs.md) | 已實作 |
 | [REQ-0006 資料與程式分離](requirements/REQ-0006-data-program-separation.md) | 已實作 |
@@ -89,6 +89,7 @@
 - [ADR-0012 定存的待確認項目從建檔那天開始](decisions/ADR-0012-deposit-events-start-at-record-date.md)
 - [ADR-0013 AGENTS.md 與 CLAUDE.md 平級](decisions/ADR-0013-peer-agent-docs.md)
 - [ADR-0014 拿掉「今天還沒盤點」](decisions/ADR-0014-drop-daily-snapshot-reminder.md)
+- [ADR-0015 盤點的「刪除」改成真的移除](decisions/ADR-0015-delete-balance-snapshots-for-real.md)
 
 ## Architecture
 

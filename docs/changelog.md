@@ -8,6 +8,25 @@
 
 ## 未發布
 
+### 餘額盤點：「刪除」改成真的移除（schema v12）
+
+使用者問「餘額盤點為何不能將盤點紀錄完整刪除？」—— 因為「刪除」一直是照搬交易的 `void`：
+標成已刪除、紀錄留著、不可復原。交易那樣做的理由（「這筆有沒有計入過」要追溯得到）在盤點身上
+不成立：盤點不是錢的進出，也沒有任何東西指向它。留著的那些救不回來、不參與計算，
+**還擋住帳戶刪除**（引用檢查不看狀態，訊息又說「已經有交易紀錄」）。理由與替代方案見
+[ADR-0015](decisions/ADR-0015-delete-balance-snapshots-for-real.md)。
+
+- 「刪除」是真的 `DELETE`；稽核表留一列 `balance_snapshot.delete`（只記帳戶與日期、不記金額）。
+  確認框念出是哪一天那次盤點、講「刪掉之後就找不回來」與後面那次盤點會怎麼重算。
+- **`migrate_v12` 刪掉既有的已刪除盤點**（它們本來就是刪掉的，不參與任何差額 —— 畫面上的數字不會變）。
+  **升級前請先手動建立一份備份**：程式依規定不自動備份，而 migration 不能 un-delete。
+- 「列表狀態」下拉拿掉；匯出的 CSV 拿掉「狀態」欄；`BalanceSnapshotFilter.status` 與錯誤碼
+  `BALANCE_SNAPSHOT_STATUS_FILTER_INVALID` 退役。`status` 欄與 CHECK 留著（免重建表），查詢裡的
+  `status = 'active'` 也留著 —— 那是給 `(status, observed_at)` 索引用的。
+- **交易的刪除沒有變**，仍然是 `void`。`glossary.md` 的兩個「刪除」改成「交易」對「名冊與盤點」。
+- 測試：真的刪掉＋稽核不帶金額＋再刪一次是 NOT_FOUND；刪光盤點之後帳戶刪得掉（之前先確認刪不掉）；
+  v11 → v12 只清掉 voided。順手補上 `data-model.md` 少了的 v11 那一列。
+
 ### 內部：待確認的排序與筆數改在 SQL 做
 
 `controller.list_inbox()` 以前把清單撈回 Python 再 `sort()`（store 的 `ORDER BY` 是另一份規則），

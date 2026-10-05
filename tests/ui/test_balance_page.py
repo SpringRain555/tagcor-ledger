@@ -131,11 +131,9 @@ def test_a_failed_edit_stays_in_the_dialog(window, monkeypatch) -> None:
     assert int(page.model.items[0]["actual_balance_minor"]) == 1000, "取消之後什麼都不該變"
 
 
-def test_deleting_a_snapshot_keeps_the_record_under_the_deleted_filter(
-    window, monkeypatch
-) -> None:
-    """「刪除」是 `void`：那一列從「有效」消失、在「已刪除」看得到；選到它時
-    「編輯」「刪除」停用（以前是按了沒反應）。"""
+def test_deleting_a_snapshot_removes_it_for_real(window, monkeypatch) -> None:
+    """「刪除」**真的移除**那一筆（ADR-0015）：清單裡不見了，也沒有「已刪除」篩選可以
+    再看到它。確認框要講「找不回來」，而且要說出是哪一天那次盤點。"""
     page = window.balance
     page.amount.setText("1000")
     page.create_snapshot()
@@ -155,15 +153,12 @@ def test_deleting_a_snapshot_keeps_the_record_under_the_deleted_filter(
     page.delete_selected()
 
     assert "已刪除" in page.result.text(), page.result.text()
-    assert "保留" in asked[0], "確認框要講紀錄會保留"
-    assert page.model.rowCount() == 0, "「有效」篩選下那一列該消失"
-
-    page.status.setCurrentIndex(page.status.findData("voided"))
-    assert page.model.rowCount() == 1, "「已刪除」篩選下要看得到"
-    assert page.model.index(0, 6).data() == "已刪除"
-    page.table.selectRow(0)
-    assert not buttons["編輯"].isEnabled(), "已刪除的盤點不能再編輯，按鈕要停用"
-    assert not buttons["刪除"].isEnabled(), "已刪除的盤點不能再刪一次，按鈕要停用"
+    assert "找不回來" in asked[0], "確認框要講刪掉就找不回來"
+    assert QDate.currentDate().toString("yyyy/MM/dd") in asked[0], "確認框要說是哪一次盤點"
+    assert page.model.rowCount() == 0
+    assert page.controller.list_balance_snapshots(account_id=page._account_id()) == []
+    assert not hasattr(page, "status"), "「列表狀態」篩選拿掉了 —— 盤點不再有已刪除"
+    assert not buttons["編輯"].isEnabled(), "清單空了，對所選盤點的按鈕要停用"
 
 
 def _amount_in_summary(text: str) -> str:

@@ -12,7 +12,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 11
+LATEST_SCHEMA_VERSION = 12
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -511,6 +511,22 @@ def migrate_v11(connection: sqlite3.Connection) -> None:
     connection.execute("DELETE FROM settings WHERE key = 'balance_snapshot_reminder'")
 
 
+def migrate_v12(connection: sqlite3.Connection) -> None:
+    """刪掉標成 `voided` 的餘額盤點 —— 盤點的「刪除」從這一版起是真的移除。
+
+    **理由寫在 [ADR-0015](../../../docs/decisions/ADR-0015-delete-balance-snapshots-for-real.md)。**
+    一句話版本：盤點不是錢的進出，而 `voided` 不可復原 —— 留著的那些既救不回來，
+    又一直擋著帳戶刪除（`delete_account()` 的引用檢查不看狀態）。
+
+    **這些列本來就是使用者刪掉的。** 它們不參與任何差額計算，畫面上只在「已刪除」
+    篩選裡看得到，而那個篩選這一版也拿掉了 —— 所以這一步不改變畫面上的任何數字。
+
+    `status` 欄與它的 CHECK 留著：拿掉要重建整張表，換到的只是少一個永遠是 `active`
+    的欄位。查詢裡的 `status = 'active'` 也留著，那是給 `(status, observed_at)` 索引用的。
+    """
+    connection.execute("DELETE FROM balance_snapshots WHERE status = 'voided'")
+
+
 def _add_column_if_missing(
     connection: sqlite3.Connection, table: str, column: str, definition: str
 ) -> None:
@@ -533,6 +549,7 @@ MIGRATIONS: dict[int, Migration] = {
     9: migrate_v9,
     10: migrate_v10,
     11: migrate_v11,
+    12: migrate_v12,
 }
 
 

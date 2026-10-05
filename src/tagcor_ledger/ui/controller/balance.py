@@ -51,17 +51,17 @@ class BalanceSection(ControllerBase):
             ),
         )
 
-    def void_balance_snapshot(self, snapshot_id: str) -> Result:
-        return self.balance.void(snapshot_id)
+    def delete_balance_snapshot(self, snapshot_id: str) -> Result:
+        """真的刪掉（ADR-0015）。交易的「刪除」仍然是 `void_transaction`，兩者不是同一件事。"""
+        return self.balance.delete(snapshot_id)
 
     def list_balance_snapshots(
         self,
         *,
         account_id: str | None = None,
-        status: str = "active",
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        result = self.balance.list(account_id=account_id, status=status, limit=limit)
+        result = self.balance.list(account_id=account_id, limit=limit)
         return self._rows(result, "gaps") if result.success else []
 
     def latest_balance_gap(self, account_id: str) -> dict[str, Any] | None:
