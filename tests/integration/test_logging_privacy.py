@@ -116,6 +116,47 @@ def test_diagnostics_survives_a_missing_database(tmp_path: Path) -> None:
     assert "資料庫尚未建立" in report
 
 
+SECRET_FOLDER = "祕密資料夾"
+
+
+def test_diagnostics_report_names_no_private_folder(tmp_path: Path) -> None:
+    """**資料根目錄的名字本身就是要藏的東西** —— 公開的 repo 裡它一律寫成佔位符。
+
+    診斷檔標榜可以直接交給別人，所以路徑區、資料庫那一行、日誌尾段都不能寫出它，
+    家目錄（帶著使用者名稱）也一樣。日誌那邊故意寫兩種常見的變形（斜線、大寫），
+    證明遮的是路徑本身，不是某一種拼法。
+    """
+    paths = resolve_app_paths(tmp_path / SECRET_FOLDER / "ledger-data")
+    assert configure_logging(paths.log_dir) is not None
+    logger = get_logger("test")
+    logger.warning("cannot open %s", paths.database_path)
+    logger.warning("as posix %s", paths.database_path.as_posix().upper())
+    logger.warning("home %s", Path.home() / "AppData")
+
+    report = DiagnosticsService(paths).build_report()
+    logging.shutdown()
+
+    assert SECRET_FOLDER not in report, "資料根目錄的名字出現在診斷檔裡了"
+    assert str(Path.home()) not in report, "家目錄（使用者名稱）出現在診斷檔裡了"
+    # 陽性對照：路徑資訊還在，只是換成佔位符；三行日誌都換到了。
+    assert "cannot open <資料根目錄>" in report
+    assert "as posix <資料根目錄>/" in report
+    assert "home %USERPROFILE%" in report
+
+
+def test_redaction_leaves_sibling_folders_alone(tmp_path: Path) -> None:
+    """`...\\data` 不能把兄弟資料夾 `...\\data2` 換掉一半 —— 那會讓路徑變成一句謊話。"""
+    paths = resolve_app_paths(tmp_path / "ledger-data")
+    assert configure_logging(paths.log_dir) is not None
+    get_logger("test").warning("sibling %s", tmp_path / "ledger-data2" / "x")
+
+    report = DiagnosticsService(paths).build_report()
+    logging.shutdown()
+
+    assert "<資料根目錄>2" not in report
+    assert "ledger-data2" in report
+
+
 def test_crash_traceback_is_logged_without_amounts(tmp_path: Path) -> None:
     """traceback 是最容易夾帶內容的地方 —— 例外訊息本身可能含金額。
 
