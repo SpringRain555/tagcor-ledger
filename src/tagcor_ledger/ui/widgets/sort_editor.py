@@ -51,14 +51,18 @@ class SortEditor(QWidget):
 
     changed = Signal()
 
-    def __init__(self, fields: Sequence[tuple[str, str]]) -> None:
+    def __init__(self, fields: Sequence[tuple[str, str]], *, title: str = "排序方式") -> None:
         """`fields` 是 `(顯示文字, 欄位 key)`，順序就是下拉裡的順序。
 
         key 必須是那個 store 的白名單裡有的值 —— 這裡不檢查，
         因為認不出來的欄位在組 SQL 時本來就會被跳過（見 `base.order_by()`）。
+
+        `title` 是面板上方那一行。一個視窗裡有兩組時（「類別與項目」：類別表一組、
+        項目表一組），它要說出是**哪一張表**的排序方式。
         """
         super().__init__()
         self._fields = list(fields)
+        self._title = title
         self.field_boxes: list[QComboBox] = []
         self.direction_boxes: list[QComboBox] = []
         self._build()
@@ -66,7 +70,7 @@ class SortEditor(QWidget):
     def _build(self) -> None:
         grid = QGridLayout(self)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.addWidget(QLabel("排序方式"), 0, 0, 1, 3)
+        grid.addWidget(QLabel(self._title), 0, 0, 1, 3)
         for row in range(LEVELS):
             field_box = combo_box()
             if row > 0:

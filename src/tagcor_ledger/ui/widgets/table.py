@@ -13,10 +13,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable, Sequence
+from typing import Any
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QEvent,
+    QModelIndex,
+    QObject,
+    QPersistentModelIndex,
+    Qt,
+)
+from PySide6.QtGui import QColor, QMouseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
@@ -283,23 +291,89 @@ def bind_selection(
     「一個已經不存在的 widget 選了幾列」本來就沒有意義，所以直接跳過 ——
     這不是把錯誤吞掉，是那個問題在那個時間點不成立。
     """
+    bind_any_selection((table,), *buttons, enabled_when=enabled_when)
+
+
+def bind_any_selection(
+    views: Sequence[QAbstractItemView],
+    *buttons: QPushButton,
+    enabled_when: Callable[[dict[str, Any]], bool] | None = None,
+) -> None:
+    """`bind_selection` 的同一條規則，但選取可能在**好幾張表的任何一張**上。
+
+    「類別與項目」那一頁兩張表共用一排按鈕（重新命名、封存／恢復、刪除未使用），而兩張表
+    一次只會有一張有選取（`category_items.py` 讓它們互斥）—— 所以「選到的那一列」仍然
+    只有一列，`enabled_when` 看的就是它。
+    """
 
     def sync() -> None:
-        if not isValid(table):
+        if not all(isValid(view) for view in views):
             return
-        rows = table.selectionModel().selectedRows()
-        enabled = bool(rows)
-        if enabled and enabled_when is not None:
-            item = table.model().data(rows[0], Qt.ItemDataRole.UserRole)
-            enabled = isinstance(item, dict) and enabled_when(item)
+        enabled = False
+        for view in views:
+            rows = view.selectionModel().selectedRows()
+            if not rows:
+                continue
+            enabled = True
+            if enabled_when is not None:
+                item = view.model().data(rows[0], Qt.ItemDataRole.UserRole)
+                enabled = isinstance(item, dict) and enabled_when(item)
+            break
         for button in buttons:
             button.setEnabled(enabled)
 
-    table.selectionModel().selectionChanged.connect(lambda *_: sync())
-    model = table.model()
-    if model is not None:
-        model.modelReset.connect(sync)
+    for view in views:
+        view.selectionModel().selectionChanged.connect(lambda *_: sync())
+        model = view.model()
+        if model is not None:
+            model.modelReset.connect(sync)
     sync()
+
+
+class _ClickToDeselect(QObject):
+    """`allow_click_to_deselect` 的 event filter。parent 是那張表，跟著它一起消失。"""
+
+    def __init__(self, view: QAbstractItemView) -> None:
+        super().__init__(view)
+        self._view = view
+        self._swallowing = False
+        view.viewport().installEventFilter(self)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        kind = event.type()
+        if kind == QEvent.Type.MouseButtonPress and isinstance(event, QMouseEvent):
+            if (
+                event.button() != Qt.MouseButton.LeftButton
+                or event.modifiers() != Qt.KeyboardModifier.NoModifier
+            ):
+                return False
+            index = self._view.indexAt(event.position().toPoint())
+            if index.isValid() and self._view.selectionModel().isSelected(index):
+                self._view.clearSelection()
+                self._swallowing = True
+                return True
+            return False
+        if self._swallowing and kind in (
+            QEvent.Type.MouseMove,
+            QEvent.Type.MouseButtonRelease,
+        ):
+            if kind == QEvent.Type.MouseButtonRelease:
+                self._swallowing = False
+            return True
+        return False
+
+
+def allow_click_to_deselect(view: QAbstractItemView) -> None:
+    """**再點一次已選的那一列就取消選取**（左鍵、沒按修飾鍵）。
+
+    Qt 的單選模式只有 Ctrl＋點才取消；直接點已選的列什麼都不會變 —— 使用者回報
+    「點選之後再點一次，會一直選著」（2026-10-09）。
+
+    **整個手勢都要吞掉**（按下、拖動、放開）：只吞按下的話，按住時滑鼠稍微一動，Qt 的
+    拖曳選取就把那一列選回去。只用在「類別與項目」那一頁 —— 別的表有主從連動（定存的
+    合約與期），取消選取會把底下那張表清空，不是順手就該擴大的行為。
+    """
+    _ClickToDeselect(view)
 
 
 def set_button_role(button: QPushButton, role: str) -> QPushButton:

@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
@@ -543,5 +544,161 @@ def test_the_delete_confirmation_names_what_will_be_deleted(window, monkeypatch)
 
     assert "類別「伙食」" in asked[0], asked[0]
     assert "設定項" not in asked[0]
-    texts = [button.text() for button in page.findChildren(QPushButton)]
+    tab = window.operation_settings.category_items
+    texts = [button.text() for button in tab.findChildren(QPushButton)]
     assert "封存／恢復" in texts and "封存／恢復所選項目" not in texts
+
+
+# --- 類別與項目：一排共用按鈕、一次只選一列、再點一次取消 -----------------------------
+
+
+def _transport_with(controller: Any, *items: str) -> str:
+    created = controller.create_category("交通")
+    assert created.success
+    transport_id = str(created.details["category_id"])
+    for name in items:
+        assert controller.create_category(name, transport_id).success
+    return transport_id
+
+
+def _row_of(page: Any, category_id: str) -> int:
+    return [str(item["category_id"]) for item in _rows(page)].index(category_id)
+
+
+def _show_tab(window: Any) -> Any:
+    """切到「類別與項目」並讓版面算完 —— 量座標與滑鼠點擊都需要（offscreen 上沒顯示的是 0）。"""
+    window.show_page(PageId.OPERATION_SETTINGS)
+    page = window.operation_settings
+    page.show_tab(page.category_items)
+    QApplication.processEvents()
+    return page.category_items
+
+
+def _click_row(table: Any, row: int, *, nudge: int = 0) -> None:
+    """用滑鼠點那一列。`nudge` 讓連續兩下落在不同點 —— 同一點連點兩下會被當成雙擊。"""
+    center = table.visualRect(table.model().index(row, 0)).center()
+    QTest.mouseClick(
+        table.viewport(),
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        center + QPoint(nudge, 0),
+    )
+
+
+def test_the_shared_buttons_exist_once_above_both_tables(window) -> None:
+    """同名的四顆只有一份，在兩張表上方；只有一邊有的留在自己的表上方。"""
+    tab = _show_tab(window)
+    texts = [button.text() for button in tab.findChildren(QPushButton)]
+    for label in ("重新命名", "封存／恢復", "刪除未使用", "排序設定"):
+        assert texts.count(label) == 1, (label, texts)
+    for label in ("新增類別", "新增項目", "更改所屬類別"):
+        assert texts.count(label) == 1, (label, texts)
+
+    shared_bottom = tab.rename_button.mapTo(tab, QPoint(0, tab.rename_button.height())).y()
+    left_top = tab.categories.table.mapTo(tab, QPoint(0, 0))
+    right_top = tab.items.table.mapTo(tab, QPoint(0, 0))
+    assert shared_bottom <= left_top.y() and shared_bottom <= right_top.y(), "共用那一排要在兩張表上方"
+    add_item = next(b for b in tab.items.findChildren(QPushButton) if b.text() == "新增項目")
+    assert add_item.mapTo(tab, QPoint(0, 0)).x() >= right_top.x() - 1, "「新增項目」要在右邊那張表上方"
+
+
+def test_one_rename_button_renames_whichever_side_is_selected(window, monkeypatch) -> None:
+    """「重新命名」只有一顆，動的是**目前選取的那一列** —— 選左邊改類別、選右邊改項目。"""
+    tab = window.operation_settings.category_items
+    tab.refresh()
+    names = iter(("伙食費", "便利商店"))
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.catalog.ask_form",
+        lambda *args, **kwargs: {"name": next(names)},
+    )
+
+    tab.categories.table.selectRow(_row_of(tab.categories, "cat_food"))
+    tab.rename_button.click()
+    tab.items.table.selectRow(_row_of(tab.items, "cat_food_711"))
+    tab.rename_button.click()
+
+    controller = window.controller
+    categories = {str(i["category_id"]): str(i["name"]) for i in controller.category_options()}
+    items = {
+        str(i["category_id"]): str(i["name"]) for i in controller.category_options("cat_food")
+    }
+    assert categories["cat_food"] == "伙食費"
+    assert items["cat_food_711"] == "便利商店"
+
+
+def test_only_one_row_is_selected_and_picking_an_item_keeps_the_filter(window) -> None:
+    """一次只選一列（共用按鈕才知道要動誰）；點右邊的項目，左邊的**選取**清掉、
+    右邊的**篩選**不動 —— 正在看的就是那個類別底下的項目。"""
+    transport_id = _transport_with(window.controller, "捷運")
+    tab = window.operation_settings.category_items
+    tab.refresh()
+
+    tab.categories.table.selectRow(_row_of(tab.categories, transport_id))
+    assert [str(item["name"]) for item in _rows(tab.items)] == ["捷運"]
+    tab.items.table.selectRow(0)
+
+    assert tab.categories.model.selected_item(tab.categories.table) is None, "左右同時有選取"
+    assert tab.selected_page() is tab.items
+    assert tab.items.parent_filter.currentData() == transport_id, "篩選跟著選取一起不見了"
+    assert [str(item["name"]) for item in _rows(tab.items)] == ["捷運"]
+
+    tab.categories.table.selectRow(_row_of(tab.categories, transport_id))
+    assert tab.items.model.selected_item(tab.items.table) is None, "反過來也要互斥"
+    assert tab.selected_page() is tab.categories
+
+
+def test_clicking_the_selected_row_again_deselects_it(window) -> None:
+    """再點一次已選的那一列 → 取消選取（Qt 的單選原本只有 Ctrl＋點才取消）。
+
+    取消的是左邊的類別時，右邊回到「全部」；取消的是右邊的項目時，篩選不動。
+    """
+    transport_id = _transport_with(window.controller, "捷運", "公車")
+    tab = _show_tab(window)
+    tab.refresh()
+    everything = len(_rows(tab.items))
+    row = _row_of(tab.categories, transport_id)
+
+    _click_row(tab.categories.table, row)
+    selected = tab.categories.model.selected_item(tab.categories.table)
+    assert selected is not None and str(selected["category_id"]) == transport_id, "第一下要選起來"
+    assert len(_rows(tab.items)) == 2
+
+    _click_row(tab.categories.table, row, nudge=24)
+    assert tab.categories.model.selected_item(tab.categories.table) is None, "再點一次要取消"
+    assert tab.items.parent_filter.currentData() is None, "取消左邊的類別，右邊要回到「全部」"
+    assert len(_rows(tab.items)) == everything > 2
+    assert not tab.rename_button.isEnabled()
+
+    _click_row(tab.categories.table, row)
+    _click_row(tab.items.table, 0)
+    assert tab.items.model.selected_item(tab.items.table) is not None
+    _click_row(tab.items.table, 0, nudge=24)
+    assert tab.items.model.selected_item(tab.items.table) is None, "右邊再點一次也要取消"
+    assert tab.items.parent_filter.currentData() == transport_id, "取消右邊的項目不該動篩選"
+
+
+def test_the_shared_buttons_follow_the_selection(window) -> None:
+    """沒選取三顆停用、封存的那一列不能改名、選類別時「更改所屬類別」停用。"""
+    controller = window.controller
+    retired = controller.create_category("停用的類別")
+    assert retired.success
+    retired_id = str(retired.details["category_id"])
+    assert controller.archive_category(retired_id).success
+    tab = window.operation_settings.category_items
+    tab.refresh()
+    move = next(b for b in tab.items.findChildren(QPushButton) if b.text() == "更改所屬類別")
+    shared = (tab.rename_button, tab.toggle_button, tab.delete_button)
+
+    assert not any(button.isEnabled() for button in shared), "沒選取就該停用"
+    assert tab.order_button.isEnabled(), "排序設定不需要選取"
+
+    tab.categories.table.selectRow(_row_of(tab.categories, retired_id))
+    assert not tab.rename_button.isEnabled(), "封存的那一列按「重新命名」什麼都不會發生"
+    assert tab.toggle_button.isEnabled() and tab.delete_button.isEnabled()
+
+    tab.categories.table.selectRow(_row_of(tab.categories, "cat_food"))
+    assert tab.rename_button.isEnabled()
+    assert not move.isEnabled(), "選的是類別，「更改所屬類別」不該能按"
+
+    tab.items.table.selectRow(_row_of(tab.items, "cat_food_711"))
+    assert tab.rename_button.isEnabled() and move.isEnabled()

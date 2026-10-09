@@ -16,6 +16,12 @@
 
 只在完全沒有歷史資料引用時成功；有引用就只能封存。刪掉被引用的設定項會讓舊交易
 失去名稱。
+
+## 類別與項目沒有自己的那一排按鈕（2026-10-09）
+
+這兩頁並排在「類別與項目」分頁裡（`shared_actions=True`）：「重新命名、封存／恢復、
+刪除未使用、排序設定」由那一層的一排共用按鈕負責，這裡只留「新增」與項目獨有的
+「更改所屬類別」。理由見 `category_items.py`。帳戶頁不變。
 """
 
 from __future__ import annotations
@@ -45,7 +51,7 @@ from tagcor_ledger.ui.formatting import (
 )
 from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.filters import CatalogFilterBar
-from tagcor_ledger.ui.widgets.reorder_dialog import ReorderDialog, ReorderEntry, ask_order
+from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.simple_form import ChoiceField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
     SETTINGS_TABLE_ROWS,
@@ -54,6 +60,45 @@ from tagcor_ledger.ui.widgets.table import (
     set_button_role,
     setup_table,
 )
+
+
+def is_active(item: dict[str, Any]) -> bool:
+    """「重新命名」「更改所屬類別」只對使用中的那一列啟用。
+
+    封存的那一列以前按下去什麼都不發生（handler 靜默 `return`）—— 跟沒選取時一模一樣的
+    「按了沒反應」，那正是 `bind_selection` 存在的理由。
+    """
+    return str(item["status"]) == "active"
+
+
+def selection_action_buttons() -> tuple[QPushButton, QPushButton, QPushButton]:
+    """對所選那一列動作的三顆：重新命名、封存／恢復、刪除未使用。
+
+    名冊頁各自一排；「類別與項目」左右兩張表**共用一排**（`category_items.py`）。
+    兩邊都從這裡拿，按鈕上的字與角色才只有一個地方說了算。
+    """
+    rename = QPushButton("重新命名")
+    # **不寫「所選項目」。** 「項目」在這個專案是第二層的專有名詞（用詞表），
+    # 「類別」那一邊寫「封存／恢復所選項目」等於說錯對象。
+    toggle = QPushButton("封存／恢復")
+    delete_button = QPushButton("刪除未使用")
+    set_button_role(delete_button, "danger")
+    return rename, toggle, delete_button
+
+
+def order_button() -> QPushButton:
+    """「排序設定」。
+
+    **排序是獨立視窗，不是表格上的兩顆按鈕。** 以前把「上移／下移」放在表格上，代價是
+    依欄位排序時必須停用它們 —— 畫面上那一列的鄰居不是儲存順序裡的鄰居。搬進視窗之後
+    衝突就不存在了：那個視窗永遠顯示自訂順序。
+    """
+    button = QPushButton("排序設定")
+    button.setToolTip(
+        "開一個視窗，用拖曳排出自己想要的順序。\n"
+        "這份順序也會用在記帳頁的下拉選單 —— 常用的排前面。"
+    )
+    return button
 
 
 class CatalogPage(QWidget):
@@ -99,13 +144,14 @@ class CatalogPage(QWidget):
     REORDERABLE = False
     """這一頁要不要「排序設定」按鈕。開了就要實作 `edit_order()`。"""
 
-    def __init__(self, controller: LedgerController, *, button_rows: int = 1) -> None:
-        """`button_rows=2` 把按鈕分成兩排：上排「新增、重新命名（與額外動作）」，
-        下排「封存／恢復、刪除、排序」。「類別與項目」那一頁兩個窗格並排時用 ——
-        一排放不下（見 `category_items.py`）。"""
+    def __init__(self, controller: LedgerController, *, shared_actions: bool = False) -> None:
+        """`shared_actions=True`：「重新命名、封存／恢復、刪除未使用、排序設定」**不在這一頁建**，
+        由外面那一層的共用按鈕列呼叫這一頁的 `rename_selected()` 等方法；這一頁只留「新增」與
+        它獨有的動作（更改所屬類別）。「類別與項目」兩張表並排時用 —— 同名的按鈕兩邊各一份，
+        使用者得先想「我選的是哪一邊」才知道該按哪一顆（見 `category_items.py`）。"""
         super().__init__()
         self.controller = controller
-        self.button_rows = button_rows
+        self.shared_actions = shared_actions
         # **排序規格從設定讀回來**，不是每次開程式都從預設開始。使用者排好了就該
         # 一直是那樣，否則「記得住」這件事等於沒做。沒存過就用這一頁的預設。
         saved = controller.sort_spec(self.SORT_PAGE) if self.SORT_PAGE else ()
@@ -166,39 +212,13 @@ class CatalogPage(QWidget):
 
     def _build(self) -> None:
         add_button = QPushButton(self.ADD_LABEL)
-        rename = QPushButton("重新命名")
+        set_button_role(add_button, "primary")
+        add_button.clicked.connect(self.add_item)
         extra_buttons: list[QPushButton] = []
         for label, handler in self._extra_selection_actions():
             button = QPushButton(label)
             button.clicked.connect(handler)
             extra_buttons.append(button)
-        # **不寫「所選項目」。** 「項目」在這個專案是第二層的專有名詞（用詞表），
-        # 「類別」分頁的按鈕寫「封存／恢復所選項目」等於說錯對象 —— 兩個分頁並排之後更明顯。
-        toggle = QPushButton("封存／恢復")
-        delete_button = QPushButton("刪除未使用")
-        set_button_role(add_button, "primary")
-        set_button_role(delete_button, "danger")
-
-        row = QHBoxLayout()
-        second_row = QHBoxLayout() if self.button_rows > 1 else row
-        for button in (add_button, rename, *extra_buttons):
-            row.addWidget(button)
-        for button in (toggle, delete_button):
-            second_row.addWidget(button)
-        if self.REORDERABLE:
-            # **排序是獨立視窗，不是表格上的兩顆按鈕。** 上一版把「上移／下移」放在
-            # 這裡，代價是依欄位排序時必須停用它們 —— 畫面上那一列的鄰居不是儲存
-            # 順序裡的鄰居。搬進視窗之後衝突就不存在了：那個視窗永遠顯示自訂順序。
-            self.order_button = QPushButton("排序設定")
-            self.order_button.setToolTip(
-                "開一個視窗，用拖曳排出自己想要的順序。\n"
-                "這份順序也會用在記帳頁的下拉選單 —— 常用的排前面。"
-            )
-            self.order_button.clicked.connect(self.edit_order)
-            second_row.addWidget(self.order_button)
-        row.addStretch()
-        if second_row is not row:
-            second_row.addStretch()
 
         setup_table(
             self.table,
@@ -207,12 +227,31 @@ class CatalogPage(QWidget):
             fit_content=True,
             fit_rows=SETTINGS_TABLE_ROWS,
         )
-        # 「新增」與「排序設定」不需要選取，其餘都是對所選項目動作 —— 沒選就停用。
-        bind_selection(self.table, rename, *extra_buttons, toggle, delete_button)
+        row = QHBoxLayout()
+        row.addWidget(add_button)
+        if self.shared_actions:
+            for button in extra_buttons:
+                row.addWidget(button)
+            # 額外動作（更改所屬類別）只對使用中的那一列有意義，跟「重新命名」同一條。
+            bind_selection(self.table, *extra_buttons, enabled_when=is_active)
+        else:
+            rename, toggle, delete_button = selection_action_buttons()
+            for button in (rename, *extra_buttons, toggle, delete_button):
+                row.addWidget(button)
+            if self.REORDERABLE:
+                self.order_button = order_button()
+                self.order_button.clicked.connect(self.edit_order)
+                row.addWidget(self.order_button)
+            # 「新增」與「排序設定」不需要選取，其餘都是對所選項目動作 —— 沒選就停用。
+            bind_selection(self.table, rename, *extra_buttons, enabled_when=is_active)
+            bind_selection(self.table, toggle, delete_button)
+            rename.clicked.connect(self.rename_selected)
+            toggle.clicked.connect(self.toggle_selected)
+            delete_button.clicked.connect(self.delete_selected)
+        row.addStretch()
+
         layout = QVBoxLayout(self)
         layout.addLayout(row)
-        if second_row is not row:
-            layout.addLayout(second_row)
         # **篩選列自己一行**，不擠在按鈕列右邊 —— 四顆按鈕加一條搜尋框會把分頁的
         # 最小寬度撐大，而這一頁的表格本來就只有三欄。
         self.filter_bar = self._make_filter_bar()
@@ -222,11 +261,6 @@ class CatalogPage(QWidget):
         # 表格現在是固定高度（`fit_rows`），沒有這一行的話 QVBoxLayout 會把多餘的
         # 高度平均塞進每個 widget 之間 —— 按鈕與表格會浮在分頁中間。
         layout.addStretch()
-
-        add_button.clicked.connect(self.add_item)
-        rename.clicked.connect(self.rename_selected)
-        toggle.clicked.connect(self.toggle_selected)
-        delete_button.clicked.connect(self.delete_selected)
 
     def refresh(self) -> None:
         self.model.replace_rows(self._rows())
@@ -244,13 +278,14 @@ class CatalogPage(QWidget):
         """
         raise NotImplementedError
 
-    def _apply_sort(self, dialog: ReorderDialog) -> Result:
-        """把視窗裡的排序規格存起來並套用。
+    def save_sort(self, spec: tuple[SortLevel, ...]) -> Result:
+        """把排序視窗裡的規格存起來並套用（下次 `refresh()` 生效）。
 
         **規格先存、再套。** 反過來的話，存檔失敗時畫面已經照新規格重畫了 ——
         使用者會以為成功，下次開程式才發現變回去。
+
+        公開是因為「類別與項目」的排序視窗一次存兩頁的規格（`category_items.py`）。
         """
-        spec = dialog.sort_spec()
         result = self.controller.save_sort_spec(self.SORT_PAGE, spec)
         if result.success:
             self.sort = spec
@@ -344,7 +379,7 @@ class AccountsPage(CatalogPage):
         )
         if dialog is None:
             return
-        result = self._apply_sort(dialog)
+        result = self.save_sort(dialog.sort_spec())
         if result.success:
             result = self.controller.set_account_order(dialog.parent_order())
         self._finish(result)
@@ -384,12 +419,15 @@ class AccountsPage(CatalogPage):
 
 
 class CategoryPageBase(CatalogPage):
-    """類別與項目共用的四個動作 —— 它們是同一張表的兩層。"""
+    """類別與項目共用的四個動作 —— 它們是同一張表的兩層。
+
+    **這兩頁沒有自己的「排序設定」。** 它們並排在「類別與項目」分頁裡，排序是那一層的
+    一個視窗，兩張表的排序方式與兩層的自訂順序一起設（`category_items.py`）。
+    """
 
     ID_FIELD = "category_id"
     LEVEL = 1
     WITH_PARENT_FILTER = False
-    REORDERABLE = True
 
     def _make_filter_bar(self) -> CatalogFilterBar | None:
         return CatalogFilterBar(with_parent=self.WITH_PARENT_FILTER)
@@ -423,21 +461,6 @@ class CategoryPageBase(CatalogPage):
     def _delete(self, identifier: str) -> Result:
         return self.controller.delete_category(identifier)
 
-    def _all_categories(self) -> list[dict[str, Any]]:
-        """整棵樹，**不套這一頁的篩選** —— 排序視窗排的是儲存順序，那是整組的。"""
-        return self.controller.category_tree(
-            tree_filter=CategoryTreeFilter(status="all")
-        )
-
-    @staticmethod
-    def _entry(row: dict[str, Any], children: tuple[ReorderEntry, ...] = ()) -> ReorderEntry:
-        return ReorderEntry(
-            identifier=str(row["category_id"]),
-            name=str(row["name"]),
-            archived=row["status"] != "active",
-            children=children,
-        )
-
 
 class CategoriesPage(CategoryPageBase):
     """類別（第一層）。**每一個類別都有自己的一列，不管它有沒有子項目。**"""
@@ -467,26 +490,6 @@ class CategoriesPage(CategoryPageBase):
         if values is None:
             return None
         return self.controller.create_category(str(values["name"]))
-
-    def edit_order(self) -> None:
-        """第一層全部是一組（`parent_id` 都是 `None`），所以只有一份拖曳清單。"""
-        rows = [row for row in self._all_categories() if int(row["level"]) == 1]
-        dialog = ask_order(
-            self,
-            "類別排序",
-            [self._entry(row) for row in rows],
-            caption="自訂順序（拖曳）",
-            sort_fields=self.SORT_FIELDS,
-            sort_spec=self.sort,
-        )
-        if dialog is None:
-            return
-        result = self._apply_sort(dialog)
-        if result.success:
-            result = self.controller.set_category_order(
-                dialog.parent_order(), parent_id=None, level=1
-            )
-        self._finish(result)
 
 
 class ItemsPage(CategoryPageBase):
@@ -616,49 +619,3 @@ class ItemsPage(CategoryPageBase):
         return self.controller.create_category(
             str(values["name"]), str(values["parent_id"])
         )
-
-    def edit_order(self) -> None:
-        """兩層：左邊排類別，右邊排**所選類別底下**的項目。
-
-        項目的順序是「每個類別各自一組」（`sort_order` 只在同一組之內有意義），
-        一份平的清單表達不了它 —— 所以這個視窗一定是兩欄。
-
-        **左邊那份類別順序也會一起存。** 它就是決定「哪一組排在前面」的東西，
-        跟「這一組裡面誰在前面」是同一件事的兩層。
-        """
-        rows = self._all_categories()
-        children: dict[str, list[dict[str, Any]]] = {}
-        for row in rows:
-            if int(row["level"]) == 2:
-                children.setdefault(str(row["parent_id"]), []).append(row)
-        entries = [
-            self._entry(
-                row,
-                tuple(self._entry(child) for child in children.get(str(row["category_id"]), [])),
-            )
-            for row in rows
-            if int(row["level"]) == 1
-        ]
-        dialog = ask_order(
-            self,
-            "項目排序",
-            entries,
-            caption="類別順序",
-            child_caption="底下的項目",
-            sort_fields=self.SORT_FIELDS,
-            sort_spec=self.sort,
-        )
-        if dialog is None:
-            return
-        result = self._apply_sort(dialog)
-        if result.success:
-            result = self.controller.set_category_order(
-                dialog.parent_order(), parent_id=None, level=1
-            )
-        for parent_id, ordered in dialog.child_orders().items():
-            if not result.success:
-                break
-            result = self.controller.set_category_order(
-                ordered, parent_id=parent_id, level=2
-            )
-        self._finish(result)

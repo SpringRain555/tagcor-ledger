@@ -1,4 +1,4 @@
-"""自訂順序的排序視窗：帳戶、類別、項目、模板四頁。
+"""自訂順序的排序視窗：帳戶、類別與項目（同一個視窗）、模板。
 
 預設帳本只有一個類別（「伙食」）與一個帳戶（「現金」），所以每一條都自己造資料。
 每一條都有一個「對話框真的開過」的斷言 —— 少了它，`exec` 被換掉之後測試會在
@@ -45,6 +45,12 @@ def _open(monkeypatch: Any, page: Any, act: Callable[[Any], bool]) -> list[int]:
     return opened
 
 
+def _tab(window: MainWindow) -> Any:
+    """類別與項目的排序是「類別與項目」分頁的**一個**視窗（2026-10-09 起）：兩張表各自的
+    排序方式 ＋ 兩層的自訂順序。以前兩個窗格各有一個「排序設定」。"""
+    return window.operation_settings.category_items
+
+
 def _move_last_to_top(order_list: Any) -> None:
     order_list.list.setCurrentRow(order_list.list.count() - 1)
     for _ in range(order_list.list.count() - 1):
@@ -69,7 +75,7 @@ def test_the_dialog_opens_showing_the_order_that_is_on_screen(
     assert len(before) >= 4, f"造資料失敗：{before}"
     seen: list[list[str]] = []
 
-    opened = _open(monkeypatch, page, lambda d: (seen.append(_texts(d.parents)), False)[1])
+    opened = _open(monkeypatch, _tab(window), lambda d: (seen.append(_texts(d.parents)), False)[1])
 
     assert opened, "對話框沒開"
     assert seen[0] == before, f"視窗顯示的不是目前順序：{seen[0]} vs {before}"
@@ -91,7 +97,7 @@ def test_moving_the_last_category_to_the_top_changes_the_page(
         _move_last_to_top(dialog.parents)
         return True
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
     after = _rows(page)
     assert after[0] == before[-1], f"{before} -> {after}"
@@ -111,7 +117,7 @@ def test_cancelling_changes_nothing(window, qtbot: Any, tmp_path: Path, monkeypa
         assert _texts(dialog.parents) != before, "對話框裡根本沒動到，這條沒在測取消"
         return False
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
     assert _rows(page) == before
 
 
@@ -137,7 +143,7 @@ def test_archived_entries_are_listed_and_marked(
     page.refresh()
     seen: list[list[str]] = []
 
-    opened = _open(monkeypatch, page, lambda d: (seen.append(_texts(d.parents)), False)[1])
+    opened = _open(monkeypatch, _tab(window), lambda d: (seen.append(_texts(d.parents)), False)[1])
 
     assert opened, "對話框沒開"
     assert "交通（已封存）" in seen[0], f"封存的沒出現或沒標註：{seen[0]}"
@@ -163,7 +169,7 @@ def test_the_first_row_cannot_move_up_and_the_last_cannot_move_down(
         assert not dialog.parents.down.isEnabled(), "最後一列還能往下移"
         return False
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
 
 def test_the_lists_are_tall_enough_that_nothing_is_cut_off(
@@ -205,7 +211,7 @@ def test_the_lists_are_tall_enough_that_nothing_is_cut_off(
         dialog.hide()
         return False
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
 
 # --- 項目（兩欄）---------------------------------------------------------------
@@ -244,7 +250,7 @@ def test_the_items_dialog_has_two_panes_and_orders_within_one_category(
         _move_last_to_top(dialog.child_list)
         return True
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
     rows = [
         (page.model.index(row, 0).data(), page.model.index(row, 1).data())
@@ -278,7 +284,7 @@ def test_switching_categories_keeps_what_you_already_moved(
         assert _texts(dialog.child_list) == moved, "切走再切回來，剛才的順序沒了"
         return False
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
 
 def test_the_items_dialog_also_orders_the_categories(
@@ -299,7 +305,7 @@ def test_the_items_dialog_also_orders_the_categories(
         _move_last_to_top(dialog.parents)
         return True
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
     categories.refresh()
     assert _rows(categories)[0] == before[-1], "左欄的類別順序沒有存下來"
@@ -321,7 +327,7 @@ def test_the_custom_order_shows_up_in_the_entry_page_dropdown(
     page.refresh()
     before = _rows(page)
 
-    assert _open(monkeypatch, page, lambda d: (_move_last_to_top(d.parents), True)[1])
+    assert _open(monkeypatch, _tab(window), lambda d: (_move_last_to_top(d.parents), True)[1])
 
     window.entry.reload_options()
     dropdown = [
@@ -408,14 +414,19 @@ def test_the_dialog_shows_the_sort_spec_that_is_in_effect(
     _with_transport_items(window, ("捷運", "公車"))
     page = window.operation_settings.items
     page.refresh()
-    seen: list[tuple[str, ...]] = []
+    seen: list[tuple[tuple[str, ...], ...]] = []
 
     def act(dialog: Any) -> bool:
-        seen.append(tuple(level.field for level in dialog.sort_spec()))
+        seen.append(
+            tuple(tuple(level.field for level in spec) for spec in dialog.sort_specs())
+        )
         return False
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
-    assert seen[0] == ("parent_custom", "custom"), seen[0]
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
+    # 一個視窗兩組：左邊類別表、右邊項目表，各自是自己生效中的那一份。
+    categories, items = seen[0]
+    assert categories == ("custom",), categories
+    assert items == ("parent_custom", "custom"), items
 
 
 def test_choosing_a_field_reorders_the_table(
@@ -429,7 +440,7 @@ def test_choosing_a_field_reorders_the_table(
     page = window.operation_settings.categories
     page.refresh()
 
-    assert _open(monkeypatch, page, lambda d: (_set_level(d, 0, "name", True), True)[1])
+    assert _open(monkeypatch, _tab(window), lambda d: (_set_level(d, 0, "name", True), True)[1])
 
     names = _rows(page)
     assert names == list(reversed(sorted(names))), f"依名稱降冪沒生效：{names}"
@@ -452,7 +463,7 @@ def test_the_second_level_breaks_ties_from_the_first(
         _set_level(dialog, 1, "name", descending=True)
         return True
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
     names = _rows(page)
     assert names == list(reversed(sorted(names))), f"第二層沒有作用：{names}"
@@ -469,7 +480,7 @@ def test_the_sort_spec_survives_a_restart(
         assert window.controller.create_category(name).success
     page = window.operation_settings.categories
     page.refresh()
-    assert _open(monkeypatch, page, lambda d: (_set_level(d, 0, "name", True), True)[1])
+    assert _open(monkeypatch, _tab(window), lambda d: (_set_level(d, 0, "name", True), True)[1])
     expected = _rows(page)
 
     # 這裡不能用 `window` fixture —— 整條測試的重點就是**第二個**視窗，
@@ -495,7 +506,7 @@ def test_cancelling_does_not_save_the_sort_spec(
     page.refresh()
     before = _rows(page)
 
-    assert _open(monkeypatch, page, lambda d: (_set_level(d, 0, "name", True), False)[1])
+    assert _open(monkeypatch, _tab(window), lambda d: (_set_level(d, 0, "name", True), False)[1])
 
     assert _rows(page) == before
     assert window.controller.sort_spec("categories") == (), "取消卻存下去了"
@@ -524,10 +535,13 @@ def test_the_dialog_warns_when_the_spec_ignores_the_custom_order(
         texts.append((with_custom, without_custom))
         return False
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
     with_custom, without_custom = texts[0]
-    assert "不會顯示在清單上" not in with_custom, with_custom
-    assert "不會顯示在清單上" in without_custom, without_custom
+    assert "沒有用到「自訂順序」" not in with_custom, with_custom
+    # 兩組排序方式在同一個視窗裡，要說出是**哪一張表**看不到拖曳的結果。
+    assert "沒有用到「自訂順序」" in without_custom, without_custom
+    assert "「類別」的排序方式" in without_custom, without_custom
+    assert "「項目」的排序方式" not in without_custom, "項目表還在用自訂順序，不該被點名"
 
 
 def test_the_direction_box_is_disabled_for_unused_levels(
@@ -547,7 +561,7 @@ def test_the_direction_box_is_disabled_for_unused_levels(
         assert editor.direction_boxes[2].isEnabled(), "選了欄位之後升降還是停用"
         return False
 
-    assert _open(monkeypatch, page, act), "對話框沒開"
+    assert _open(monkeypatch, _tab(window), act), "對話框沒開"
 
 
 def test_templates_and_accounts_remember_their_sort_too(

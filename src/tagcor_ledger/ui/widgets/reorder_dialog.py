@@ -77,6 +77,20 @@ class ReorderEntry:
     children: tuple["ReorderEntry", ...] = field(default_factory=tuple)
 
 
+@dataclass(frozen=True, slots=True)
+class SortSection:
+    """排序視窗裡的一組「排序方式」：標題、可以選的欄位、目前的規格。
+
+    多數視窗只有一組（帳戶、模板）。「類別與項目」有兩組 —— 類別表與項目表各自記得
+    自己的排序方式（`SORT_SPEC_PAGES` 裡的兩個 key），而兩張表在同一個分頁、共用一顆
+    「排序設定」（2026-10-09 起）。
+    """
+
+    title: str
+    fields: tuple[tuple[str, str], ...]
+    spec: tuple[SortLevel, ...] = ()
+
+
 def entry_label(entry: ReorderEntry) -> str:
     return f"{entry.name}（已封存）" if entry.archived else entry.name
 
@@ -169,7 +183,9 @@ class ReorderDialog(QDialog):
         child_caption: str = "",
         sort_fields: Sequence[tuple[str, str]] = (),
         sort_spec: Sequence[SortLevel] = (),
+        sort_sections: Sequence[SortSection] = (),
     ) -> None:
+        """`sort_fields`／`sort_spec` 是只有一組排序方式時的簡寫；兩組以上用 `sort_sections`。"""
         super().__init__(parent)
         self.setWindowTitle(title)
         self._entries = entries
@@ -188,16 +204,30 @@ class ReorderDialog(QDialog):
         # **排序方式與自訂順序並排在同一個視窗裡。** 它們是同一件事的兩半：
         # 左邊決定「照什麼排」，右邊決定「自訂那一層長什麼樣」。分成兩個入口的話，
         # 使用者得先猜哪一個才是他要的。
-        self.sort_editor = SortEditor(sort_fields) if sort_fields else None
+        sections = tuple(sort_sections)
+        if sort_fields:
+            sections = (SortSection("排序方式", tuple(sort_fields), tuple(sort_spec)), *sections)
+        self._sections = sections
+        self.sort_editors = [
+            SortEditor(section.fields, title=section.title) for section in sections
+        ]
         self._build()
-        if self.sort_editor is not None:
-            self.sort_editor.set_spec(sort_spec)
+        for editor, section in zip(self.sort_editors, sections, strict=True):
+            editor.set_spec(section.spec)
+
+    @property
+    def sort_editor(self) -> SortEditor | None:
+        """第一組排序方式 —— 多數視窗只有這一組。"""
+        return self.sort_editors[0] if self.sort_editors else None
 
     def _build(self) -> None:
         lists = QHBoxLayout()
-        if self.sort_editor is not None:
+        if self.sort_editors:
             side = QVBoxLayout()
-            side.addWidget(self.sort_editor)
+            for index, editor in enumerate(self.sort_editors):
+                if index:
+                    side.addSpacing(16)
+                side.addWidget(editor)
             side.addStretch()
             lists.addLayout(side)
         lists.addWidget(self.parents)
@@ -223,8 +253,8 @@ class ReorderDialog(QDialog):
         layout.addWidget(self.hint)
         layout.addWidget(buttons)
 
-        if self.sort_editor is not None:
-            self.sort_editor.changed.connect(self._sync_hint)
+        for editor in self.sort_editors:
+            editor.changed.connect(self._sync_hint)
         self._sync_hint()
 
         if self.child_list is not None:
@@ -238,17 +268,36 @@ class ReorderDialog(QDialog):
         實際上是他選了「照名稱排」。順序**有**存下去，只是沒有拿來用。
         """
         base = "拖曳或用上移／下移調整自訂順序，按「確定」才會存下來。"
-        if self.sort_editor is not None and not self.sort_editor.uses_custom():
+        ignoring = [
+            section.title
+            for section, editor in zip(self._sections, self.sort_editors, strict=True)
+            if not editor.uses_custom()
+        ]
+        if ignoring and len(self.sort_editors) == 1:
             self.hint.setText(
                 base + "\n"
                 "目前的排序方式沒有用到「自訂順序」，所以拖曳的結果不會顯示在清單上"
                 "（順序仍然會存起來）。要看到效果，請把某一層改成自訂順序。"
             )
             return
+        if ignoring:
+            # 兩組的時候要說出**是哪一張表**看不到拖曳的結果 —— 另一張可能看得到。
+            where = "、".join(f"「{title}」" for title in ignoring)
+            self.hint.setText(
+                base + "\n"
+                f"{where}沒有用到「自訂順序」，所以拖曳的結果不會顯示在那張表上"
+                "（順序仍然會存起來）。要看到效果，請把某一層改成自訂順序。"
+            )
+            return
         self.hint.setText(base + "這份順序也會用在記帳頁的下拉選單。")
 
     def sort_spec(self) -> tuple[SortLevel, ...]:
-        return self.sort_editor.spec() if self.sort_editor is not None else ()
+        """第一組的規格。只有一組排序方式的視窗用這個。"""
+        return self.sort_editors[0].spec() if self.sort_editors else ()
+
+    def sort_specs(self) -> tuple[tuple[SortLevel, ...], ...]:
+        """每一組的規格，順序同 `sort_sections`。"""
+        return tuple(editor.spec() for editor in self.sort_editors)
 
     def _show_children(self) -> None:
         """換到另一個上層時，先把目前這一組的順序記下來再換。
@@ -301,6 +350,7 @@ def ask_order(
     child_caption: str = "",
     sort_fields: Sequence[tuple[str, str]] = (),
     sort_spec: Sequence[SortLevel] = (),
+    sort_sections: Sequence[SortSection] = (),
 ) -> ReorderDialog | None:
     """開排序視窗。**取消回傳 `None`** —— 那不是失敗，呼叫端不要跳錯誤訊息。"""
     dialog = ReorderDialog(
@@ -311,6 +361,7 @@ def ask_order(
         child_caption=child_caption,
         sort_fields=sort_fields,
         sort_spec=sort_spec,
+        sort_sections=sort_sections,
     )
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
