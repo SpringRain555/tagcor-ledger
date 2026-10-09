@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from tagcor_ledger.ui.widgets.forms import date_field, select_data
+from tagcor_ledger.ui.widgets.forms import combo_box, date_field, select_data
 
 
 MIN_DIALOG_WIDTH = 420
@@ -126,7 +126,7 @@ class SimpleFormDialog(QDialog):
         form.setSpacing(10)
         for spec in self._fields:
             if isinstance(spec, ChoiceField):
-                combo = QComboBox()
+                combo = combo_box()
                 for label, value in spec.options:
                     combo.addItem(label, value)
                 if spec.default is not None:

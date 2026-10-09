@@ -182,6 +182,13 @@ flowchart LR
   - **`QCheckBox::indicator` 已經覆寫了**（為了方框：Fusion 的外框色是 `palette.window().darker(140)` 推導的，在 `#0D0D0F` 上完全看不見），所以勾號要**自己給圖**，`styles.qss` 的 `:checked` 有一行 `image: url(...)`，路徑由 `theme.py` 的 `resolve_stylesheet()` 在載入時代換。這一次的症狀是一塊**看起來很像設計**的實心白方塊 —— 沒有人發現它壞了。
   - 要給圖只能給 **PNG，而且標準與 `@2x` 兩個尺寸都要**。SVG 需要 Qt SVG image plugin（PySide6 的選配元件，本機的 conda env 就沒有），QSS 的 `url()` 也不吃 `data:` URI —— 兩條都實測過，失敗的樣子都是「那一格靜靜地不畫圖」。圖檔由 `tools/icons/make_check_icon.py` 產生，不要用繪圖軟體改。
 - **主字體必須是中文字型**（`Microsoft JhengHei UI` 排第一），12pt、Medium 字重。理由是 `Segoe UI Variable` 沒有中文字形，中文全靠 fallback，而**字重套不到 fallback 字型上** —— 對它設 Medium 只有數字變粗，中文一點都沒變。字體不打包，順序是 `Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、`Segoe UI Variable`、`Segoe UI`、sans-serif。
+- **下拉選單一律用 `combo_box()`，不要自己 `QComboBox()`。** Fusion 把不可編輯的下拉當成選單：
+  清單移到讓目前那一項對齊下拉框（選到下面的選項，下次打開整個清單往上跑），而且**不理會
+  `maxVisibleItems`**、盡量攤開到整個螢幕。`styles.qss` 的 `combobox-popup: 0` 換成清單模式 ——
+  開在下拉框正下方、一次最多 `COMBO_VISIBLE_ITEMS`（10）項、超過就捲、目前那一項反白。
+  清單模式不會自己把清單撐到最長那一項的寬度，那件事是工廠做的（`_ComboBox.showPopup`），
+  所以繞過工廠的下拉會把長名字從中間省略。`test_every_dropdown_comes_from_the_shared_factory`
+  與 `tests/ui/test_dropdowns.py`（量打開之後的 geometry）守著。
 - **日期欄位一律用 `date_field()`，不要用 `QDateTimeEdit`。** 介面只問到「哪一天」；時分秒由 `iso_from_date()` 補上（新建補現在、編輯沿用原值），資料庫存的仍然是完整時間戳。顯示一律用 `display_date()`，**不要把補出來的時分印出來** —— 那不是使用者輸入的東西。
 - UI 變更至少跑 `tests/ui` smoke；樣式資源變更需同步更新 `tests/unit/test_resources.py`。
 - **`apply_dark_theme()` 要在任何 widget 建出來之前套用**（`MainWindow.__init__` 的第一件事），而且**一個 process 只套一次**（有標記擋著）。`setFont`／`setPalette`／`setStyleSheet` 是 application 層級的操作，Qt 要傳播給當下活著的每一個 widget —— 重複套用的成本隨 widget 數量成長，而且比線性還快。正式執行只開一個視窗所以看不出來；**測試裡會讓整包從幾分鐘變成 32 分鐘**。它換掉整個 application 的字體，而表格在建構當下就會量自己該多寬 —— 順序反了，量到的是預設字體下的寬度，之後就再也不會重算。**UI 測試的 fixture 不要順手多做一次 `refresh()`**：那會把「第一次就要對」這個條件洗掉，而使用者看到的永遠是第一次。

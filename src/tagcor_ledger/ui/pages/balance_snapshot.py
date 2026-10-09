@@ -33,7 +33,6 @@ from typing import Any
 
 from PySide6.QtCore import QDate, Signal
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -58,6 +57,7 @@ from tagcor_ledger.ui.formatting import (
 )
 from tagcor_ledger.ui.pages.inbox import InboxSection
 from tagcor_ledger.ui.widgets.forms import (
+    combo_box,
     date_field,
     fill_combo,
     form_panel,
@@ -104,7 +104,7 @@ class BalanceSnapshotPage(QWidget):
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
         self.controller = controller
-        self.account = QComboBox()
+        self.account = combo_box()
         self.observed_at = date_field()
         self.amount = QLineEdit()
         self.note = QLineEdit()
@@ -328,7 +328,7 @@ class BalanceSnapshotEditDialog(QDialog):
         super().__init__(parent)
         self.controller = controller
         self.snapshot = snapshot
-        self.account = QComboBox()
+        self.account = combo_box()
         self.observed_at = date_field()
         self.amount = QLineEdit(minor_text(snapshot["actual_balance_minor"]))
         self.note = QLineEdit(str(snapshot.get("note", "")))

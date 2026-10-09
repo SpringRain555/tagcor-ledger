@@ -29,7 +29,6 @@ from dataclasses import replace
 from typing import Any
 
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -42,7 +41,7 @@ from PySide6.QtWidgets import (
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import ENTRY_NAMES, error_text, minor_text
-from tagcor_ledger.ui.widgets.forms import fill_combo, select_data
+from tagcor_ledger.ui.widgets.forms import combo_box, fill_combo, select_data
 
 
 class TemplateDialog(QDialog):
@@ -67,11 +66,11 @@ class TemplateDialog(QDialog):
         self.current = current
         self.prefill = prefill
         self.name = QLineEdit()
-        self.flow = QComboBox()
-        self.account = QComboBox()
-        self.destination = QComboBox()
-        self.category = QComboBox()
-        self.detail = QComboBox()
+        self.flow = combo_box()
+        self.account = combo_box()
+        self.destination = combo_box()
+        self.category = combo_box()
+        self.detail = combo_box()
         self.amount = QLineEdit()
         self.description = QLineEdit()
         self.error = QLabel()

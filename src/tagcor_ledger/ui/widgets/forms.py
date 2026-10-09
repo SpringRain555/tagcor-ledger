@@ -1,4 +1,9 @@
-"""下拉選單、日期時間輸入與狀態訊息的共用操作。"""
+"""下拉選單、日期時間輸入與狀態訊息的共用操作。
+
+下拉與日期欄都有自己的工廠（`combo_box()`、`date_field()`），**畫面上每一個都必須從
+工廠生出來** —— 兩者擋的都是 Qt 預設行為與這個專案的 QSS 疊在一起才出現的問題，
+繞過工廠的欄位就完全沒有被保護到。
+"""
 
 from __future__ import annotations
 
@@ -127,6 +132,51 @@ def show_status(label: QLabel, text: str, *, ok: bool | None = None) -> None:
     style = label.style()
     style.unpolish(label)
     style.polish(label)
+
+
+COMBO_VISIBLE_ITEMS = 10
+"""下拉清單一次最多顯示幾項，超過就出現捲軸（使用者 2026-10-09 選定，也是 Qt 的預設值）。
+
+**這個數字要有 `styles.qss` 的 `combobox-popup: 0` 才會生效。** Fusion 把不可編輯的下拉
+當成選單：清單移到讓「目前那一項」對齊下拉框的位置，而且**不理會 `maxVisibleItems`**，
+盡量攤開到整個螢幕。理由與實測數字寫在 `styles.qss` 的 `QComboBox` 規則上。
+"""
+
+
+class _ComboBox(QComboBox):
+    """打開之前先把清單撐到最長那一項的寬度。
+
+    選單模式（Fusion 的預設）會自己把清單撐寬到內容寬；換成清單模式之後，清單就跟下拉框
+    一樣寬，比下拉框長的項目被從中間省略（2026-10-09 實測：118 px 的下拉，內容要 870 px，
+    清單也只給 118 px）。下拉框的寬度在第一次顯示時就定了，之後才加進來的長名字（新增了
+    一個帳戶、定存的到期及轉存方式）就會撞上這件事。
+
+    多出來的寬度用量的，不寫死：框線加 QSS 的 padding 就是 `frameWidth()`（兩邊各一份），
+    捲軸只有項目多過上限時才有。
+    """
+
+    def showPopup(self) -> None:  # noqa: N802
+        view = self.view()
+        needed = view.sizeHintForColumn(0) + 2 * view.frameWidth()
+        if self.count() > self.maxVisibleItems():
+            needed += view.verticalScrollBar().sizeHint().width()
+        screen = self.screen()
+        if screen is not None:
+            needed = min(needed, screen.availableGeometry().width())
+        view.setMinimumWidth(max(needed, self.width()))
+        super().showPopup()
+
+
+def combo_box() -> QComboBox:
+    """下拉選單。**每一個下拉都必須從這裡生出來**，不要自己 `QComboBox()`。
+
+    它管兩件事：一次最多 `COMBO_VISIBLE_ITEMS` 項，以及清單至少跟最長那一項一樣寬
+    （見 `_ComboBox`）。繞過工廠的下拉兩件事都沒有 —— `tests/unit/test_architecture.py`
+    有一條守著，跟 `date_field()` 同一個做法。
+    """
+    combo = _ComboBox()
+    combo.setMaxVisibleItems(COMBO_VISIBLE_ITEMS)
+    return combo
 
 
 def fill_combo(

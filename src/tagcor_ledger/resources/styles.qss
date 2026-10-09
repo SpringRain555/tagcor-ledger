@@ -200,8 +200,19 @@ QSpinBox:disabled {
     border-color: #33333C;
 }
 
+/* `combobox-popup: 0`：**清單開在下拉框正下方，一次最多 10 項，超過就捲。**
+ *
+ * Fusion 對不可編輯的下拉回傳 `SH_ComboBox_Popup = 1`，也就是「選單模式」：清單移到
+ * 讓目前那一項對齊下拉框的位置 —— 選到下面的選項，下次打開整個清單往上跑 —— 而且
+ * 這個模式下 Qt **不理會 `maxVisibleItems`**，清單盡量攤開到整個螢幕。2026-10-09 實測
+ * 25 項：選單模式下清單頂到螢幕上緣、624 px 高、沒有捲軸；加了這一行之後開在正下方、
+ * 10 項加捲軸、目前那一項反白。
+ *
+ * 換成清單模式，選單模式順帶做的兩件事要自己補：列高（下面的 `::item`）與「清單至少
+ * 跟最長那一項一樣寬」（`forms.combo_box()`）。上限的數字在 `forms.COMBO_VISIBLE_ITEMS`。 */
 QComboBox {
     padding-right: 8px;
+    combobox-popup: 0;
 }
 
 /* 這裡**刻意沒有 `::drop-down` 規則**。
@@ -219,6 +230,19 @@ QComboBox QAbstractItemView {
     selection-background-color: #2E2E38;
     selection-color: #E8E8EA;
     outline: 0;
+}
+
+/* 清單模式的每一列由 QStyledItemDelegate 畫，所以吃得到 `::item`。不給的話列高只剩
+ * 字高（實測 16 px），比選單模式的列擠得多。滑鼠移過去時選取會跟著走，所以 `:selected`
+ * 同時是「目前這一項」與「滑鼠下的那一項」。 */
+QComboBox QAbstractItemView::item {
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    color: #E8E8EA;
+    background-color: #2E2E38;
 }
 
 QAbstractItemView {

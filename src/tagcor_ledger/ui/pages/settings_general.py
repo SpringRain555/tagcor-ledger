@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -20,7 +19,7 @@ from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.domain.models import ApplicationSettings
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import ENTRY_NAMES, result_message
-from tagcor_ledger.ui.widgets.forms import fill_combo, form_panel, select_data
+from tagcor_ledger.ui.widgets.forms import combo_box, fill_combo, form_panel, select_data
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 
@@ -31,9 +30,9 @@ class GeneralSettingsPage(QWidget):
         super().__init__()
         self.controller = controller
         self.paths = paths
-        self.account = QComboBox()
-        self.flow = QComboBox()
-        self.page_size = QComboBox()
+        self.account = combo_box()
+        self.flow = combo_box()
+        self.page_size = combo_box()
         self.result = QLabel()
         self._build()
         self.reload()

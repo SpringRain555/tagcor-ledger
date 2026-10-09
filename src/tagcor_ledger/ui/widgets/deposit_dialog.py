@@ -24,7 +24,6 @@ from typing import Any
 
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -53,7 +52,7 @@ from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.infrastructure.clock import today_taipei
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import display_date, minor_text, rate_input_text, result_message
-from tagcor_ledger.ui.widgets.forms import date_field, fill_combo, select_data
+from tagcor_ledger.ui.widgets.forms import combo_box, date_field, fill_combo, select_data
 from tagcor_ledger.ui.widgets.layout import FORM_WIDTH
 from tagcor_ledger.ui.widgets.simple_form import TextField, ask_form
 
@@ -76,12 +75,12 @@ class DepositContractDialog(QDialog):
         self.current = current
         self.values: dict[str, Any] = {}
         self.name = QLineEdit("郵局定存")
-        self.account = QComboBox()
+        self.account = combo_box()
         self.new_account_button = QPushButton("新增帳戶…")
-        self.interest_destination = QComboBox()
-        self.interest_method = QComboBox()
-        self.maturity_action = QComboBox()
-        self.rate_type = QComboBox()
+        self.interest_destination = combo_box()
+        self.interest_method = combo_box()
+        self.maturity_action = combo_box()
+        self.rate_type = combo_box()
         self.term_months = QSpinBox()
         self.opened_on = date_field()
         self.principal = QLineEdit()

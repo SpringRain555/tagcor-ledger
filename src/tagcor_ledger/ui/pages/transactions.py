@@ -20,7 +20,6 @@ from typing import Any, cast
 from PySide6.QtCore import QDate, QDateTime, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -37,6 +36,7 @@ from PySide6.QtWidgets import (
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, transaction_values
 from tagcor_ledger.ui.widgets.forms import (
+    combo_box,
     date_field,
     fill_combo,
     iso_from_date,
@@ -77,9 +77,9 @@ class TransactionsPage(QWidget):
         self.date_enabled = QCheckBox("日期")
         self.date_from = date_field(QDate.currentDate().addMonths(-1))
         self.date_to = date_field(QDate.currentDate())
-        self.account = QComboBox()
-        self.category = QComboBox()
-        self.status = QComboBox()
+        self.account = combo_box()
+        self.category = combo_box()
+        self.status = combo_box()
         self.previous_button = QPushButton("上一頁")
         self.next_button = QPushButton("下一頁")
         self.cursors: list[dict[str, str] | None] = [None]
@@ -278,10 +278,10 @@ class TransactionEditDialog(QDialog):
         super().__init__(parent)
         self.controller = controller
         self.transaction = transaction
-        self.account = QComboBox()
-        self.destination = QComboBox()
-        self.category = QComboBox()
-        self.detail = QComboBox()
+        self.account = combo_box()
+        self.destination = combo_box()
+        self.category = combo_box()
+        self.detail = combo_box()
         self.occurred_at = date_field()
         self.amount = QLineEdit(str(transaction["amount"]))
         self.description = QLineEdit(str(transaction["description"]))

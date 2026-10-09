@@ -12,7 +12,6 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -26,6 +25,7 @@ from PySide6.QtWidgets import (
 from tagcor_ledger.application.reference import DISCLAIMER, ReferenceEntry, is_stale
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import reference_entry_values
+from tagcor_ledger.ui.widgets.forms import combo_box
 from tagcor_ledger.ui.widgets.table import RowsModel, set_button_role, setup_table
 from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 
@@ -34,7 +34,7 @@ class ReferencePage(QWidget):
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
         self.controller = controller
-        self.topic = QComboBox()
+        self.topic = combo_box()
         self.search = QLineEdit()
         self.status = QLabel()
         self.table = QTableView()

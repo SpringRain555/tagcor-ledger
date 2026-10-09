@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.domain.models import SortLevel
+from tagcor_ledger.ui.widgets.forms import combo_box
 
 LEVELS = 3
 """畫面上固定幾層。理由見模組說明。"""
@@ -67,12 +68,12 @@ class SortEditor(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.addWidget(QLabel("排序方式"), 0, 0, 1, 3)
         for row in range(LEVELS):
-            field_box = QComboBox()
+            field_box = combo_box()
             if row > 0:
                 field_box.addItem("（不使用）", NONE_FIELD)
             for label, key in self._fields:
                 field_box.addItem(label, key)
-            direction_box = QComboBox()
+            direction_box = combo_box()
             for label, descending in DIRECTIONS:
                 direction_box.addItem(label, descending)
             field_box.currentIndexChanged.connect(lambda *_: self._emit())

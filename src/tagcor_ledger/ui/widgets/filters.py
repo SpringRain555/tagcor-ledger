@@ -21,12 +21,13 @@ from typing import Any
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QWidget,
 )
+
+from tagcor_ledger.ui.widgets.forms import combo_box
 
 SEARCH_WIDTH = 260
 """搜尋框的寬度上限。名冊裡的名字都很短（「早餐」「電子票證儲值」），
@@ -48,8 +49,8 @@ class CatalogFilterBar(QWidget):
     def __init__(self, *, with_parent: bool = False) -> None:
         super().__init__()
         self.search = QLineEdit()
-        self.status = QComboBox()
-        self.parent_filter = QComboBox() if with_parent else None
+        self.status = combo_box()
+        self.parent_filter = combo_box() if with_parent else None
         self._build()
 
     def _build(self) -> None:

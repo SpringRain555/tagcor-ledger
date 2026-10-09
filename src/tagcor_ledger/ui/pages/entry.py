@@ -45,7 +45,6 @@ from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QBoxLayout,
     QButtonGroup,
-    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -58,6 +57,7 @@ from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import ENTRY_NAMES, minor_text, result_message
 from tagcor_ledger.ui.widgets.forms import (
     add_suffix_hint,
+    combo_box,
     date_field,
     fill_combo,
     iso_from_date,
@@ -119,11 +119,11 @@ class EntryPage(QWidget):
         self.scope_buttons = QButtonGroup(self)
         self.scope_row = QWidget()
         self._labels: list[QLabel] = []
-        self.account = QComboBox()
-        self.destination = QComboBox()
+        self.account = combo_box()
+        self.destination = combo_box()
         self.occurred_at = date_field()
-        self.category = QComboBox()
-        self.detail = QComboBox()
+        self.category = combo_box()
+        self.detail = combo_box()
         self.amount = QLineEdit()
         self.description = QLineEdit()
         self.status = status_label()

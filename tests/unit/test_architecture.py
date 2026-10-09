@@ -716,3 +716,36 @@ def test_every_date_input_comes_from_the_shared_factory() -> None:
             "日期欄一律用 `forms.date_field()`，不要自己 `QDateEdit(...)`：\n"
             + "\n".join(offenders)
         )
+
+
+# 下拉的唯一工廠。`QComboBox()` 直接建出來的話，「一次最多幾項」與「清單撐到最長那一項」
+# 都沒有套到 —— 後者在 QSS 換成清單模式之後就只剩工廠會做。
+DROPDOWN_FACTORY = "ui/widgets/forms.py"
+
+
+def test_every_dropdown_comes_from_the_shared_factory() -> None:
+    """**`ui/` 底下不得直接建 `QComboBox`**，一律用 `forms.combo_box()`。
+
+    跟日期欄同一個理由：Qt 的預設行為與這個專案的 QSS 疊在一起才出問題。Fusion 把不可
+    編輯的下拉當成選單 —— 清單對齊目前那一項（選到下面的選項，下次打開整個往上跑），而且
+    不理會 `maxVisibleItems`。QSS 的 `combobox-popup: 0` 把它換成清單模式，但清單模式不會
+    自己把清單撐到最長那一項的寬度，那件事是工廠做的。2026-10-09 之前，十個檔案裡有 32 個
+    直接建的下拉。
+    """
+    offenders: list[str] = []
+    factory_calls = 0
+    for path in _modules("ui"):
+        relative = path.relative_to(SOURCE_ROOT).as_posix()
+        factory_calls += _constructor_calls(path, "combo_box")
+        if relative == DROPDOWN_FACTORY:
+            continue
+        count = _constructor_calls(path, "QComboBox")
+        if count:
+            offenders.append(f"  {relative} 直接建了 {count} 個 QComboBox")
+    # 陽性對照：一個工廠呼叫都掃不到，代表掃描路徑或抽取器壞了 —— 那時「沒有違規」不算數。
+    assert factory_calls >= 20, f"只掃到 {factory_calls} 個 combo_box() 呼叫，掃描壞了"
+    if offenders:
+        pytest.fail(
+            "下拉一律用 `forms.combo_box()`，不要自己 `QComboBox(...)`：\n"
+            + "\n".join(offenders)
+        )
