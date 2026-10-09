@@ -615,3 +615,43 @@ def test_each_transfer_scope_saves_the_right_entry_type(window) -> None:
         for row in controller.list_transactions().details["transactions"]
     ]
     assert sorted(kinds) == ["expense", "income", "transfer"], kinds
+
+
+def test_a_transfer_template_lands_between_my_own_accounts(window) -> None:
+    """模板裡的轉帳一定是「我的帳戶之間」—— 不管記帳頁上一次停在哪一種轉帳對象。
+
+    以前 `apply_draft()` 只切流向、不切轉帳對象：剛記過一筆「別人轉入」，再按「郵局提款」
+    模板的「填入記帳頁」，轉入帳戶那一列被藏起來，**存下去是一筆收入**，總資產憑空多了一筆。
+    """
+    controller = window.controller
+    created = controller.create_account("郵局", "1000")
+    assert created.success
+    post_office = str(created.details["account_id"])
+    page = window.entry
+    page.reload_options()
+
+    page.select_entry_type("transfer")
+    page.select_transfer_scope("inbound")
+    assert page.effective_entry_type() == "income", "前提：上一次停在「別人轉入」"
+
+    page.apply_draft(
+        {
+            "entry_type": "transfer",
+            "account_id": post_office,
+            "destination_account_id": "acct_cash",
+            "description": "郵局提款",
+        }
+    )
+
+    assert page.current_transfer_scope() == "internal"
+    assert page.form.isRowVisible(page.destination) is True
+    assert page.account.currentData() == post_office
+    assert page.destination.currentData() == "acct_cash"
+    page.amount.setText("3000")
+    page.submit()
+    assert "已儲存" in page.status.text(), page.status.text()
+    kinds = [
+        row["entry_type"]
+        for row in controller.list_transactions().details["transactions"]
+    ]
+    assert kinds == ["transfer"], kinds

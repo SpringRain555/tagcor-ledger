@@ -372,6 +372,11 @@ class EntryPage(QWidget):
 
     def apply_draft(self, draft: dict[str, Any], *, use_current_time: bool = True) -> None:
         self.saved_message_timer.stop()
+        # **模板裡的轉帳一定是「我的帳戶之間」**（對外轉帳存成收入／支出，見模組說明）。
+        # 轉帳對象要先切回來：只切流向的話，它會停在上一次用的那一種 —— 剛記過一筆
+        # 「別人轉入」再填入「郵局提款」，轉入帳戶那一列被藏起來，存下去是一筆收入。
+        if draft.get("entry_type") == "transfer":
+            self.select_transfer_scope("internal")
         self.select_entry_type(draft.get("entry_type"))
         select_data(self.account, draft.get("account_id"))
         select_data(self.destination, draft.get("destination_account_id"))
