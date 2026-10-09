@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, transaction_values
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.forms import (
     combo_box,
     date_field,
@@ -253,12 +254,11 @@ class TransactionsPage(QWidget):
         item = self.model.selected_item(self.table)
         if item is None or item["status"] != "active":
             return
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "確認刪除",
             "確定要刪除所選交易嗎？\n\n紀錄會保留在狀態「已刪除」裡，但不能再改回有效。",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         result = self.controller.void_transaction(str(item["transaction_id"]))
         if result.success:

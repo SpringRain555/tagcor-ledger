@@ -8,7 +8,9 @@
 那句話對「剛開始用、只有三筆」與「用了半年、四百筆」的人是同一句，
 但後果差很多。所以現在**把筆數念出來**，而且沒勾備份時明講「沒有備份，救不回來」。
 
-預設按鈕明確設成「否」：這種對話框最常見的誤觸是順手按 Enter。
+預設按鈕是「否」：這種對話框最常見的誤觸是順手按 Enter。這條規則以前只寫在這裡，
+於是只有這一頁（與刪除備份）記得 —— 2026-10-09 起它住在 `widgets/confirm.py`，
+每一個確認框都走那裡。
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import error_text
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.forms import show_status, status_label
 from tagcor_ledger.ui.widgets.table import set_button_role
 
@@ -83,17 +86,14 @@ class ResetPage(QWidget):
 
     def reset(self) -> None:
         backup = self.backup_first.isChecked()
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "確認重製",
             f"目前的資料：{self.loss_summary()}。\n\n"
             "重製後這些全部會消失，"
             + ("重製前會先自動建立一份備份。" if backup else "而且沒有備份可以救。")
             + "\n\n確定要重製嗎？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         try:
             self.controller.reset_ledger(create_backup_first=backup)

@@ -157,9 +157,7 @@ def test_deleting_a_snapshot_removes_it_for_real(window, monkeypatch) -> None:
         asked.append(str(args[2]))
         return QMessageBox.StandardButton.Yes
 
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.balance_snapshot.QMessageBox.question", confirm
-    )
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(confirm))
     page.delete_selected()
 
     assert "已刪除" in page.result.text(), page.result.text()

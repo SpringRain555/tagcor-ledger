@@ -44,6 +44,7 @@ from tagcor_ledger.ui.formatting import (
     deposit_term_values,
     result_message,
 )
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.deposit_dialog import (
     DepositContractDialog,
     DepositTermDialog,
@@ -239,15 +240,14 @@ class DepositsPage(QWidget):
         item = self.contract_model.selected_item(self.contracts)
         if item is None:
             return
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "確認結束",
             f"要結束「{item['name']}」嗎？\n"
             "已經記過的交易與每一期的紀錄都留著，只是它不會再產生待確認草稿，"
             "清單上也會收起來（勾「顯示已結束的合約」還看得到）。\n"
             "還有存續中的期時不能結束 —— 那種情況請用「中途解約」。",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         self._finish(
             self.controller.close_deposit_contract(str(item["contract_id"])), "無法結束"
@@ -257,13 +257,12 @@ class DepositsPage(QWidget):
         item = self.contract_model.selected_item(self.contracts)
         if item is None:
             return
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "確認刪除",
             f"要刪除「{item['name']}」嗎？\n"
             "只有從未入帳過的定存可以刪除；已經有入帳紀錄的請改用「結束合約」。",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         self._finish(
             self.controller.delete_deposit_contract(str(item["contract_id"])), "無法刪除"

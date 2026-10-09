@@ -43,6 +43,7 @@ from tagcor_ledger.ui.formatting import (
     item_values,
     result_message,
 )
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.filters import CatalogFilterBar
 from tagcor_ledger.ui.widgets.reorder_dialog import ReorderDialog, ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.simple_form import ChoiceField, TextField, ask_form
@@ -285,14 +286,13 @@ class CatalogPage(QWidget):
         item = self.model.selected_item(self.table)
         if item is None:
             return
-        answer = QMessageBox.question(
+        if confirm(
             self,
             "確認刪除",
             f"確定要刪除{self.NOUN}「{item['name']}」嗎？\n\n"
             f"只有從來沒被用過的{self.NOUN}刪得掉。用過的請改按「封存／恢復」——"
             "歷史資料會留著，它只是不再出現在選單裡。",
-        )
-        if answer == QMessageBox.StandardButton.Yes:
+        ):
             self._finish(self._delete(str(item[self.ID_FIELD])))
 
     def _finish(self, result: Result) -> None:

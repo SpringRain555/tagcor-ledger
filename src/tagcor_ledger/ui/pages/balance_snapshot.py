@@ -39,7 +39,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -56,6 +55,7 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.pages.inbox import InboxSection
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.forms import (
     combo_box,
     date_field,
@@ -293,13 +293,12 @@ class BalanceSnapshotPage(QWidget):
         item = self.model.selected_item(self.table)
         if item is None:
             return
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "確認刪除",
             f"確定要刪除 {display_date(str(item['observed_at']))} 那一次盤點嗎？\n\n"
             "刪掉之後就找不回來了。後面那一次盤點的未解釋差額，會改拿再前一次的盤點重算。",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         result = self.controller.delete_balance_snapshot(str(item["snapshot_id"]))
         show_status(self.result, result_message(result), ok=result.success)

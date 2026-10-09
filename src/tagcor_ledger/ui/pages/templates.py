@@ -34,6 +34,7 @@ from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import SortLevel
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, template_values
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.template_dialog import TemplateDialog
 from tagcor_ledger.ui.widgets.table import (
@@ -219,15 +220,14 @@ class TemplatesPage(QWidget):
         item = self.model.selected_item(self.table)
         if item is None:
             return
-        answer = QMessageBox.question(
+        if confirm(
             self,
             "確認刪除",
             f"確定要刪除模板「{item['name']}」嗎？\n\n"
             "刪掉就沒有了。已經用它記過的交易不受影響 —— 模板只是預填用的，"
             "交易存下來之後就與它無關。\n\n"
             "只是暫時不想用的話，改按「封存／恢復」。",
-        )
-        if answer == QMessageBox.StandardButton.Yes:
+        ):
             self._finish(self.controller.delete_template(str(item["template_id"])))
 
     def _finish(self, result: Result) -> None:

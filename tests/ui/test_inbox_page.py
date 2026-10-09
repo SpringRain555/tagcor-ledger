@@ -13,7 +13,7 @@
 from typing import Any
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtWidgets import QTableView
+from PySide6.QtWidgets import QMessageBox, QTableView
 
 from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.navigation import PageId
@@ -204,9 +204,24 @@ def test_skipping_a_monthly_payout_removes_it_without_creating_a_transaction(
         for index, item in enumerate(window.inbox.model.items)
         if item["event_type"] == "interest_payout"
     )
+    # **略過是單向的**（略過掉的不會再產生），所以先問一次；答「否」什麼都不動。
+    answers = [QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes]
+    asked: list[str] = []
+
+    def answer(*args: Any, **_kwargs: Any) -> QMessageBox.StandardButton:
+        asked.append(str(args[2]))
+        return answers[len(asked) - 1]
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(answer))
+    window.inbox.table.selectRow(row)
+    window.inbox.skip_selected()
+    assert window.inbox.model.rowCount() == before, "答「否」不該略過"
+
     window.inbox.table.selectRow(row)
     window.inbox.skip_selected()
 
+    assert "郵局存本取息" in asked[0] and "領息" in asked[0], asked[0]
+    assert "不會再出現" in asked[0], asked[0]
     assert window.inbox.model.rowCount() == before - 1
     assert window.transactions.model.rowCount() == 0
 

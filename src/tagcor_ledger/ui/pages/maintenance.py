@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from tagcor_ledger.application.failures import message_for
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import backup_row_text, error_text, result_message
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.table import bind_selection, set_button_role
 
 BACKUP_FALLBACK = (
@@ -150,7 +151,7 @@ class MaintenancePage(QWidget):
         path = self._selected_path()
         if item is None or path is None:
             return
-        answer = QMessageBox.question(
+        if not confirm(
             self,
             "確認刪除備份",
             # **這裡要有完整路徑。** 清單那一列只到資料夾名，而這是最後一次
@@ -158,10 +159,7 @@ class MaintenancePage(QWidget):
             f"要永久刪除這一份備份嗎？\n\n{item.text()}\n{path}\n\n"
             f"{self._remaining_usable_text(path)}\n"
             "刪掉之後救不回來。",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         result = self.controller.delete_backup(path)
         if not result.success:
@@ -206,18 +204,23 @@ class MaintenancePage(QWidget):
                 message_for(code) or f"這份備份不可用（{code or '原因不明'}）。",
             )
             return
-        answer = QMessageBox.question(
+        # **照勾選框說實話。** 以前這裡一律寫「還原前會先備份目前資料」，而那個勾選框
+        # 預設是沒勾的 —— 使用者照著按「是」，換來的是一次沒有退路的還原（2026-10-09）。
+        protect = self.protect_restore.isChecked()
+        if not confirm(
             self,
             "確認還原",
-            "還原前會先備份目前資料。確定繼續嗎？",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+            f"要用這一份備份取代目前的資料嗎？\n\n{path}\n\n"
+            + (
+                "還原前會先把目前的資料備份起來。"
+                if protect
+                else "目前的資料會被整個取代。沒有勾「還原前先建立備份」，"
+                "還原之後就救不回來。"
+            ),
+        ):
             return
         try:
-            self.controller.restore_backup(
-                path,
-                create_backup_first=self.protect_restore.isChecked(),
-            )
+            self.controller.restore_backup(path, create_backup_first=protect)
             self.result.setText("備份已還原。")
             self.restored.emit()
             self.refresh()

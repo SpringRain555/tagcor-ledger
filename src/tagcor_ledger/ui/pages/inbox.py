@@ -53,14 +53,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tagcor_ledger.domain.deposits import DEPOSIT_EVENT_TYPE_NAMES, DepositEventType
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import (
     deposit_event_values,
+    display_date,
     error_text,
     minor_text,
     result_message,
 )
+from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.simple_form import DateField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
@@ -228,9 +231,23 @@ class InboxSection(QWidget):
         self.changed.emit()
 
     def skip_selected(self) -> None:
-        """略過 =「我看過，這一期不記」。**到期項目會被擋下來**（見 `deposits/postings.py`）。"""
+        """略過 =「我看過，這一期不記」。**到期項目會被擋下來**（見 `deposits/postings.py`）。
+
+        **略過是單向的**：略過掉的事件不會再產生（`UNIQUE` ＋ `INSERT OR IGNORE`），所以先問一次。
+        到期那一種不問 —— 它本來就會被擋下，擋下來的訊息會講替代作法；先問一個答「是」之後
+        還是做不到的問題，只是多按一次。
+        """
         item: dict[str, Any] | None = self.model.selected_item(self.table)
         if item is None:
+            return
+        event_type = DepositEventType(str(item["event_type"]))
+        if event_type != DepositEventType.MATURITY and not confirm(
+            self,
+            "確認略過",
+            f"要略過「{item['contract_name']}」{display_date(str(item['due_date']))} 的"
+            f"{DEPOSIT_EVENT_TYPE_NAMES[event_type]}嗎？\n\n"
+            "略過之後這一筆不會再出現在待確認，也不會產生交易。",
+        ):
             return
         result = self.controller.skip_deposit_event(str(item["event_id"]))
         if not result.success:

@@ -749,3 +749,45 @@ def test_every_dropdown_comes_from_the_shared_factory() -> None:
             "下拉一律用 `forms.combo_box()`，不要自己 `QComboBox(...)`：\n"
             + "\n".join(offenders)
         )
+
+
+# 確認框的唯一出口。它固定把預設按鈕設成「否」—— Qt 不指定時焦點在「是」，按 Enter 就是是。
+CONFIRM_HELPER = "ui/widgets/confirm.py"
+
+
+def _question_calls(path: Path) -> int:
+    """這個模組呼叫 `QMessageBox.question(...)` 幾次（AST 的屬性呼叫，不做字串比對）。"""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "question"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "QMessageBox"
+    )
+
+
+def test_every_confirmation_goes_through_the_shared_helper() -> None:
+    """**`ui/` 底下不得直接呼叫 `QMessageBox.question`**，一律用 `confirm()`。
+
+    `question()` 不指定預設按鈕時，焦點落在「是」上，對話框一出來按 Enter 就是「是」
+    （2026-10-09 實測）。這條規則以前只寫在 `reset.py` 的 docstring 裡，於是八個確認框裡
+    只有兩個記得 —— 交易、盤點、名冊、模板、定存合約、還原的確認框按 Enter 都會直接動手。
+    """
+    # 陽性對照：抽取器在 helper 自己身上要認得出那一個呼叫，否則底下會空過。
+    assert _question_calls(SOURCE_ROOT / CONFIRM_HELPER) == 1, "抽取器認不出 QMessageBox.question"
+    offenders: list[str] = []
+    for path in _modules("ui"):
+        relative = path.relative_to(SOURCE_ROOT).as_posix()
+        if relative == CONFIRM_HELPER:
+            continue
+        count = _question_calls(path)
+        if count:
+            offenders.append(f"  {relative} 直接呼叫了 {count} 次 QMessageBox.question")
+    if offenders:
+        pytest.fail(
+            "確認框一律用 `widgets.confirm.confirm()`（預設按鈕是「否」）：\n"
+            + "\n".join(offenders)
+        )
