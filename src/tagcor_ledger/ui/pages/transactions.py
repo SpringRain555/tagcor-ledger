@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -48,6 +47,7 @@ from tagcor_ledger.ui.widgets.forms import (
     select_data,
 )
 from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
+from tagcor_ledger.ui.widgets.notice import warn
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
     bind_selection,
@@ -217,7 +217,7 @@ class TransactionsPage(QWidget):
             cursor=self.cursors[self.page_index],
         )
         if not result.success:
-            QMessageBox.warning(self, "交易無法載入", result_message(result))
+            warn(self, "交易無法載入", result_message(result))
             return
         self.model.replace_rows(list(result.details.get("transactions", [])))
         next_cursor = result.details.get("next_cursor")
@@ -261,7 +261,7 @@ class TransactionsPage(QWidget):
             self.first_page()
             self.changed.emit()
         else:
-            QMessageBox.warning(self, "無法刪除", result_message(result))
+            warn(self, "無法刪除", result_message(result))
 
 
 class TransactionEditDialog(QDialog):

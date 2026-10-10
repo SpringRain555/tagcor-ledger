@@ -163,9 +163,15 @@ flowchart LR
   `QMessageBox.question()` 不指定預設按鈕時，焦點落在「是」上 —— 對話框一出來按 Enter 就直接動手；
   而且它的按鈕是 Qt 的英文「Yes／No」（程式沒有載入 Qt 的翻譯），靜態函式改不了（兩件都是 2026-10-09 實測）。
   所以 `confirm()` 自己建對話框，**不加 `&Y`／`&N` 助記鍵**（加了單按 Y 就是「是」）。文字要講出
-  **要動的是哪一個**與**之後救不救得回來**。`test_every_confirmation_goes_through_the_shared_helper`
-  擋住任何地方呼叫 `question`，`tests/ui/test_confirm.py` 用真的對話框按 Enter、Esc 並看按鈕上的字；
-  其他測試攔確認框一律用 `tests/ui/conftest.py` 的 `answer_confirmations`（攔 `QMessageBox.exec`）。
+  **要動的是哪一個**與**之後救不救得回來**。
+- **提示框一律用 `widgets/notice.py` 的 `warn()`／`inform()`：按鈕寫「確定」。** 靜態的
+  `QMessageBox.warning()`／`information()` 底下是英文的「OK」，理由同上。「確定」跟專案裡每一張
+  自己的對話框（新增、排序、表單）的確認鈕同一個字。
+- `test_every_message_box_goes_through_the_shared_helpers` 擋住任何地方呼叫 `QMessageBox` 的靜態函式；
+  `tests/ui/test_confirm.py` 用真的對話框按 Enter、Esc 並看按鈕上的字。**UI 測試裡每一個 `QMessageBox.exec`
+  都被 `tests/ui/conftest.py` 的 `dialog_stub`（autouse）攔下**：確認框用 `answer_confirmations(否, 是, …)`
+  照順序回答，提示框要了 `notices` 才算預期；沒預期到的對話框讓測試**失敗**，而不是讓整包測試掛住
+  （modal 對話框在 offscreen 上沒有人按，以前漏攔一處就是掛住）。
 - **有些字串照抄程式外面的正本，不得縮短。** `domain/deposits.py` 的
   `MATURITY_ACTION_NAMES` 四個名字逐字照郵局定期儲金存單（`REQ-0007` §列舉 是文件側的
   正本）—— 使用者在那個下拉選單前面做的事就是把實體單據上的打勾抄過來，

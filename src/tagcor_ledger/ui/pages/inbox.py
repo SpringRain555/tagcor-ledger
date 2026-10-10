@@ -46,7 +46,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -64,6 +63,7 @@ from tagcor_ledger.ui.formatting import (
     result_message,
 )
 from tagcor_ledger.ui.widgets.confirm import confirm
+from tagcor_ledger.ui.widgets.notice import warn
 from tagcor_ledger.ui.widgets.simple_form import DateField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
     RowsModel,
@@ -215,7 +215,7 @@ class InboxSection(QWidget):
                 str(values["amount"]), allow_zero=True
             ).amount_minor
         except MoneyError as exc:
-            QMessageBox.warning(
+            warn(
                 self, "金額無效", error_text(exc, fallback=BAD_AMOUNT_TEXT)
             )
             return
@@ -225,7 +225,7 @@ class InboxSection(QWidget):
             occurred_on=str(values["occurred_on"]),
         )
         if not result.success:
-            QMessageBox.warning(self, "無法確認", result_message(result))
+            warn(self, "無法確認", result_message(result))
             return
         self.refresh()
         self.changed.emit()
@@ -251,7 +251,7 @@ class InboxSection(QWidget):
             return
         result = self.controller.skip_deposit_event(str(item["event_id"]))
         if not result.success:
-            QMessageBox.warning(self, "無法略過", result_message(result))
+            warn(self, "無法略過", result_message(result))
             return
         self.refresh()
         self.changed.emit()

@@ -19,8 +19,8 @@
 回傳值都照 Qt 的規則走），只換掉上面的字。**刻意不加 `&Y`／`&N` 助記鍵**：
 加了的話單按一個 Y 鍵就等於按「是」，那正是預設「否」想擋掉的那種順手。
 
-測試攔的是 `QMessageBox.exec`（`tests/ui/conftest.py` 的 `answer_confirmations`），
-不是 `question` —— 這裡已經不呼叫它了。
+測試攔的是 `QMessageBox.exec`（`tests/ui/conftest.py` 的 `dialog_stub` 與 `answer_confirmations`），
+不是 `question` —— 這裡已經不呼叫它了。提示框（只有一顆「確定」）在 `notice.py`，同一個做法。
 """
 
 from __future__ import annotations

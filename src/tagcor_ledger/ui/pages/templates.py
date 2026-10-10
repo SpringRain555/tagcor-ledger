@@ -23,7 +23,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
-    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -35,6 +34,7 @@ from tagcor_ledger.domain.models import SortLevel
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import result_message, template_values
 from tagcor_ledger.ui.widgets.confirm import confirm
+from tagcor_ledger.ui.widgets.notice import warn
 from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.template_dialog import TemplateDialog
 from tagcor_ledger.ui.widgets.table import (
@@ -232,7 +232,7 @@ class TemplatesPage(QWidget):
 
     def _finish(self, result: Result) -> None:
         if not result.success:
-            QMessageBox.warning(self, "操作失敗", result_message(result))
+            warn(self, "操作失敗", result_message(result))
             return
         self.refresh()
         self.changed.emit()

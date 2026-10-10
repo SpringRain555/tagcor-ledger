@@ -1,9 +1,12 @@
-"""確認框：按鈕寫「是」「否」、預設是「否」、還原照勾選框說實話。
+"""確認框與提示框：按鈕寫「是」「否」／「確定」、確認框預設是「否」、還原照勾選框說實話。
 
 `confirm()` 固定把預設按鈕設成「否」。**這裡用真的對話框按 Enter**，不是只檢查傳了什麼參數 ——
 要守的是「使用者按下 Enter 會發生什麼」，而那取決於 Qt 怎麼解讀參數（`question()` 不指定預設
-按鈕時，焦點落在「是」上）。按鈕上的字也是看真的那個對話框：靜態的 `question()` 給的是英文的
-Yes／No，`confirm()` 自己建對話框才換得掉。
+按鈕時，焦點落在「是」上）。按鈕上的字也是看真的那個對話框：靜態的 `question()`／`warning()`
+給的是英文的 Yes／No／OK，`confirm()` 與 `notice` 自己建對話框才換得掉。
+
+看真的對話框的那幾條要關掉 `conftest.py` 的 `dialog_stub`（`use_real_dialogs = True`）——
+其他測試裡每一個 `QMessageBox.exec` 都被它攔下來。
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
 from tagcor_ledger.ui.widgets.confirm import confirm
+from tagcor_ledger.ui.widgets.notice import inform, warn
 
 
 def _answer_with(action: Callable[[QMessageBox], None]) -> list[str]:
@@ -44,8 +48,9 @@ def _answer_with(action: Callable[[QMessageBox], None]) -> list[str]:
     return seen
 
 
-def test_pressing_enter_on_a_confirmation_means_no(qtbot: Any) -> None:
+def test_pressing_enter_on_a_confirmation_means_no(qtbot: Any, dialog_stub: Any) -> None:
     """對話框一出來就按 Enter：**不動手**。這正是 `confirm()` 存在的理由。"""
+    dialog_stub.use_real_dialogs = True
     parent = QWidget()
     qtbot.addWidget(parent)
     seen = _answer_with(lambda box: QTest.keyClick(box, Qt.Key.Key_Return))
@@ -54,8 +59,9 @@ def test_pressing_enter_on_a_confirmation_means_no(qtbot: Any) -> None:
     assert seen == ["確定要刪除嗎？"], "對話框沒有出現，這條沒在測 Enter"
 
 
-def test_clicking_yes_is_the_only_way_to_say_yes(qtbot: Any) -> None:
+def test_clicking_yes_is_the_only_way_to_say_yes(qtbot: Any, dialog_stub: Any) -> None:
     """陽性對照：按「是」要回傳 True —— 否則上一條的 False 可能只是「什麼都會回 False」。"""
+    dialog_stub.use_real_dialogs = True
     parent = QWidget()
     qtbot.addWidget(parent)
     seen = _answer_with(lambda box: box.button(QMessageBox.StandardButton.Yes).click())
@@ -64,11 +70,12 @@ def test_clicking_yes_is_the_only_way_to_say_yes(qtbot: Any) -> None:
     assert seen, "對話框沒有出現"
 
 
-def test_the_buttons_say_yes_and_no_in_chinese(qtbot: Any) -> None:
+def test_the_buttons_say_yes_and_no_in_chinese(qtbot: Any, dialog_stub: Any) -> None:
     """按鈕寫「是」「否」，不是 Qt 的英文 Yes／No；「否」同時是預設與 Esc 的那一顆。
 
     **不加 `&Y`／`&N` 助記鍵** —— 加了的話單按一個 Y 鍵就等於「是」。
     """
+    dialog_stub.use_real_dialogs = True
     parent = QWidget()
     qtbot.addWidget(parent)
     found: dict[str, Any] = {}
@@ -90,6 +97,28 @@ def test_the_buttons_say_yes_and_no_in_chinese(qtbot: Any) -> None:
     assert seen, "對話框沒有出現"
     assert (found["yes"], found["no"]) == ("是", "否"), found
     assert found["default_is_no"] and found["escape_is_no"], found
+
+
+def test_a_notice_says_ok_in_chinese_and_enter_closes_it(qtbot: Any, dialog_stub: Any) -> None:
+    """提示框只有一顆「確定」（不是 Qt 的英文 OK），按 Enter 就關掉；警告與資訊各自的圖示。"""
+    dialog_stub.use_real_dialogs = True
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    found: list[tuple[QMessageBox.Icon, list[str]]] = []
+
+    def inspect(box: QMessageBox) -> None:
+        found.append((box.icon(), [button.text() for button in box.buttons()]))
+        QTest.keyClick(box, Qt.Key.Key_Return)
+
+    for show in (warn, inform):
+        seen = _answer_with(inspect)
+        show(parent, "操作失敗", "這一筆存不進去。")
+        assert seen == ["這一筆存不進去。"], "對話框沒有出現（或 Enter 沒有關掉它）"
+
+    assert found == [
+        (QMessageBox.Icon.Warning, ["確定"]),
+        (QMessageBox.Icon.Information, ["確定"]),
+    ], found
 
 
 def test_the_restore_confirmation_tells_the_truth_about_the_backup(

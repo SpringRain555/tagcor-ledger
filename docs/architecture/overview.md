@@ -80,7 +80,7 @@ src/tagcor_ledger/
 │   │                   category_items.py 是並排類別與項目的那個分頁）
 │   └── widgets/        sidebar、layout、table、forms、filters、simple_form、
 │                       asset_share、template_dialog、deposit_dialog、
-│                       reorder_dialog、sort_editor、confirm（確認框的唯一出口）
+│                       reorder_dialog、sort_editor、confirm（確認框）、notice（提示框）
 └── app/                bootstrap、paths、path_settings、window_state、
                         logging_setup、single_instance、startup、resources
 ```

@@ -127,7 +127,9 @@ def test_confirming_an_inbox_item_refreshes_the_transaction_list(window, make_de
     )
 
 
-def test_a_bad_amount_when_confirming_says_so_in_chinese(window, make_deposit, monkeypatch) -> None:
+def test_a_bad_amount_when_confirming_says_so_in_chinese(
+    window, make_deposit, monkeypatch, notices
+) -> None:
     """確認時打錯金額：跳中文警告，**而且不入帳**。
 
     這是「使用者照存摺輸入實際利息」的入口 —— 打錯字被安靜吞掉的話，
@@ -140,16 +142,11 @@ def test_a_bad_amount_when_confirming_says_so_in_chinese(window, make_deposit, m
     before = window.inbox.model.rowCount()
 
     answer_form(monkeypatch, {"occurred_on": "2021-01-15", "amount": "一千元"})
-    warnings: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.inbox.QMessageBox.warning",
-        lambda parent, title, text: warnings.append((title, text)),
-    )
 
     window.inbox.confirm_selected()
 
-    assert warnings, "金額打錯卻什麼都沒說"
-    title, text = warnings[0]
+    assert notices, "金額打錯卻什麼都沒說"
+    title, text = notices[0].title, notices[0].text
     assert title == "金額無效"
     assert "數字" in text, f"訊息要講人話：{text!r}"
     assert "MoneyError" not in text and "AMOUNT_" not in text, "不准印英文碼"
@@ -219,7 +216,7 @@ def test_skipping_a_monthly_payout_removes_it_without_creating_a_transaction(
     assert window.transactions.model.rowCount() == 0
 
 
-def test_skipping_a_maturity_is_refused_in_chinese(window, make_deposit, monkeypatch) -> None:
+def test_skipping_a_maturity_is_refused_in_chinese(window, make_deposit, notices) -> None:
     """**到期不能略過。**
 
     `settle_event()` 只改事件狀態，而 `deposit_events` 有
@@ -234,16 +231,11 @@ def test_skipping_a_maturity_is_refused_in_chinese(window, make_deposit, monkeyp
     window.inbox.refresh()
     before = window.inbox.model.rowCount()
 
-    warnings: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.inbox.QMessageBox.warning",
-        lambda parent, title, text: warnings.append((title, text)),
-    )
     window.inbox.table.selectRow(0)
     window.inbox.skip_selected()
 
-    assert warnings, "到期被略過卻什麼都沒說"
-    text = warnings[0][1]
+    assert notices, "到期被略過卻什麼都沒說"
+    text = notices[0].text
     assert "0" in text and "確認" in text, f"要講出替代作法：{text!r}"
     assert "結束合約" in text or "解約" in text, text
     assert "DEPOSIT_" not in text, f"錯誤碼漏到畫面上了：{text!r}"

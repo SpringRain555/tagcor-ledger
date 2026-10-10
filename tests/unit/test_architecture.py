@@ -751,40 +751,48 @@ def test_every_dropdown_comes_from_the_shared_factory() -> None:
         )
 
 
-def _question_calls(source: str) -> int:
-    """這段程式呼叫 `QMessageBox.question(...)` 幾次（AST 的屬性呼叫，不做字串比對）。"""
+STATIC_MESSAGE_BOXES = {"question", "warning", "information", "critical", "about", "aboutQt"}
+"""`QMessageBox` 的靜態函式。它們的按鈕都是 Qt 的英文標準文字，而且建好就直接 exec，改不了。"""
+
+
+def _static_message_box_calls(source: str) -> int:
+    """這段程式呼叫 `QMessageBox.question(...)`／`.warning(...)` 這類靜態函式幾次（AST，不做字串比對）。"""
     return sum(
         1
         for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "question"
+        and node.func.attr in STATIC_MESSAGE_BOXES
         and isinstance(node.func.value, ast.Name)
         and node.func.value.id == "QMessageBox"
     )
 
 
-def test_every_confirmation_goes_through_the_shared_helper() -> None:
-    """**`ui/` 底下不得呼叫 `QMessageBox.question`**，一律用 `widgets.confirm.confirm()`。
+def test_every_message_box_goes_through_the_shared_helpers() -> None:
+    """**`ui/` 底下不得呼叫 `QMessageBox` 的靜態函式**：確認框用 `widgets.confirm.confirm()`，
+    提示框用 `widgets.notice.warn()`／`inform()`。
 
-    兩個理由，都是 2026-10-09 實測的：
+    都是 2026-10-09 實測的：
 
+    - 靜態函式的按鈕是 Qt 的英文「Yes／No／OK」（程式沒有載入 Qt 的翻譯），而靜態函式改不了
+      按鈕上的字。所以兩個 helper 都自己建對話框，只換字。
     - `question()` 不指定預設按鈕時，焦點落在「是」上，對話框一出來按 Enter 就是「是」。
       這條規則以前只寫在 `reset.py` 的 docstring 裡，於是八個確認框只有兩個記得。
-    - 它的按鈕是 Qt 的英文「Yes／No」（程式沒有載入 Qt 的翻譯），而靜態函式改不了按鈕上的字。
-      所以 `confirm()` 自己建對話框，**連它自己也不呼叫 `question`**。
+    - 靜態函式在 C++ 那一側呼叫 exec，測試攔不到 —— 漏攔一個就是整包測試掛住
+      （`tests/ui/conftest.py` 的 `dialog_stub` 只攔得到 Python 這一側的 exec）。
     """
-    # 陽性對照：抽取器要認得出一個呼叫，否則底下會空過。
-    assert _question_calls("QMessageBox.question(None, 't', 'x')") == 1, "抽取器壞了"
-    assert _question_calls("QMessageBox.warning(None, 't', 'x')") == 0
+    # 陽性對照：抽取器要認得出呼叫，也要分得出不是 QMessageBox 的同名函式。
+    assert _static_message_box_calls("QMessageBox.question(None, 't', 'x')") == 1, "抽取器壞了"
+    assert _static_message_box_calls("QMessageBox.warning(None, 't', 'x')") == 1, "抽取器壞了"
+    assert _static_message_box_calls("logger.warning('x')") == 0
     offenders: list[str] = []
     for path in _modules("ui"):
-        count = _question_calls(path.read_text(encoding="utf-8"))
+        count = _static_message_box_calls(path.read_text(encoding="utf-8"))
         if count:
             relative = path.relative_to(SOURCE_ROOT).as_posix()
-            offenders.append(f"  {relative} 呼叫了 {count} 次 QMessageBox.question")
+            offenders.append(f"  {relative} 呼叫了 {count} 次 QMessageBox 的靜態函式")
     if offenders:
         pytest.fail(
-            "確認框一律用 `widgets.confirm.confirm()`（按鈕「是／否」、預設「否」）：\n"
-            + "\n".join(offenders)
+            "確認框用 `confirm()`（按鈕「是／否」、預設「否」），提示框用 `warn()`／`inform()`"
+            "（按鈕「確定」）：\n" + "\n".join(offenders)
         )

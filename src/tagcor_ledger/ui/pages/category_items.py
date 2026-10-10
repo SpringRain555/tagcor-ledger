@@ -54,7 +54,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QVBoxLayout,
     QWidget,
 )
@@ -70,6 +69,7 @@ from tagcor_ledger.ui.pages.catalog import (
     selection_action_buttons,
 )
 from tagcor_ledger.ui.widgets.forms import select_data
+from tagcor_ledger.ui.widgets.notice import warn
 from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, SortSection, ask_order
 from tagcor_ledger.ui.widgets.table import allow_click_to_deselect, bind_any_selection
 
@@ -249,4 +249,4 @@ class CategoryItemsTab(QWidget):
         self.refresh()
         self.changed.emit()
         if not result.success:
-            QMessageBox.warning(self, "操作失敗", result_message(result))
+            warn(self, "操作失敗", result_message(result))

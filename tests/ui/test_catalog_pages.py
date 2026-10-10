@@ -419,24 +419,19 @@ def test_moving_an_item_to_another_category_from_the_items_tab(window, monkeypat
 
 
 def test_moving_an_item_with_nowhere_to_go_says_so_instead_of_opening_a_form(
-    window, monkeypatch
+    window, monkeypatch, notices
 ) -> None:
     """只有一個類別時，開一張只能選同一個的表單是在浪費使用者一次確定。"""
     page = window.operation_settings.items
     page.refresh()
     page.table.selectRow(0)
 
-    told: list[str] = []
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.catalog.QMessageBox.information",
-        lambda parent, title, text: told.append(title),
-    )
     monkeypatch.setattr(
         "tagcor_ledger.ui.pages.catalog.ask_form",
         lambda *args, **kwargs: pytest.fail("沒有別的類別可搬，不該開表單"),
     )
     page.move_selected()
-    assert told == ["沒有其他類別"]
+    assert [notice.title for notice in notices] == ["沒有其他類別"]
 
 
 def test_the_parent_dropdown_keeps_every_category_while_searching(window) -> None:

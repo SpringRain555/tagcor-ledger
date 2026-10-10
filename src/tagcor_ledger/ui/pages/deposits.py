@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -50,6 +49,7 @@ from tagcor_ledger.ui.widgets.deposit_dialog import (
     DepositTermDialog,
     TerminateTermDialog,
 )
+from tagcor_ledger.ui.widgets.notice import inform, warn
 from tagcor_ledger.ui.widgets.table import (
     SETTINGS_TABLE_ROWS,
     RowsModel,
@@ -182,9 +182,9 @@ class DepositsPage(QWidget):
         """
         result = self.controller.generate_deposit_events()
         if not result.success:
-            QMessageBox.warning(self, "產生失敗", result_message(result))
+            warn(self, "產生失敗", result_message(result))
             return
-        QMessageBox.information(
+        inform(
             self,
             "產生完成",
             f"已產生 {int(result.details.get('generated', 0))} 件待確認草稿。\n\n"
@@ -286,7 +286,7 @@ class DepositsPage(QWidget):
         if item is None:
             return
         if str(item["status"]) != DepositTermStatus.ACTIVE:
-            QMessageBox.warning(
+            warn(
                 self,
                 "無法解約",
                 "只有「存續中」的期可以中途解約。這一期已經結清、續存或解約過了。",
@@ -304,7 +304,7 @@ class DepositsPage(QWidget):
 
     def _finish(self, result: Any, failure_title: str) -> None:
         if not result.success:
-            QMessageBox.warning(self, failure_title, result_message(result))
+            warn(self, failure_title, result_message(result))
             return
         self.refresh()
         self.changed.emit()

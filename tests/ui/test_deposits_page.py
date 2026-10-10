@@ -30,7 +30,7 @@ def test_deposits_tab_and_pending_deposit_section_exist(window) -> None:
     assert not page.confirm_button.isVisibleTo(page)
 
 
-def test_deposit_contract_flows_into_pending_inbox(window, make_deposit, monkeypatch) -> None:
+def test_deposit_contract_flows_into_pending_inbox(window, make_deposit, notices) -> None:
     controller = window.controller
     make_deposit(controller, generate=False)
 
@@ -41,12 +41,8 @@ def test_deposit_contract_flows_into_pending_inbox(window, make_deposit, monkeyp
     # **走真正的按鈕**，不是直接呼叫 controller —— 那顆按鈕在 v0.23.0 才補上
     # （README 早就寫著它存在，程式裡卻沒有），走它才測得到有沒有接線。
     page = window.operation_settings.deposits
-    told: list[str] = []
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.deposits.QMessageBox.information",
-        lambda parent, title, text: told.append(text),
-    )
     page.generate_button.click()
+    told = [notice.text for notice in notices]
     assert told and "不會自動入帳" in told[0], told
 
     contracts = [
@@ -56,7 +52,9 @@ def test_deposit_contract_flows_into_pending_inbox(window, make_deposit, monkeyp
     assert "郵局定存" in contracts, contracts
 
 
-def test_adding_an_account_that_already_exists_just_selects_it(window, qtbot, monkeypatch) -> None:
+def test_adding_an_account_that_already_exists_just_selects_it(
+    window, qtbot, monkeypatch, notices
+) -> None:
     """定存對話框的「新增帳戶…」打到既有名字時，要把它選起來而不是丟錯誤。
 
     預設值是「郵局定存」，也就是最可能已經開過的名字 —— 第二次按必然撞名。
@@ -67,23 +65,15 @@ def test_adding_an_account_that_already_exists_just_selects_it(window, qtbot, mo
     dialog = DepositContractDialog(window.controller, window)
     qtbot.addWidget(dialog)
 
-    warnings: list[str] = []
-    infos: list[str] = []
     monkeypatch.setattr(
         "tagcor_ledger.ui.widgets.deposit_dialog.ask_form",
         lambda *a, **k: {"name": "郵局定存", "balance": "0"},
     )
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.widgets.deposit_dialog.QMessageBox.warning",
-        staticmethod(lambda parent, title, text, *a, **k: warnings.append(text)),
-    )
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.widgets.deposit_dialog.QMessageBox.information",
-        staticmethod(lambda parent, title, text, *a, **k: infos.append(text)),
-    )
 
     dialog.add_account()
 
+    warnings = [notice.text for notice in notices if notice.kind == "warning"]
+    infos = [notice.text for notice in notices if notice.kind == "information"]
     assert not warnings, f"不該出現錯誤框：{warnings}"
     assert infos and "郵局定存" in infos[0]
     assert dialog.account.currentText() == "郵局定存", "沒有把既有的那個帳戶選起來"
@@ -293,7 +283,7 @@ def test_closing_a_contract_hides_it_until_you_ask_to_see_it(window, make_deposi
 
 
 def test_closing_a_contract_with_a_live_term_says_what_to_do_instead(
-    window, make_deposit, monkeypatch, answer_confirmations
+    window, make_deposit, answer_confirmations, notices
 ) -> None:
     """擋下來的時候要指出「中途解約」，不能只說不行。"""
     controller = window.controller
@@ -303,14 +293,9 @@ def test_closing_a_contract_with_a_live_term_says_what_to_do_instead(
     page.contracts.selectRow(0)
 
     answer_confirmations(True)
-    warnings: list[str] = []
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.deposits.QMessageBox.warning",
-        staticmethod(lambda parent, title, text, *a, **k: warnings.append(text)),
-    )
-
     page.close_button.click()
 
+    warnings = [notice.text for notice in notices if notice.kind == "warning"]
     assert warnings, "還有存續中的期卻讓它關掉了"
     assert "中途解約" in warnings[0], warnings[0]
     assert "DEPOSIT_" not in warnings[0], f"錯誤碼漏到畫面上了：{warnings[0]}"

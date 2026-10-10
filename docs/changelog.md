@@ -8,6 +8,26 @@
 
 ## 未發布
 
+### 提示框的按鈕改成「確定」；UI 測試裡沒預期到的對話框會失敗，不再掛住
+
+「操作失敗」「產生完成」這類提示框底下一直是英文的「OK」—— 跟確認框的 Yes／No 同一個原因
+（靜態的 `QMessageBox.warning()`／`information()` 用 Qt 的標準按鈕文字，程式沒有載入 Qt 的翻譯）。
+使用者要求改成「確定」。
+
+- **新的 `widgets/notice.py`：`warn()`（警告圖示）與 `inform()`（資訊圖示）**，自己建對話框、按鈕寫「確定」——
+  跟專案裡每一張自己的對話框（新增、排序、表單）的確認鈕同一個字。24 處靜態呼叫（10 個檔案）全部改用它。
+- 守門擴大成 `test_every_message_box_goes_through_the_shared_helpers`：`ui/` 底下不得呼叫 `QMessageBox` 的
+  **任何**靜態函式（question、warning、information、critical、about）。
+- **UI 測試的安全網**：`tests/ui/conftest.py` 的 `dialog_stub` 是 autouse，攔下每一個 `QMessageBox.exec`。
+  確認框照 `answer_confirmations(否, 是, …)` 回答，提示框要了 `notices` 才算預期；**沒預期到的對話框、
+  給了答案卻沒被問到，測試結束時失敗**，訊息裡就是那個對話框的內容。以前每一條測試各自換掉靜態函式，
+  漏換一處的代價是**整包測試掛住** —— modal 對話框在 offscreen 上沒有人按，而靜態函式在 C++ 那一側
+  呼叫 exec，Python 這邊攔不到（實測）。六處各自替換 `warning`／`information` 的寫法改成 `notices`。
+- 測試：真的提示框上只有一顆「確定」、Enter 關得掉、警告與資訊各自的圖示。反向驗證：拿掉「確定」那一行，
+  按鈕變回 `OK`、那一條紅；放一個呼叫 `QMessageBox.warning` 的模組，守門紅；三條故意出錯的測試
+  （沒預期的提示框、沒給答案的確認框、答案沒被用到）各自在 teardown 紅，**沒有一條掛住**。
+- 不受影響：啟動失敗與全域錯誤的那兩個對話框本來就是自己建的，按鈕早就是中文（「關閉」「繼續使用」）。
+
 ### 確認框的按鈕改成「是／否」
 
 全中文的確認框底下一直是英文的「Yes／No」（截圖時發現，從第一天就這樣）：靜態的 `QMessageBox.question()`
@@ -22,7 +42,7 @@
   不受影響（實測）。原本十處各自替換 `question` 的寫法全部改掉。
 - 測試：真的對話框上的字是「是」「否」、Esc 是否（Enter 是否那條原本就有）。反向驗證：拿掉「是」那一行，
   按鈕變回 `&Yes`、那一條紅；放一個呼叫 `question` 的模組，守門紅。
-- 還沒改的：「操作失敗」這類**提示框**（`QMessageBox.warning`／`information`）的「OK」按鈕仍是英文。
+- 「操作失敗」這類**提示框**的「OK」在下一節改成「確定」。
 
 ### 交易紀錄：「刪除」改成真的移除（schema v13）
 

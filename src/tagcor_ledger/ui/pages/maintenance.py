@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -25,6 +24,7 @@ from tagcor_ledger.application.failures import message_for
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import backup_row_text, error_text, result_message
 from tagcor_ledger.ui.widgets.confirm import confirm
+from tagcor_ledger.ui.widgets.notice import warn
 from tagcor_ledger.ui.widgets.table import bind_selection, set_button_role
 
 BACKUP_FALLBACK = (
@@ -123,7 +123,7 @@ class MaintenancePage(QWidget):
             self.result.setText(f"備份已建立：{path}")
             self.refresh()
         except Exception as exc:
-            QMessageBox.warning(
+            warn(
                 self, "備份失敗", error_text(exc, fallback=BACKUP_FALLBACK)
             )
 
@@ -163,7 +163,7 @@ class MaintenancePage(QWidget):
             return
         result = self.controller.delete_backup(path)
         if not result.success:
-            QMessageBox.warning(self, "刪除失敗", result_message(result))
+            warn(self, "刪除失敗", result_message(result))
             self.refresh()
             return
         self.result.setText("備份已刪除。")
@@ -198,7 +198,7 @@ class MaintenancePage(QWidget):
         validation = self.controller.validate_backup(path)
         if not validation["valid"]:
             code = str(validation.get("error_code") or "")
-            QMessageBox.warning(
+            warn(
                 self,
                 "無法還原",
                 message_for(code) or f"這份備份不可用（{code or '原因不明'}）。",
@@ -225,7 +225,7 @@ class MaintenancePage(QWidget):
             self.restored.emit()
             self.refresh()
         except Exception as exc:
-            QMessageBox.warning(
+            warn(
                 self, "還原失敗", error_text(exc, fallback=BACKUP_FALLBACK)
             )
 
@@ -233,7 +233,7 @@ class MaintenancePage(QWidget):
         try:
             self.result.setText(f"CSV 已匯出：{self.controller.export_csv()}")
         except Exception as exc:
-            QMessageBox.warning(
+            warn(
                 self,
                 "匯出失敗",
                 error_text(exc, fallback="CSV 無法匯出。請確認匯出資料夾可寫入、磁碟還有空間。"),
@@ -244,7 +244,7 @@ class MaintenancePage(QWidget):
         if result.success:
             self.result.setText(f"餘額盤點 CSV 已匯出：{result.details.get('path')}")
             return
-        QMessageBox.warning(self, "匯出失敗", result_message(result))
+        warn(self, "匯出失敗", result_message(result))
 
     def export_diagnostics(self) -> None:
         result = self.controller.export_diagnostics()
@@ -254,7 +254,7 @@ class MaintenancePage(QWidget):
                 "（不含金額、備註與個人資料夾路徑，可直接提供給他人）"
             )
             return
-        QMessageBox.warning(self, "診斷資訊匯出失敗", result_message(result))
+        warn(self, "診斷資訊匯出失敗", result_message(result))
 
     def _selected_path(self) -> Path | None:
         item = self.list.currentItem()

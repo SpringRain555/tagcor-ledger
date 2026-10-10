@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -54,6 +53,7 @@ from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import display_date, minor_text, rate_input_text, result_message
 from tagcor_ledger.ui.widgets.forms import combo_box, date_field, fill_combo, select_data
 from tagcor_ledger.ui.widgets.layout import FORM_WIDTH
+from tagcor_ledger.ui.widgets.notice import inform, warn
 from tagcor_ledger.ui.widgets.simple_form import TextField, ask_form
 
 MAX_TERM_MONTHS = 600
@@ -243,7 +243,7 @@ class DepositContractDialog(QDialog):
             return
 
         if self._select_account_named(cleaned):
-            QMessageBox.information(
+            inform(
                 self,
                 "已經有這個帳戶",
                 f"「{cleaned}」已經在清單裡了，已經幫你選起來。",
@@ -252,7 +252,7 @@ class DepositContractDialog(QDialog):
 
         result = self.controller.create_account(cleaned, str(values["balance"]).strip() or "0")
         if not result.success:
-            QMessageBox.warning(self, "無法新增帳戶", result_message(result))
+            warn(self, "無法新增帳戶", result_message(result))
             return
         self._reload_accounts()
         self._select_account_named(cleaned)

@@ -33,7 +33,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
-    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -51,6 +50,7 @@ from tagcor_ledger.ui.formatting import (
 )
 from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.filters import CatalogFilterBar
+from tagcor_ledger.ui.widgets.notice import inform, warn
 from tagcor_ledger.ui.widgets.reorder_dialog import ReorderEntry, ask_order
 from tagcor_ledger.ui.widgets.simple_form import ChoiceField, TextField, ask_form
 from tagcor_ledger.ui.widgets.table import (
@@ -332,7 +332,7 @@ class CatalogPage(QWidget):
 
     def _finish(self, result: Result) -> None:
         if not result.success:
-            QMessageBox.warning(self, "操作失敗", result_message(result))
+            warn(self, "操作失敗", result_message(result))
             return
         self.refresh()
         self.changed.emit()
@@ -549,7 +549,7 @@ class ItemsPage(CategoryPageBase):
         current_parent = str(item["parent_id"])
         parents = self.controller.category_options()
         if all(str(parent["category_id"]) == current_parent for parent in parents):
-            QMessageBox.information(
+            inform(
                 self, "沒有其他類別", "請先在左邊的「類別」建立另一個類別，才有地方可以搬。"
             )
             return
@@ -599,7 +599,7 @@ class ItemsPage(CategoryPageBase):
         """
         parents = self.controller.category_options()
         if not parents:
-            QMessageBox.information(self, "沒有類別", "請先在左邊的「類別」建立一個類別。")
+            inform(self, "沒有類別", "請先在左邊的「類別」建立一個類別。")
             return None
         values = ask_form(
             self,

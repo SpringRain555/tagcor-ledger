@@ -19,7 +19,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QLabel,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -29,6 +28,7 @@ from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import error_text
 from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.forms import show_status, status_label
+from tagcor_ledger.ui.widgets.notice import warn
 from tagcor_ledger.ui.widgets.table import set_button_role
 
 RESET_FALLBACK = "記帳資料無法重製，資料沒有變動。請匯出診斷資訊回報。"
@@ -99,7 +99,7 @@ class ResetPage(QWidget):
             self.controller.reset_ledger(create_backup_first=backup)
         except Exception as exc:  # noqa: BLE001 —— 這裡要攔住一切，不能讓視窗無聲消失
             text = error_text(exc, fallback=RESET_FALLBACK)
-            QMessageBox.warning(self, "重製失敗", text)
+            warn(self, "重製失敗", text)
             show_status(self.result, text, ok=False)
             return
         show_status(
