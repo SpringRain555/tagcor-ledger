@@ -8,6 +8,17 @@
 
 ## 未發布
 
+### CI：記帳頁「切流向時欄位不動」那條改成只在 Windows 量
+
+推上 GitHub 之後 CI 是紅的：`test_switching_flow_never_moves_the_fields_that_stay` 在 Linux 上量到欄位左緣
+差 1 px，而且 2026-10-05 那次推送起就紅在這一條。它比的是座標**相等**，結果取決於字型 —— Linux 的字型下，
+轉帳那幾個四字標籤比算出來的寬 1 px；Windows 上中文字寬是整數，實機 150% 縮放量過也是 0。程式不用改。
+
+- 那一條標成 `geometry`，跟其他量像素的測試一樣歸本機的 pre-push 與 `Verify.ps1 -Ui` 管。
+- `pyproject.toml` 的 marker 說明補一句：比數值的才標，只比上下順序的不用。
+- 「CI 少了量像素的 21 條」這個條數從九處文件與註解拿掉（CLAUDE.md／AGENTS.md、README、`docs/environment`、
+  pre-push、workflow）—— 它已經漂過一次（實際是 22，現在 23），條數看 pytest 輸出的 deselected。
+
 ### 提示框的按鈕改成「確定」；UI 測試裡沒預期到的對話框會失敗，不再掛住
 
 「操作失敗」「產生完成」這類提示框底下一直是英文的「OK」—— 跟確認框的 Yes／No 同一個原因

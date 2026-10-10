@@ -4,16 +4,17 @@
 #
 #   pre-commit  每次 commit，2 秒（ruff + mypy）
 #   pre-push    每次 push，約 70 秒（ruff + mypy + 全部測試）   ← 這一份
-#   CI          push 之後，約 60 秒（同上，但少了量像素的那 21 條）
+#   CI          push 之後，約 60 秒（同上，但少了量像素的那幾條）
 #
 # 為什麼 pytest 可以進 pre-push，卻不能進 pre-commit：**差別在頻率。**
 # pre-commit 一天觸發十幾次，66 秒會讓人習慣性打 --no-verify，而一個被習慣性
 # 繞過的閘門比沒有閘門更糟。pre-push 通常一個工作段落才一次，70 秒可以接受。
 #
 # 為什麼不是「反正有 CI 就好」：CI 跑在 push **之後**，main 會短暫變紅；而且
-# **CI 跑不了量像素的那 21 條**（Linux 的字體與 Qt 平台外掛都不同，這個專案是
-# Windows-first）。這一份跑在 Windows 上，所以它跑得比 CI 完整 —— 它是那 21 條
-# 唯一會被自動執行的地方。
+# **CI 跑不了量像素的那幾條**（`geometry` marker；Linux 的字體與 Qt 平台外掛都不同，
+# 這個專案是 Windows-first）。這一份跑在 Windows 上，所以它跑得比 CI 完整 —— 它是那幾條
+# 唯一會被自動執行的地方。條數不寫在這裡：寫了就會漂（寫 21、實際 22 過），要看就看
+# pytest 輸出的 deselected。
 #
 # 啟用：git config core.hooksPath .githooks
 # 例外：git push --no-verify
@@ -59,7 +60,7 @@ fi
 echo "  OK    mypy --strict"
 
 # offscreen 才跑得動 UI 測試（沒有真的視窗）。**這裡不排除 geometry** ——
-# 那 21 條只有在 Windows 上量才有意義，而這裡就是 Windows。
+# 量像素的那幾條只有在 Windows 上量才有意義，而這裡就是 Windows。
 QT_QPA_PLATFORM=offscreen
 export QT_QPA_PLATFORM
 

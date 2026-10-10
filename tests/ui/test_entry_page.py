@@ -104,6 +104,7 @@ def test_the_entry_form_asks_in_the_order_the_user_fills_it(window) -> None:
     assert len(set(transfer_tops)) == len(transfer_tops)
 
 
+@pytest.mark.geometry
 def test_switching_flow_never_moves_the_fields_that_stay(window) -> None:
     """切流向時，留著的欄位**一格都不動**。
 
@@ -114,6 +115,11 @@ def test_switching_flow_never_moves_the_fields_that_stay(window) -> None:
 
     支出、收入、轉帳・我的帳戶之間都是七列，所以金額、備註、儲存鈕的 y 要完全一樣；
     x 則是四種情形都一樣。
+
+    **比的是座標相等，所以標 `geometry`。** Linux 的字型下，轉帳那幾個四字標籤比
+    `_pin_label_column()` 算出來的寬 1 px，欄位跟著右移 1 px —— CI 從 2026-10-05 起
+    紅在這一條。Windows 上中文字寬是整數（2026-10-10 實機 150% 縮放量過，每字 16 px），
+    量出來是 0。
     """
     page = window.entry
     window.show_page(PageId.ENTRY)

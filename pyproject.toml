@@ -59,6 +59,8 @@ markers = [
     # 版面量出來的數字不會一樣 —— 而這個專案是 Windows-first，在 Linux 上驗版面
     # 驗到的不是使用者會看到的東西。CI 用 `-m "not geometry"` 跳過，這幾條由
     # 本機的 `.\tools\Verify.ps1 -Ui` 負責。
+    # **比數值的才標**（座標相等、寬度夠不夠、差幾 px）；只比上下順序的不用，順序不隨字型變。
+    # 2026-10-10 漏標一條，Linux 上差 1 px，CI 紅了五天才被看到（docs/lessons.md）。
     "geometry: measures widget pixels; Windows-only, excluded from Linux CI",
 ]
 

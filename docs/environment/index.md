@@ -67,7 +67,7 @@ python -m tagcor_ledger --data-dir .\.local-data-check --init-data --json
 offscreen 沒有中文字型，中文會渲染成豆腐塊。
 
 三層閘門各擋不同的東西：`.githooks/pre-commit`（ruff ＋ mypy，約 2 秒）、
-`.githooks/pre-push`（加全部測試，約 70 秒）、GitHub Actions（同 pre-push，少了量像素的那 21 條）。
+`.githooks/pre-push`（加全部測試，約 70 秒）、GitHub Actions（同 pre-push，少了量像素的那幾條）。
 第一次 clone 要跑一次 `git config core.hooksPath .githooks`。
 
 ## 4. 怎麼更新

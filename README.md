@@ -285,7 +285,7 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 |---|---|---|---|
 | `pre-commit` | 每次 commit | ruff ＋ mypy | 約 2 秒 |
 | `pre-push` | 每次 push | ruff ＋ mypy ＋ **全部測試** | 約 70 秒 |
-| GitHub Actions | push 之後 | 同上，少了量像素的 21 條 | 約 60 秒 |
+| GitHub Actions | push 之後 | 同上，少了量像素的那幾條 | 約 60 秒 |
 
 `pre-push` 跑得比 CI 完整：量像素的測試（`geometry` marker）只在 Windows 上量才
 有意義，而 CI 跑 Linux。要跳過任一層用 `--no-verify`。

@@ -9,7 +9,7 @@
 # runner 上的乾淨 venv，不存在混裝。所以只在這個 workflow 的 step 裡裝，
 # **絕不加進 pyproject.toml 的 dependencies** —— 那會讓開發者的 Windows 環境踩到雷。
 #
-# **跑得動的都跑，只排除量像素的那 21 條**（`-m "not geometry"`）。那幾條量出來的
+# **跑得動的都跑，只排除量像素的那幾條**（`-m "not geometry"`，條數看輸出的 deselected）。那幾條量出來的
 # 數字取決於字體與 Qt 平台外掛，而這個專案是 Windows-first —— 在 Linux 上驗版面，
 # 驗到的不是使用者會看到的東西，失敗訊息還會指向錯的方向。它們由本機的
 # `.\tools\Verify.ps1 -Ui` 負責，而那是發版前一定會跑的。
