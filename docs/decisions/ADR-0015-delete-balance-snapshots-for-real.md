@@ -4,6 +4,8 @@
 - 日期：2026-10-05
 - 取代：[REQ-0003](../requirements/REQ-0003-balance-snapshots.md) 原本的「刪除的盤點（`voided`，紀錄保留）」。
   **交易的刪除不受影響**，仍然是 `void`（[state-machines.md](../architecture/state-machines.md) §1）。
+- 後續：交易的刪除 2026-10-09 也改成真的移除（[ADR-0017](ADR-0017-delete-transactions-for-real.md)）——
+  下面「後果」裡「交易的刪除沒有跟著改」那一條從那天起不成立。
 
 ## 背景
 

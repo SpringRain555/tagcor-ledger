@@ -55,7 +55,7 @@ erDiagram
         text transaction_id PK
         int revision "樂觀鎖"
         text entry_type "income｜expense｜transfer｜adjustment"
-        text status "active｜voided"
+        text status "v13 起只會是 active"
         text occurred_at
     }
     account_postings {
@@ -99,7 +99,7 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
 ## Migration registry
 
 - v1：核心帳務表、舊 payee schema、FTS、settings、audit。
-- v2：`transactions.replaces_transaction_id`。
+- v2：`transactions.replaces_transaction_id`（**v13 起不再寫入**，見 v13）。
 - v3：模板、定期收支（`recurring_schedules`）、待確認草稿（`scheduled_occurrences`）。
 - v4：`balance_snapshots`。
 - v5：移除 payee schema、重建 FTS、移除啟動備份設定。
@@ -123,6 +123,13 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
 - v12：**刪掉 `status = 'voided'` 的餘額盤點**，盤點的「刪除」從這一版起是真的移除。
   `status` 欄與 CHECK 留著（拿掉要重建整張表），之後只會是 `active`。理由見
   [ADR-0015](../decisions/ADR-0015-delete-balance-snapshots-for-real.md)。
+- v13：**刪掉 `status = 'voided'` 的交易**，交易的「刪除」從這一版起是真的移除。外鍵是開著的，
+  所以有順序：`replaces_transaction_id` 全部清成 NULL（它只指向被替換掉的舊轉帳，那些全是 `voided`；
+  之後也不再寫，替換關係改記在稽核列）→ 指向已刪除交易的 `deposit_events.transaction_id` 清成 NULL
+  （事件維持已確認）→ 刪它們的 FTS、allocation、posting → 刪交易。`status` 欄與 CHECK 留著。
+  理由見 [ADR-0017](../decisions/ADR-0017-delete-transactions-for-real.md)。
+  **`deposit_events.transaction_id` 從這一版起可能是 NULL 而事件是 `confirmed`** ——
+  代表它產生的那筆交易後來被刪掉了。
 
 **每一版都是新的一版，不改舊的那一版**，因為使用者的資料庫已經跑過了 —— migration
 記錄下來就不會再跑第二次，改舊版的內容對既有資料庫毫無效果。所以 v3 建的兩張表由

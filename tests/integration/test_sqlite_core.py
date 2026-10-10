@@ -8,11 +8,11 @@ from tagcor_ledger.application.transaction_service import (
     AddTransactionRequest,
     AddTransfer,
     AddTransferRequest,
+    DeleteTransaction,
     ListTransactions,
     TransactionQuery,
     UpdateTransaction,
     UpdateTransactionRequest,
-    VoidTransaction,
 )
 from tagcor_ledger.domain.models import TransactionFilter
 from tagcor_ledger.domain.money import Money
@@ -165,7 +165,7 @@ def test_editing_a_transaction_leaves_no_stale_row_in_the_search_index(
     assert int(rows["n"]) == 1, "一筆交易在 FTS 裡只能有一列，改幾次都一樣"
 
 
-def test_keyset_pagination_search_and_void(tmp_path: Path) -> None:
+def test_keyset_pagination_search_and_delete(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "ledger-data")
     store = LedgerStore(paths)
     add = AddTransaction(paths, store)
@@ -200,7 +200,7 @@ def test_keyset_pagination_search_and_void(tmp_path: Path) -> None:
     assert len(second.details["transactions"]) == 1
 
     transaction_id = first.details["transactions"][0]["transaction_id"]
-    assert VoidTransaction(paths, store).execute(transaction_id).success
+    assert DeleteTransaction(paths, store).execute(transaction_id).success
     assert len(ListTransactions(paths, store).execute().details["transactions"]) == 2
 
 
@@ -290,7 +290,7 @@ def test_account_balances_match_the_single_account_query(tmp_path: Path) -> None
             destination_account_id="acct_cash",
         )
     )
-    voided = AddTransaction(paths, store).execute(
+    deleted = AddTransaction(paths, store).execute(
         AddTransactionRequest(
             occurred_at="2026-06-24T11:00:00+08:00",
             entry_type="expense",
@@ -299,7 +299,7 @@ def test_account_balances_match_the_single_account_query(tmp_path: Path) -> None
             category_id="cat_food_711",
         )
     )
-    VoidTransaction(paths, store).execute(str(voided.details["transaction"]["transaction_id"]))
+    DeleteTransaction(paths, store).execute(str(deleted.details["transaction"]["transaction_id"]))
 
     balances = store.account_balances()
     accounts = store.list_accounts(include_archived=True)

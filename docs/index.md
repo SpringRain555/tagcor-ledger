@@ -62,7 +62,7 @@
 
 | | 狀態 |
 |---|---|
-| [REQ-0001 穩固核心](requirements/REQ-0001-stable-core.md) | 已實作 |
+| [REQ-0001 穩固核心](requirements/REQ-0001-stable-core.md) | 已實作；**交易的「作廢」2026-10-09 改成真的刪除**（[ADR-0017](decisions/ADR-0017-delete-transactions-for-real.md)）|
 | [REQ-0002 核心收尾與模板](requirements/REQ-0002-core-and-templates.md) | 已實作；**週期排程那一段在 v0.23.0 移除**（[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)）|
 | [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作；**「今天還沒盤點」那則提醒在 0.25.0 移除**（[ADR-0014](decisions/ADR-0014-drop-daily-snapshot-reminder.md)）；**刪除改成真的移除**（[ADR-0015](decisions/ADR-0015-delete-balance-snapshots-for-real.md)）|
 | [REQ-0004 設定、路徑與用詞](requirements/REQ-0004-settings-paths-terms.md) | 已實作；操作設定現在是**四個**分頁（定期收支移除，[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)；類別與項目 2026-10-05 合成並排的一頁）|
@@ -91,6 +91,7 @@
 - [ADR-0014 拿掉「今天還沒盤點」](decisions/ADR-0014-drop-daily-snapshot-reminder.md)
 - [ADR-0015 盤點的「刪除」改成真的移除](decisions/ADR-0015-delete-balance-snapshots-for-real.md)
 - [ADR-0016 待確認併進餘額盤點](decisions/ADR-0016-inbox-under-balance-snapshots.md)
+- [ADR-0017 交易的「刪除」改成真的移除](decisions/ADR-0017-delete-transactions-for-real.md)
 
 ## Architecture
 

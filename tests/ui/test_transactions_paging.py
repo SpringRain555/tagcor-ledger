@@ -153,7 +153,7 @@ def test_clearing_filters_resets_every_control_and_goes_back_to_page_one(
 
     page.search.setText("第 1 筆")
     page.date_enabled.setChecked(True)
-    page.status.setCurrentIndex(1)
+    page.account.setCurrentIndex(1)
 
     page.clear_filters()
 
@@ -161,7 +161,6 @@ def test_clearing_filters_resets_every_control_and_goes_back_to_page_one(
     assert not page.date_enabled.isChecked()
     assert page.account.currentIndex() == 0
     assert page.category.currentIndex() == 0
-    assert page.status.currentIndex() == 0
     assert page.page_index == 0, "清除篩選之後還停在後面的頁"
     assert page.cursors == [None], "游標堆疊沒有重設"
 

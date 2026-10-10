@@ -22,10 +22,10 @@ from tagcor_ledger.application.templates import TemplateService
 from tagcor_ledger.application.transaction_service import (
     AddTransaction,
     AddTransfer,
+    DeleteTransaction,
     ListTransactions,
     ReplaceTransfer,
     UpdateTransaction,
-    VoidTransaction,
 )
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
@@ -62,7 +62,7 @@ class ControllerBase:
         self.list_transaction_records = ListTransactions(self.paths, self.store)
         self.update_transaction_record = UpdateTransaction(self.paths, self.store)
         self.replace_transfer_record = ReplaceTransfer(self.paths, self.store)
-        self.void_transaction_record = VoidTransaction(self.paths, self.store)
+        self.delete_transaction_record = DeleteTransaction(self.paths, self.store)
 
     def _run_startup_tasks(self) -> None:
         """開程式時把已經到期的定存事件放進待確認。**只產生草稿，不建立任何交易。**

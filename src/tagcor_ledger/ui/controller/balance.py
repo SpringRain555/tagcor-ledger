@@ -52,7 +52,7 @@ class BalanceSection(ControllerBase):
         )
 
     def delete_balance_snapshot(self, snapshot_id: str) -> Result:
-        """真的刪掉（ADR-0015）。交易的「刪除」仍然是 `void_transaction`，兩者不是同一件事。"""
+        """真的刪掉（ADR-0015）。交易的刪除 2026-10-09 起也是真的移除（ADR-0017）。"""
         return self.balance.delete(snapshot_id)
 
     def list_balance_snapshots(

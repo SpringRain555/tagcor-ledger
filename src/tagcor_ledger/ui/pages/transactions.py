@@ -3,9 +3,9 @@
 轉帳沒有「編輯」—— 編輯轉帳實際上是建一筆新的、刪除原本那筆（替換轉帳），所以同一顆
 按鈕在轉帳與非轉帳時做的是兩件不同的事，對話框標題也不一樣。
 
-**「刪除」是 `void`，不是真的刪掉。** 那一列的狀態變成 `voided`、不再計入，但紀錄留著，
-篩選「已刪除」看得到、不可復原（`state-machines.md` §1）。2026-09-20 之前叫「作廢」；
-改字的理由與兩個「刪除」怎麼區分見 `glossary.md`。
+**「刪除」是真的刪掉**（v13 起，ADR-0017）。以前是 `void`：那一列標成「已刪除」、紀錄留著、
+狀態篩選看得到 —— 那是正式會計的做法，而這是一個人的帳本。所以這一頁也沒有「狀態」篩選與欄位了：
+剩下的每一筆都有效。代價是刪錯了只能從備份救，所以確認框念出是哪一筆、預設停在「否」。
 
 **「建立模板」不在這一頁做事。** 它只把所選交易的內容送出去（`template_requested`），
 由 `main_window` 帶到「操作設定 → 模板」開一張已經填好的新增視窗，使用者自己取名、自己按儲存。
@@ -34,7 +34,11 @@ from PySide6.QtWidgets import (
 )
 
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import result_message, transaction_values
+from tagcor_ledger.ui.formatting import (
+    result_message,
+    transaction_summary,
+    transaction_values,
+)
 from tagcor_ledger.ui.widgets.confirm import confirm
 from tagcor_ledger.ui.widgets.forms import (
     combo_box,
@@ -70,7 +74,7 @@ class TransactionsPage(QWidget):
         self.table = QTableView()
         self.model = RowsModel(
             # 「流向」不是「類型」—— 用詞表明文（記帳頁、篩選都叫流向，這個表頭以前是唯一的例外）。
-            ["日期", "流向", "帳戶", "類別／項目", "金額（TWD）", "備註", "狀態"],
+            ["日期", "流向", "帳戶", "類別／項目", "金額（TWD）", "備註"],
             transaction_values,
             amount_column=4,
         )
@@ -80,7 +84,6 @@ class TransactionsPage(QWidget):
         self.date_to = date_field(QDate.currentDate())
         self.account = combo_box()
         self.category = combo_box()
-        self.status = combo_box()
         self.previous_button = QPushButton("上一頁")
         self.next_button = QPushButton("下一頁")
         self.cursors: list[dict[str, str] | None] = [None]
@@ -99,15 +102,12 @@ class TransactionsPage(QWidget):
             date_widget.setEnabled(False)
         self.date_enabled.toggled.connect(self.date_from.setEnabled)
         self.date_enabled.toggled.connect(self.date_to.setEnabled)
-        self.status.addItem("有效", "active")
-        self.status.addItem("已刪除", "voided")
-        self.status.addItem("全部", "all")
         apply_button = QPushButton("套用篩選")
         clear_button = QPushButton("清除篩選")
         set_button_role(apply_button, "primary")
 
-        # 篩選列拆成兩行並加上標籤。原本九個元件擠同一行，其中帳戶／類別／狀態
-        # 三個下拉**完全沒有標籤**，要靠猜哪個是哪個。
+        # 篩選列拆成兩行並加上標籤。原本九個元件擠同一行，其中的下拉**完全沒有標籤**，
+        # 要靠猜哪個是哪個。（「狀態」那一個 v13 拿掉了：沒有「已刪除」的交易可以篩。）
         top_row = QHBoxLayout()
         top_row.addWidget(self.search, 1)
         top_row.addWidget(self.date_enabled)
@@ -119,7 +119,6 @@ class TransactionsPage(QWidget):
         for label, widget in (
             ("帳戶", self.account),
             ("類別", self.category),
-            ("狀態", self.status),
         ):
             bottom_row.addWidget(QLabel(label))
             bottom_row.addWidget(widget)
@@ -136,14 +135,7 @@ class TransactionsPage(QWidget):
         template_button = QPushButton("建立模板")
         set_button_role(edit_button, "primary")
         set_button_role(delete_button, "danger")
-        bind_selection(self.table, edit_button, template_button)
-        # 「刪除」只對有效的交易有意義；「編輯」不綁 —— 對已刪除的交易按下去，
-        # store 會回 TRANSACTION_VOIDED 的中文，那是有用的回饋。從已刪除的交易建模板也合理。
-        bind_selection(
-            self.table,
-            delete_button,
-            enabled_when=lambda item: item["status"] == "active",
-        )
+        bind_selection(self.table, edit_button, delete_button, template_button)
         actions = QHBoxLayout()
         for action_button in (edit_button, delete_button, template_button):
             actions.addWidget(action_button)
@@ -191,7 +183,6 @@ class TransactionsPage(QWidget):
         self.date_enabled.setChecked(False)
         self.account.setCurrentIndex(0)
         self.category.setCurrentIndex(0)
-        self.status.setCurrentIndex(0)
         self.first_page()
 
     def next_page(self) -> None:
@@ -223,7 +214,6 @@ class TransactionsPage(QWidget):
             ),
             account_id=cast(str | None, self.account.currentData()),
             category_id=cast(str | None, self.category.currentData()),
-            status=str(self.status.currentData()),
             cursor=self.cursors[self.page_index],
         )
         if not result.success:
@@ -250,17 +240,23 @@ class TransactionsPage(QWidget):
             self.changed.emit()
 
     def delete_selected(self) -> None:
-        # 按鈕對已刪除的列本來就停用（`enabled_when`），這一行只是防程式直接呼叫。
+        """**真的刪掉**（ADR-0017）。確認框念出是哪一筆、講刪掉就找不回來。
+
+        定存確認入帳產生的那一筆多講一句：那一筆待確認已經是「已確認」，刪掉交易它也不會
+        回到待確認 —— 要重記就得自己補記。不講的話，使用者會以為刪掉之後可以重新確認一次。
+        """
         item = self.model.selected_item(self.table)
-        if item is None or item["status"] != "active":
+        if item is None:
             return
-        if not confirm(
-            self,
-            "確認刪除",
-            "確定要刪除所選交易嗎？\n\n紀錄會保留在狀態「已刪除」裡，但不能再改回有效。",
-        ):
+        text = (
+            f"確定要刪除這一筆交易嗎？\n\n{transaction_summary(item)}\n\n"
+            "刪掉之後就找不回來了（只能從備份還原）。帳戶餘額與餘額盤點的差額會跟著重算。"
+        )
+        if item.get("source") == "deposit":
+            text += "\n\n這一筆是定存確認入帳產生的：刪掉之後，那一筆待確認不會再回來，需要的話請自己補記。"
+        if not confirm(self, "確認刪除", text):
             return
-        result = self.controller.void_transaction(str(item["transaction_id"]))
+        result = self.controller.delete_transaction(str(item["transaction_id"]))
         if result.success:
             self.first_page()
             self.changed.emit()

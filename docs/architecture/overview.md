@@ -45,7 +45,7 @@ src/tagcor_ledger/
 ├── main.py             CLI 參數、--json、單一實例、啟動失敗分類
 ├── domain/             models、deposits、dates、money
 ├── application/
-│   ├── transaction_service.py  收入／支出／轉帳／編輯／作廢／替換轉帳／列表
+│   ├── transaction_service.py  收入／支出／轉帳／編輯／刪除／替換轉帳／列表
 │   ├── catalogs.py     帳戶、類別／項目
 │   ├── balance.py      餘額盤點與未解釋差額
 │   ├── templates.py    模板（v0.23.0 前叫 automation.py，那時還管定期收支）
@@ -58,7 +58,7 @@ src/tagcor_ledger/
 │   ├── result.py       Result：成功／失敗與錯誤碼
 │   └── failures.py     錯誤碼 → 中文說法。**一個碼的句子只寫在這裡**
 ├── infrastructure/
-│   ├── migrations.py   v1 → v12 的 schema
+│   ├── migrations.py   v1 → v13 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
 │   ├── stores/         一個聚合一個檔：accounts／categories／transactions／

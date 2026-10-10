@@ -113,11 +113,10 @@ def amount_color(item: dict[str, Any]) -> str:
 
     - 收入綠、支出紅（使用者 2026-08-19 選定的國際財會方向）
     - **轉帳不上色** —— 錢只是換了地方，不是收支
-    - 作廢的整列變暗，因為它已經不算數了
     - 沒有流向的金額（定存本金、帳戶餘額）就是一般文字，不要為了「有顏色」而上色
+
+    （以前還有一條「已刪除的整列變暗」。v13 起交易的刪除是真的移除，畫面上沒有那種列了。）
     """
-    if str(item.get("status", "")) == "voided":
-        return colors.TEXT_FAINT
     entry_type = str(item.get("entry_type", ""))
     if not entry_type:
         return colors.TEXT

@@ -135,11 +135,9 @@ ERROR_MESSAGES: dict[str, str] = {
     ),
     # ---- 交易 ----
     "TRANSACTION_NOT_FOUND": "找不到這筆交易，它可能已經被刪除。請重新整理交易紀錄。",
-    "TRANSACTION_VOIDED": "這筆交易已經刪除了，不能再修改。要更正就新增一筆。",
     "TRANSACTION_REVISION_CONFLICT": (
         "這筆交易在你編輯的期間被改過了。請重新整理交易紀錄，確認現在的內容之後再改一次。"
     ),
-    "TRANSACTION_STATUS_FILTER_INVALID": "狀態篩選值不合法。正常操作不會發生，請回報。",
     "PAGE_LIMIT_INVALID": "每頁筆數只接受 20、50 或 100。",
     "ENTRY_TYPE_INVALID": "流向只能是收入、支出或轉帳。正常操作不會發生，請回報。",
     "DATETIME_TIMEZONE_REQUIRED": "時間缺少時區。正常操作不會發生，請回報。",
@@ -151,7 +149,6 @@ ERROR_MESSAGES: dict[str, str] = {
         "寫入裡完成。"
     ),
     "TRANSFER_NOT_FOUND": "找不到要替換的轉帳。請重新整理交易紀錄。",
-    "TRANSFER_NOT_ACTIVE": "這筆轉帳已經刪除了，不能再替換。",
     "CURRENCY_MISMATCH": "兩個帳戶的幣別不同。目前只支援同幣別（TWD）的轉帳。",
     # ---- 餘額盤點 ----
     "BALANCE_SNAPSHOT_NEGATIVE": "盤點金額不能是負數。",

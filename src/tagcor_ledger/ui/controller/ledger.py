@@ -174,7 +174,6 @@ class LedgerSection(ControllerBase):
         date_to: str | None = None,
         account_id: str | None = None,
         category_id: str | None = None,
-        status: str = "active",
         cursor: dict[str, str] | None = None,
         direction: str = "next",
         limit: int | None = None,
@@ -192,7 +191,6 @@ class LedgerSection(ControllerBase):
                     date_to=date_to,
                     account_id=account_id,
                     category_id=category_id,
-                    status=status,
                 ),
             )
         )
@@ -203,8 +201,8 @@ class LedgerSection(ControllerBase):
     def replace_transfer(self, **values: Any) -> Result:
         return self.replace_transfer_record.execute(ReplaceTransferRequest(**values))
 
-    def void_transaction(self, transaction_id: str) -> Result:
-        return self.void_transaction_record.execute(transaction_id)
+    def delete_transaction(self, transaction_id: str) -> Result:
+        return self.delete_transaction_record.execute(transaction_id)
 
     # --- 一般偏好 -----------------------------------------------------------
 

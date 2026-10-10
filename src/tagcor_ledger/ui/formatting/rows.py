@@ -22,7 +22,6 @@ from tagcor_ledger.domain.deposits import (
 from tagcor_ledger.ui.formatting.primitives import (
     DEPOSIT_TERM_STATUS_NAMES,
     ENTRY_NAMES,
-    STATUS_NAMES,
     display_date,
     group_digits,
     rate_text,
@@ -76,8 +75,18 @@ def transaction_values(item: dict[str, Any]) -> list[str]:
         category,
         signed_amount_text(item),
         str(item["description"]),
-        STATUS_NAMES.get(str(item["status"]), str(item["status"])),
     ]
+
+
+def transaction_summary(item: dict[str, Any]) -> str:
+    """一筆交易濃縮成一行，給確認框念出**要動的是哪一筆**。
+
+    欄位與交易紀錄那一列相同（`transaction_values`），只是排成一行 —— 確認框裡的這一筆要
+    跟使用者剛才在表格上選的那一列長得一樣，否則他得自己對照兩種寫法。
+    """
+    date, flow, account, category, amount, description = transaction_values(item)
+    text = "　".join(part for part in (date, flow, account, category, amount) if part)
+    return f"{text}（{description}）" if description else text
 
 
 def account_values(item: dict[str, Any]) -> list[str]:

@@ -18,7 +18,6 @@ class EntryType(StrEnum):
 
 class RecordStatus(StrEnum):
     ACTIVE = "active"
-    VOIDED = "voided"
     ARCHIVED = "archived"
 
 
@@ -78,17 +77,20 @@ class TransactionRecord:
     subcategory_name: str | None
     description: str
     correlation_id: str
-    replaces_transaction_id: str | None = None
+    source: str = ""
+    """誰寫的：`manual`（記帳頁、交易紀錄）或 `deposit`（定存確認入帳）。刪除確認框用它 ——
+    刪掉定存產生的那一筆，那一筆待確認不會再回來，這件事要先講。"""
 
 
 @dataclass(frozen=True, slots=True)
 class TransactionFilter:
+    """交易紀錄的篩選。**沒有狀態** —— v13 起刪除是真的移除（ADR-0017），剩下的每一筆都有效。"""
+
     search: str = ""
     date_from: str | None = None
     date_to: str | None = None
     account_id: str | None = None
     category_id: str | None = None
-    status: str = "active"
 
 
 @dataclass(frozen=True, slots=True)

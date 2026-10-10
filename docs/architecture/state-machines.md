@@ -10,36 +10,38 @@
 
 ## 1. 交易 `transactions`
 
-`CHECK (status IN ('active', 'voided'))`，另有 `revision` 整數欄位。
+`CHECK (status IN ('active', 'voided'))`，另有 `revision` 整數欄位 —— **但從 v13 起只會是 `active`。**
 
 | 狀態 | 定義 |
 |---|---|
-| `active` 有效 | 計入餘額與所有統計 |
-| `voided` 已刪除 | 不計入任何計算，但**保留紀錄**：交易紀錄頁篩選「已刪除」看得到。**不是真的從資料庫拿掉** |
+| `active` 有效 | 計入餘額與所有統計。資料庫裡的每一筆交易都是這個狀態 |
+| ~~`voided`~~ | **不再使用**（2026-10-09，[ADR-0017](../decisions/ADR-0017-delete-transactions-for-real.md)）。`migrate_v13` 刪掉了既有的那些列；CHECK 留著是因為拿掉要重建整張表 |
 
-> 畫面上這個動作叫「刪除」（2026-09-20 起；之前叫「作廢」）。識別字仍是 `void`，
-> 與名冊那種真的移除的 `delete` 是兩件事 —— 為什麼共用一個字見 `glossary.md` §操作。
+**「刪除」是真的移除那一筆**（`StoreBase._remove_transaction()`）：交易、它的 posting 與 allocation、
+FTS 索引一起消失，稽核表留一列 `transaction.delete`（流向與日期，不記金額）。帳戶餘額、盤點的差額、
+交易紀錄都跟著重算 —— 它們本來就是現算的。
 
 ### 轉移表
 
-| 從 ＼ 到 | `active` | `voided` |
+| 從 ＼ 到 | `active` | 刪除 |
 |---|---|---|
-| **`active`** | ▶ 編輯（`revision` +1） | ▶ 刪除 |
-| **`voided`** | ✗ **不可復原** | — |
+| **`active`** | ▶ 編輯（`revision` +1） | ✂ 真的移除 |
 
 ```mermaid
 stateDiagram-v2
     [*] --> active: 建立
     active --> active: 編輯（revision +1）
-    active --> voided: 刪除（紀錄保留）
-    voided --> [*]
-    note right of voided
-        單向。想「復原」只能重新建一筆新的。
+    active --> [*]: 刪除（真的移除）
+    note right of active
+        刪掉就沒了，只能從備份還原。
+        確認框預設停在「否」。
     end note
 ```
 
-**刪除是單向的。** 想恢復一筆已刪除的交易，只能重新建立一筆新的。這是刻意的 —— 復原會讓
-「這筆到底有沒有計入」的歷史變得無法追溯。
+> **2026-10-09 之前這裡是 `active → voided`**：「刪除」只把它標成已刪除、紀錄留著、單向不可復原，
+> 理由是「復原會讓『這筆到底有沒有計入』的歷史變得無法追溯」。那是正式會計的做法（帳要接受稽核），
+> 而這是一個人的帳本 —— 留著的那些救不回來、不參與計算，還擋住帳戶與類別的刪除（引用檢查不看狀態）。
+> 比較表與被否決的替代方案見 ADR-0017。
 
 ### 編輯與 revision
 
@@ -54,14 +56,22 @@ stateDiagram-v2
 編輯轉帳 → TRANSFER_EDIT_NOT_SUPPORTED
 ```
 
-正確流程是**替換**：在**同一個 SQLite transaction 內**建立新轉帳、刪除舊轉帳，
-新交易的 `replaces_transaction_id` 指向舊的。要嘛兩件事都成功，要嘛都沒發生。
+正確流程是**替換**：在**同一個 SQLite transaction 內**建立新轉帳、**刪掉**舊轉帳。
+要嘛兩件事都成功，要嘛都沒發生。
 
 ```
 舊轉帳 active ──┐
-                ├─ 同一個 SQLite transaction ─→ 舊轉帳 voided ＋ 新轉帳 active
-新轉帳（建立）──┘                                        └── replaces_transaction_id 指向舊的
+                ├─ 同一個 SQLite transaction ─→ 新轉帳 active（舊的那筆已經不在）
+新轉帳（建立）──┘                                  └── 替換關係記在稽核列 transaction.transfer_replace 的 replaces
 ```
+
+> v13 之前新轉帳的 `replaces_transaction_id` 指向留著的舊轉帳（`voided`）。那一欄是外鍵，舊轉帳真的
+> 刪掉就會被它擋住，所以不再寫入（`tests/unit/test_retired_schema_values.py` 守著）；`migrate_v13` 清掉了舊值。
+
+### 定存產生的交易
+
+定存確認入帳產生的交易被刪掉時，`deposit_events.transaction_id` 放手成 NULL、事件**維持已確認** ——
+那一筆待確認不會回來（§3：已確認是終點）。刪除確認框會先講這件事。
 
 ### `entry_type` 不是狀態
 
@@ -182,8 +192,9 @@ stateDiagram-v2
 **到期項目不能略過**（`DEPOSIT_MATURITY_CANNOT_BE_SKIPPED`，v0.24.0）——
 略過的事件不會再生出來，那一期會永遠停在「存續中」。理由與替代作法見 §7。
 
-`confirmed` 與 `skipped` 都是**終點**。想改變已確認的結果，去刪除它產生的那筆交易；
-`DEPOSIT_EVENT_NOT_PENDING` 就是在擋非 `pending` 的修改。
+`confirmed` 與 `skipped` 都是**終點**。想改變已確認的結果，去編輯或刪除它產生的那筆交易；
+`DEPOSIT_EVENT_NOT_PENDING` 就是在擋非 `pending` 的修改。刪除那筆交易時事件**維持已確認**、
+`transaction_id` 放手成 NULL（v13 起交易的刪除是真的移除，§1）—— 它不會回到待確認，要重記就自己補記。
 
 ### 確認時只問日期與實際金額
 
@@ -221,7 +232,7 @@ stateDiagram-v2
 | `active` 有效 | 作為差額計算的基準點。資料庫裡的每一筆盤點都是這個狀態 |
 | ~~`voided`~~ | **不再使用**（2026-10-05，[ADR-0015](../decisions/ADR-0015-delete-balance-snapshots-for-real.md)）。`migrate_v12` 刪掉了既有的那些列；CHECK 留著是因為拿掉要重建整張表 |
 
-**「刪除」是真的移除那一列**，不是轉移到另一個狀態 —— 這一點跟交易（§1）不一樣。
+**「刪除」是真的移除那一列**，不是轉移到另一個狀態 —— 交易（§1）2026-10-09 起也一樣（ADR-0017）。
 刪掉之後，後面那一筆盤點的差額自動改拿再前一筆盤點當基準（差額是現算的，見下）。
 稽核表留一列 `balance_snapshot.delete`（只記帳戶與日期）。
 

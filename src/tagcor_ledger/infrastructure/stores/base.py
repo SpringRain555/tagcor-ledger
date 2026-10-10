@@ -101,7 +101,7 @@ class StoreBase:
                c.category_id, c.name AS category_name,
                pc.category_id AS parent_category_id,
                pc.name AS parent_category_name,
-               t.description, t.correlation_id, t.replaces_transaction_id
+               t.description, t.correlation_id, t.source
         FROM transactions t
         JOIN account_postings p1 ON p1.transaction_id = t.transaction_id AND p1.sequence = 1
         JOIN accounts a1 ON a1.account_id = p1.account_id
@@ -153,11 +153,7 @@ class StoreBase:
             subcategory_name=child_name,
             description=str(row["description"]),
             correlation_id=str(row["correlation_id"]),
-            replaces_transaction_id=(
-                str(row["replaces_transaction_id"])
-                if row["replaces_transaction_id"] is not None
-                else None
-            ),
+            source=str(row["source"]),
         )
 
     @staticmethod
@@ -300,15 +296,16 @@ class StoreBase:
         description: str,
         source: str,
         correlation_id: str,
-        replaces_transaction_id: str | None = None,
+        replaces: str | None = None,
     ) -> None:
         """在**呼叫者的 transaction 內**寫出一筆轉帳：一筆交易、兩筆 posting。
 
         來源為負（`sequence = 1`）、目的為正（`sequence = 2`）。順序是有意義的 ——
         `_transaction_select()` 靠 `sequence` 分辨哪一邊是來源。
 
-        `replaces_transaction_id` 給替換轉帳用（轉帳不能原地編輯，只能建新的、作廢舊的）。
-        作廢舊的那一步留在呼叫端 —— 這裡只負責「新的那一筆長什麼樣」。
+        `replaces` 給替換轉帳用（轉帳不能原地編輯，只能建新的、刪掉舊的）：**只記在稽核列裡**。
+        2026-10-09 之前它寫進 `transactions.replaces_transaction_id`，那一欄是指向舊交易的外鍵 ——
+        而舊交易從 v13 起是真的刪掉（ADR-0017），外鍵會擋住刪除。刪掉舊的那一步留在呼叫端。
         """
         if source_account_id == destination_account_id:
             raise ValueError("TRANSFER_SAME_ACCOUNT")
@@ -319,9 +316,8 @@ class StoreBase:
             """
             INSERT INTO transactions(
                 transaction_id, revision, status, entry_type, occurred_at,
-                recorded_at, updated_at, description, source, correlation_id,
-                replaces_transaction_id
-            ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, ?, ?, ?)
+                recorded_at, updated_at, description, source, correlation_id
+            ) VALUES (?, 1, 'active', 'transfer', ?, ?, ?, ?, ?, ?)
             """,
             (
                 transaction_id,
@@ -331,7 +327,6 @@ class StoreBase:
                 description.strip(),
                 source,
                 correlation_id,
-                replaces_transaction_id,
             ),
         )
         connection.executemany(
@@ -365,19 +360,62 @@ class StoreBase:
             "destination_account_id": destination_account_id,
             "amount_minor": money.amount_minor,
         }
-        if replaces_transaction_id is not None:
-            details["replaces_transaction_id"] = replaces_transaction_id
+        if replaces is not None:
+            details["replaces"] = replaces
         cls._audit(
             connection,
             correlation_id=correlation_id,
-            action=(
-                "transaction.transfer"
-                if replaces_transaction_id is None
-                else "transaction.transfer_replace"
-            ),
+            action="transaction.transfer" if replaces is None else "transaction.transfer_replace",
             entity_type="transaction",
             entity_id=transaction_id,
             details=details,
+        )
+
+    @classmethod
+    def _remove_transaction(
+        cls,
+        connection: sqlite3.Connection,
+        *,
+        transaction_id: str,
+        correlation_id: str,
+    ) -> None:
+        """在**呼叫者的 transaction 內**真的移除一筆交易（ADR-0017，2026-10-09 起）。
+
+        「一筆交易長什麼樣」只有一個地方說了算，「一筆交易怎麼消失」也一樣：transactions 一列、
+        它的 posting 與 allocation、FTS 索引，最後一列稽核。刪除與替換轉帳都走這裡。
+
+        **指向它的只剩一個地方要先放手**：定存確認入帳時，`deposit_events.transaction_id` 記著
+        它產生的交易。那一欄設成 NULL、事件維持「已確認」—— 跟以前作廢之後的結果一樣：
+        那一筆待確認不會再回來，錢也不算了。（另一個指向它的 `replaces_transaction_id`
+        從 v13 起不再寫入，舊值由 `migrate_v13` 清掉。）
+
+        稽核只記流向與日期，**不記金額**（同盤點的刪除，ADR-0015）。
+        """
+        row = connection.execute(
+            "SELECT entry_type, occurred_at FROM transactions WHERE transaction_id = ?",
+            (transaction_id,),
+        ).fetchone()
+        if row is None:
+            raise NotFoundError("TRANSACTION_NOT_FOUND")
+        connection.execute(
+            "UPDATE deposit_events SET transaction_id = NULL WHERE transaction_id = ?",
+            (transaction_id,),
+        )
+        key = (transaction_id,)
+        connection.execute("DELETE FROM transaction_fts WHERE transaction_id = ?", key)
+        connection.execute("DELETE FROM category_allocations WHERE transaction_id = ?", key)
+        connection.execute("DELETE FROM account_postings WHERE transaction_id = ?", key)
+        connection.execute("DELETE FROM transactions WHERE transaction_id = ?", key)
+        cls._audit(
+            connection,
+            correlation_id=correlation_id,
+            action="transaction.delete",
+            entity_type="transaction",
+            entity_id=transaction_id,
+            details={
+                "entry_type": str(row["entry_type"]),
+                "occurred_on": str(row["occurred_at"])[:10],
+            },
         )
 
     @staticmethod

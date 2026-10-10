@@ -250,14 +250,17 @@ class ReplaceTransfer:
             )
 
 
-class VoidTransaction:
+class DeleteTransaction:
+    """**真的刪掉**一筆交易（v13 起，ADR-0017）。2026-10-09 之前叫 `VoidTransaction`，
+    只把它標成已刪除、紀錄留著。"""
+
     def __init__(self, paths: AppPaths, store: LedgerStore | None = None) -> None:
         self.store = store or LedgerStore(paths)
 
     def execute(self, transaction_id: str) -> Result:
         correlation_id = new_correlation_id()
         try:
-            self.store.void_transaction(transaction_id, correlation_id)
+            self.store.delete_transaction(transaction_id, correlation_id)
             return Result.ok("交易已刪除。", correlation_id=correlation_id)
         except DOMAIN_FAILURES as exc:
             return failure(
@@ -360,5 +363,5 @@ def transaction_to_dict(transaction: TransactionRecord) -> dict[str, Any]:
         "description": transaction.description,
         "tag_path_name": path_name,
         "correlation_id": transaction.correlation_id,
-        "replaces_transaction_id": transaction.replaces_transaction_id,
+        "source": transaction.source,
     }

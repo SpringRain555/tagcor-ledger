@@ -1,7 +1,10 @@
-"""交易的建立、轉帳、替換轉帳、編輯、作廢與 keyset 分頁查詢。
+"""交易的建立、轉帳、替換轉帳、編輯、刪除與 keyset 分頁查詢。
 
 轉帳一律是「兩筆 posting、一筆 transaction」；轉帳不支援原地編輯，只能用
-`replace_transfer` 建新的、作廢舊的。
+`replace_transfer` 建新的、刪掉舊的。
+
+**刪除是真的移除**（v13 起，ADR-0017）；以前是 `void`：標成已刪除、紀錄留著。
+怎麼移除一筆只有一個寫法，在 `StoreBase._remove_transaction()`。
 """
 
 from __future__ import annotations
@@ -87,18 +90,13 @@ class TransactionStore(StoreBase):
     ) -> TransactionRecord:
         if source_account_id == destination_account_id:
             raise ValueError("TRANSFER_SAME_ACCOUNT")
-        timestamp = now_iso()
         with database_transaction(self.paths.database_path) as connection:
             original = connection.execute(
-                """
-                SELECT entry_type, status FROM transactions WHERE transaction_id = ?
-                """,
+                "SELECT entry_type FROM transactions WHERE transaction_id = ?",
                 (original_transaction_id,),
             ).fetchone()
             if original is None or original["entry_type"] != "transfer":
                 raise NotFoundError("TRANSFER_NOT_FOUND")
-            if original["status"] != "active":
-                raise ValueError("TRANSFER_NOT_ACTIVE")
             self._write_transfer(
                 connection,
                 transaction_id=new_transaction_id,
@@ -109,16 +107,13 @@ class TransactionStore(StoreBase):
                 description=description,
                 source="manual",
                 correlation_id=correlation_id,
-                replaces_transaction_id=original_transaction_id,
+                replaces=original_transaction_id,
             )
-            # 建新的與作廢舊的在同一個 transaction 內 —— 不會出現兩筆都有效或兩筆都沒有。
-            connection.execute(
-                """
-                UPDATE transactions
-                SET status = 'voided', revision = revision + 1, updated_at = ?
-                WHERE transaction_id = ?
-                """,
-                (timestamp, original_transaction_id),
+            # 建新的與刪掉舊的在同一個 transaction 內 —— 不會出現兩筆都在或兩筆都沒有。
+            self._remove_transaction(
+                connection,
+                transaction_id=original_transaction_id,
+                correlation_id=correlation_id,
             )
         return self.get_transaction(new_transaction_id)
 
@@ -137,13 +132,11 @@ class TransactionStore(StoreBase):
         timestamp = now_iso()
         with database_transaction(self.paths.database_path) as connection:
             current = connection.execute(
-                "SELECT entry_type, revision, status FROM transactions WHERE transaction_id = ?",
+                "SELECT entry_type, revision FROM transactions WHERE transaction_id = ?",
                 (transaction_id,),
             ).fetchone()
             if current is None:
                 raise NotFoundError("TRANSACTION_NOT_FOUND")
-            if current["status"] != "active":
-                raise ValueError("TRANSACTION_VOIDED")
             if current["entry_type"] == "transfer":
                 raise ValueError("TRANSFER_EDIT_NOT_SUPPORTED")
             if int(current["revision"]) != expected_revision:
@@ -195,25 +188,11 @@ class TransactionStore(StoreBase):
             )
         return self.get_transaction(transaction_id)
 
-    def void_transaction(self, transaction_id: str, correlation_id: str) -> None:
+    def delete_transaction(self, transaction_id: str, correlation_id: str) -> None:
+        """**真的刪掉**一筆交易（ADR-0017）。找不到丟 `TRANSACTION_NOT_FOUND`。"""
         with database_transaction(self.paths.database_path) as connection:
-            changed = connection.execute(
-                """
-                UPDATE transactions
-                SET status = 'voided', revision = revision + 1, updated_at = ?
-                WHERE transaction_id = ? AND status = 'active'
-                """,
-                (now_iso(), transaction_id),
-            ).rowcount
-            if changed == 0:
-                raise NotFoundError("TRANSACTION_NOT_FOUND")
-            self._audit(
-                connection,
-                correlation_id=correlation_id,
-                action="transaction.void",
-                entity_type="transaction",
-                entity_id=transaction_id,
-                details={},
+            self._remove_transaction(
+                connection, transaction_id=transaction_id, correlation_id=correlation_id
             )
 
     def get_transaction(self, transaction_id: str) -> TransactionRecord:
@@ -237,15 +216,11 @@ class TransactionStore(StoreBase):
         if not 1 <= limit <= 200:
             raise ValueError("PAGE_LIMIT_INVALID")
         filters = transaction_filter or TransactionFilter()
-        conditions: list[str] = []
+        # v13 起每一筆都是 active（刪除是真的移除）。條件留著是讓 `(status, occurred_at)`
+        # 索引用得上 —— keyset 分頁靠它不必把資料撈出來排（同 ADR-0015 對盤點的做法）。
+        conditions: list[str] = ["t.status = 'active'"]
         parameters: list[Any] = []
         joins = ""
-        if filters.status == "active":
-            conditions.append("t.status = 'active'")
-        elif filters.status == "voided":
-            conditions.append("t.status = 'voided'")
-        elif filters.status != "all":
-            raise ValueError("TRANSACTION_STATUS_FILTER_INVALID")
         if cursor is not None:
             operator = "<" if cursor_direction == "next" else ">"
             conditions.append(

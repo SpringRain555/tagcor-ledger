@@ -12,7 +12,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 12
+LATEST_SCHEMA_VERSION = 13
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -527,6 +527,39 @@ def migrate_v12(connection: sqlite3.Connection) -> None:
     connection.execute("DELETE FROM balance_snapshots WHERE status = 'voided'")
 
 
+def migrate_v13(connection: sqlite3.Connection) -> None:
+    """刪掉標成 `voided` 的交易 —— 交易的「刪除」從這一版起是真的移除。
+
+    **理由寫在 [ADR-0017](../../../docs/decisions/ADR-0017-delete-transactions-for-real.md)。**
+    一句話版本：這是只有一個使用者、沒有稽核義務的個人帳本，而「作廢、紀錄留著」是正式會計的
+    做法。留著的那些救不回來、不參與任何計算，還擋住帳戶與類別的刪除（引用檢查不看狀態）。
+
+    **這些列本來就是使用者刪掉的**（或是替換轉帳時被換掉的舊轉帳），不計入任何金額 ——
+    畫面上的數字一個都不會變。順序有講究，因為外鍵是開著的：
+
+    1. `replaces_transaction_id` 全部清成 NULL。它只會指向被替換掉的舊轉帳，而那些全是
+       `voided`；這一欄從這一版起也不再寫入（替換關係只留在稽核列裡）。
+    2. 定存事件指向已刪除交易的，`transaction_id` 清成 NULL、事件維持「已確認」——
+       跟執行期刪除一筆交易時的做法一樣（`StoreBase._remove_transaction`）。
+    3. 刪掉它們的 FTS、allocation、posting，最後才是交易本身。
+
+    `status` 欄與它的 CHECK 留著：拿掉要重建整張表，換到的只是少一個永遠是 `active` 的欄位。
+    稽核表不動 —— 它是「誰在什麼時候做了什麼」的唯一紀錄，只增不刪。
+    """
+    voided = "SELECT transaction_id FROM transactions WHERE status = 'voided'"
+    connection.execute(
+        "UPDATE transactions SET replaces_transaction_id = NULL "
+        "WHERE replaces_transaction_id IS NOT NULL"
+    )
+    connection.execute(
+        f"UPDATE deposit_events SET transaction_id = NULL WHERE transaction_id IN ({voided})"
+    )
+    connection.execute(f"DELETE FROM transaction_fts WHERE transaction_id IN ({voided})")
+    connection.execute(f"DELETE FROM category_allocations WHERE transaction_id IN ({voided})")
+    connection.execute(f"DELETE FROM account_postings WHERE transaction_id IN ({voided})")
+    connection.execute("DELETE FROM transactions WHERE status = 'voided'")
+
+
 def _add_column_if_missing(
     connection: sqlite3.Connection, table: str, column: str, definition: str
 ) -> None:
@@ -550,6 +583,7 @@ MIGRATIONS: dict[int, Migration] = {
     10: migrate_v10,
     11: migrate_v11,
     12: migrate_v12,
+    13: migrate_v13,
 }
 
 

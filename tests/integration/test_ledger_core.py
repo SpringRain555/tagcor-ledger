@@ -23,7 +23,7 @@ from tagcor_ledger.domain.models import ApplicationSettings, TransactionFilter
 from tagcor_ledger.infrastructure.database import connect_database, initialize_database
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION, migrate_v1
-from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
+from tagcor_ledger.infrastructure.sqlite_store import LedgerStore, NotFoundError
 
 
 def test_schema_v1_migrates_to_latest_and_reruns_safely(tmp_path: Path) -> None:
@@ -132,7 +132,12 @@ def test_schema_never_grows_a_stored_value_card_concept(tmp_path: Path) -> None:
     )
 
 
-def test_replace_transfer_is_atomic_and_links_old_transaction(tmp_path: Path) -> None:
+def test_replace_transfer_is_atomic_and_removes_the_old_one(tmp_path: Path) -> None:
+    """替換轉帳 = 建新的 ＋ **真的刪掉**舊的（v13 起，ADR-0017），同一個 SQLite transaction。
+
+    以前舊的那筆是標成 `voided`、新的用 `replaces_transaction_id` 指回去；現在舊的不在了，
+    那個關係只留在稽核列（`transaction.transfer_replace` 的 `replaces`）。
+    """
     paths = resolve_app_paths(tmp_path / "ledger")
     store = LedgerStore(paths)
     account_result = AccountService(paths, store).create(name="銀行", opening_balance="1000")
@@ -169,11 +174,20 @@ def test_replace_transfer_is_atomic_and_links_old_transaction(tmp_path: Path) ->
         )
     )
     assert replaced.success
-    replacement = replaced.details["transaction"]
-    assert replacement["replaces_transaction_id"] == original_id
-    assert store.get_transaction(original_id).status == "voided"
+    replacement_id = str(replaced.details["transaction"]["transaction_id"])
+    with pytest.raises(NotFoundError):
+        store.get_transaction(original_id)
     assert store.account_balance_minor(bank_id) == 800
     assert store.account_balance_minor("acct_cash") == 200
+    with connect_database(paths.database_path) as connection:
+        audit = connection.execute(
+            "SELECT details_json FROM audit_events "
+            "WHERE entity_id = ? AND action = 'transaction.transfer_replace'",
+            (replacement_id,),
+        ).fetchone()
+    assert audit is not None and original_id in str(audit["details_json"]), (
+        "替換關係要留在稽核列裡 —— 交易表上已經沒有舊的那一筆可以指了"
+    )
 
 
 def test_combined_filters_and_bidirectional_keyset_paging(tmp_path: Path) -> None:
@@ -197,7 +211,6 @@ def test_combined_filters_and_bidirectional_keyset_paging(tmp_path: Path) -> Non
         date_to="2026-06-05T23:59:59+08:00",
         account_id="acct_cash",
         category_id="cat_food",
-        status="active",
     )
     first, next_cursor = store.list_transactions(limit=2, transaction_filter=filters)
     assert [item.occurred_at[8:10] for item in first] == ["05", "04"]

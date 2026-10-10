@@ -102,12 +102,16 @@
 | `DATETIME_TIMEZONE_REQUIRED` | 時間字串沒有時區 | 同上。本專案固定 `Asia/Taipei` |
 | `VALIDATION_FAILED` | **退路碼**：輸入驗證失敗，而且認不出是哪一種 | 匯出診斷資訊回報。**這個碼出現代表分類漏了一種情形**，該補一個具體的碼 |
 | `TRANSACTION_NOT_FOUND` | 交易不存在 | 可能已被刪除或資料庫被換過 |
-| `TRANSACTION_VOIDED` | 想編輯一筆已刪除（`voided`）的交易 | 刪除不可復原。要改就新建一筆 |
 | `TRANSACTION_REVISION_CONFLICT` | 樂觀鎖衝突 —— 這筆在你編輯期間被別處改過 | 重新載入交易紀錄再改一次 |
-| `TRANSACTION_STATUS_FILTER_INVALID` | 篩選的狀態值不合法 | UI 正常操作不會發生 |
 | `TRANSACTION_UPDATE_FAILED` | **退路碼**：更新失敗，原因認不出來 | 匯出診斷資訊回報 |
 | `LIST_TRANSACTIONS_FAILED` | **退路碼**：查詢失敗 | 多半是資料庫層問題；匯出診斷資訊 |
 | `PAGE_LIMIT_INVALID` | 每頁筆數不在允許範圍 | 只接受 20／50／100 |
+
+> **2026-10-09 退役三個碼**（不加反引號，理由同上）：TRANSACTION_VOIDED（編輯已刪除的交易）、
+> TRANSFER_NOT_ACTIVE（替換已刪除的轉帳）、TRANSACTION_STATUS_FILTER_INVALID（交易紀錄的狀態篩選）。
+> 交易的刪除從 v13 起是真的移除（[ADR-0017](../decisions/ADR-0017-delete-transactions-for-real.md)），
+> 資料庫裡不再有「已刪除」的交易，狀態篩選也拿掉了 —— 它們擋的情形不存在了。
+> 刪掉之後再對它動作，得到的是 `TRANSACTION_NOT_FOUND`／`TRANSFER_NOT_FOUND`。
 
 ## 轉帳
 
@@ -117,7 +121,6 @@
 | `TRANSFER_DESTINATION_REQUIRED` | 沒選轉入帳戶 | 選一個 |
 | `TRANSFER_EDIT_NOT_SUPPORTED` | 想就地編輯轉帳 | **這是刻意的。** 轉帳用「替換」流程：建新的、刪除舊的，同一個 SQLite transaction 完成 |
 | `TRANSFER_NOT_FOUND` | 要替換的轉帳不存在 | 重新載入 |
-| `TRANSFER_NOT_ACTIVE` | 要替換的轉帳已刪除 | 已刪除的不能再替換 |
 | `TRANSFER_REPLACE_FAILED` | **退路碼**：替換流程失敗 | **舊轉帳未變更。** 匯出診斷資訊回報 |
 | `CURRENCY_MISMATCH` | 兩個帳戶幣別不同 | 目前只支援同幣別 TWD 轉帳 |
 

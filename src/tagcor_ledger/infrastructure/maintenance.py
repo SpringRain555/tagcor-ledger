@@ -13,7 +13,6 @@ import sqlite3
 from typing import Any
 
 from tagcor_ledger.app.paths import AppPaths
-from tagcor_ledger.domain.models import TransactionFilter
 from tagcor_ledger.infrastructure.clock import now_iso
 from tagcor_ledger.infrastructure.database import connect_database, initialize_database
 from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION
@@ -186,11 +185,7 @@ class MaintenanceService:
         cursor: tuple[str, str] | None = None
         rows: list[dict[str, Any]] = []
         while True:
-            page, cursor = store.list_transactions(
-                limit=200,
-                cursor=cursor,
-                transaction_filter=TransactionFilter(status="all"),
-            )
+            page, cursor = store.list_transactions(limit=200, cursor=cursor)
             rows.extend(
                 {
                     "交易時間": item.occurred_at,
@@ -202,7 +197,6 @@ class MaintenanceService:
                     "金額": item.money.to_decimal_string(),
                     "幣別": item.money.currency,
                     "備註": item.description,
-                    "狀態": "有效" if item.status == "active" else "已刪除",
                     "交易 ID": item.transaction_id,
                 }
                 for item in page
@@ -219,7 +213,6 @@ class MaintenanceService:
             "金額",
             "幣別",
             "備註",
-            "狀態",
             "交易 ID",
         ]
         with target.open("w", encoding="utf-8-sig", newline="") as handle:

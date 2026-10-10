@@ -67,33 +67,74 @@ def test_action_buttons_sit_left_to_right_in_the_agreed_order(window) -> None:
     assert len({button.x() for button in by_position}) == 3, "有兩顆疊在同一個 x，版面沒跑"
 
 
-def test_delete_is_disabled_on_a_deleted_row_but_the_other_two_are_not(
+def test_delete_names_the_transaction_and_then_removes_it_for_real(
     window, monkeypatch
 ) -> None:
-    """對一筆已刪除的交易：「刪除」停用（以前是按了沒反應），「編輯」與「建立模板」照常。
+    """「刪除」**真的刪掉**（v13 起，ADR-0017）。
 
-    「編輯」不綁，因為按下去 store 會回 `TRANSACTION_VOIDED` 的中文，那是有用的回饋；
-    從已刪除的交易建模板也是合理的事。
+    確認框念出是哪一筆、講找不回來；答「否」什麼都不動（陽性對照），答「是」那一列就不見了 ——
+    而且沒有「已刪除」篩選可以把它找回來：那個篩選與「狀態」欄一起拿掉了。
     """
     _record_lunch(window)
     page = window.transactions
+    answers = [QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes]
+    asked: list[str] = []
+
+    def answer(*args, **kwargs) -> QMessageBox.StandardButton:
+        asked.append(str(args[2]))
+        return answers[len(asked) - 1]
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(answer))
     page.table.selectRow(0)
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.transactions.QMessageBox.question",
-        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
-    )
+    page.delete_selected()
+    assert page.model.rowCount() == 1, "答「否」不該刪"
+
+    page.table.selectRow(0)
     page.delete_selected()
 
-    page.status.setCurrentIndex(page.status.findData("voided"))
-    page.first_page()
-    assert page.model.rowCount() == 1, "已刪除的那一列要在「已刪除」篩選裡看得到"
-    page.table.selectRow(0)
-    assert page.model.selected_item(page.table)["status"] == "voided"
+    assert page.model.rowCount() == 0
+    assert window.controller.list_transactions().details["transactions"] == []
+    assert "午餐" in asked[0] and "2026/08/19" in asked[0], f"要念出是哪一筆：{asked[0]}"
+    assert "找不回來" in asked[0], asked[0]
+    assert "定存" not in asked[0], "手打的交易不該講定存那一句"
+    headers = [
+        page.model.headerData(column, Qt.Orientation.Horizontal)
+        for column in range(page.model.columnCount())
+    ]
+    assert "狀態" not in headers, "沒有已刪除的交易了，狀態欄每一列都會是同一個值"
+    assert not hasattr(page, "status"), "「狀態」篩選拿掉了"
 
-    buttons = _action_buttons(window)
-    assert not buttons["刪除"].isEnabled(), "已刪除的交易不能再刪一次，按鈕要停用"
-    assert buttons["編輯"].isEnabled()
-    assert buttons["建立模板"].isEnabled()
+
+def test_deleting_a_deposit_posting_says_the_draft_will_not_come_back(
+    window, make_deposit, monkeypatch
+) -> None:
+    """定存確認入帳產生的那一筆，刪掉之後那一筆待確認**不會回來**（它已經是「已確認」）——
+    使用者會以為刪掉就能重新確認一次，所以確認框要先講。"""
+    controller = window.controller
+    make_deposit(controller)
+    event = controller.list_inbox()[0]
+    assert controller.confirm_deposit_event(
+        str(event["event_id"]), actual_amount_minor=1_600, occurred_on=str(event["due_date"])
+    ).success
+    page = window.transactions
+    page.first_page()
+    row = next(
+        index
+        for index, item in enumerate(page.model.items)
+        if item.get("source") == "deposit"
+    )
+    asked: list[str] = []
+
+    def answer(*args, **kwargs) -> QMessageBox.StandardButton:
+        asked.append(str(args[2]))
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(answer))
+    page.table.selectRow(row)
+    page.delete_selected()
+
+    assert "定存確認入帳產生的" in asked[0], asked[0]
+    assert "不會再回來" in asked[0], asked[0]
 
 
 @pytest.mark.geometry

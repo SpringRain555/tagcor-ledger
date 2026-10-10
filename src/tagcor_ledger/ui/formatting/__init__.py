@@ -24,7 +24,6 @@ from tagcor_ledger.ui.formatting.messages import (
 from tagcor_ledger.ui.formatting.primitives import (
     DEPOSIT_TERM_STATUS_NAMES,
     ENTRY_NAMES,
-    STATUS_NAMES,
     display_date,
     display_datetime,
     group_digits,
@@ -45,6 +44,7 @@ from tagcor_ledger.ui.formatting.rows import (
     overview_account_values,
     reference_entry_values,
     template_values,
+    transaction_summary,
     transaction_values,
 )
 
@@ -52,7 +52,6 @@ __all__ = [
     "BACKUP_STATE_LABELS",
     "DEPOSIT_TERM_STATUS_NAMES",
     "ENTRY_NAMES",
-    "STATUS_NAMES",
     "account_values",
     "backup_row_text",
     "backup_state_text",
@@ -75,5 +74,6 @@ __all__ = [
     "result_message",
     "signed_amount_text",
     "template_values",
+    "transaction_summary",
     "transaction_values",
 ]

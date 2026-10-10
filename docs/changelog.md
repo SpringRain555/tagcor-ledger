@@ -8,6 +8,38 @@
 
 ## 未發布
 
+### 交易紀錄：「刪除」改成真的移除（schema v13）
+
+使用者問「交易紀錄的刪除，是否為真的刪除？」—— 不是：一直是 `void`，標成已刪除、紀錄留著、篩選看得到、
+不可復原。比較過兩種做法（以及「作廢＋永久刪除」的兩段式）之後，使用者選了**一步到位真的刪除**：
+「確實刪除比較直觀」。個人記帳軟體的主流本來就是確認後直接刪除；「作廢、紀錄留著」是正式會計
+（要接受稽核）的做法。理由、比較表與被否決的方案見
+[ADR-0017](decisions/ADR-0017-delete-transactions-for-real.md)。
+
+- **「刪除」是真的移除**：交易、它的 posting 與 allocation、FTS 索引一起消失；稽核表留一列 `transaction.delete`
+  （流向與日期、**不記金額**）。移除一筆交易只有一個寫法：`StoreBase._remove_transaction()`。
+- **只被已刪除交易用過的帳戶與類別刪得掉了** —— 以前已刪除的交易還在，引用檢查不看狀態，它們永遠只能封存。
+- **替換轉帳 = 建新的 ＋ 真的刪掉舊的**（同一個 SQLite transaction）。`replaces_transaction_id` 不再寫入
+  （它是指向舊交易的外鍵，會擋住刪除），替換關係改記在稽核列的 `replaces`；`test_retired_schema_values.py`
+  守著「不再寫」（`voided` 也是）。
+- **定存確認入帳產生的交易被刪掉時**，事件維持「已確認」、`transaction_id` 放手成 NULL —— 跟以前作廢之後
+  的結果一樣，那一筆待確認不會回來。確認框會先講這一句。
+- **`migrate_v13` 清掉既有的已刪除交易**（含被替換掉的舊轉帳）：先清 `replaces_transaction_id`、再讓指向它們的
+  定存事件放手、最後刪 FTS／allocation／posting／交易（外鍵開著，順序不可反）。它們本來就不計入任何金額 ——
+  **畫面上的數字不會變**。**升級前請先手動建立一份備份**：程式依規定不自動備份，而 migration 不能 un-delete。
+  `status` 欄與 CHECK 留著（免重建表），列表查詢的 `t.status = 'active'` 也留著（給 `(status, occurred_at)` 索引用）。
+- 交易紀錄：「狀態」篩選與欄位拿掉；確認框念出是哪一筆（`formatting.transaction_summary`，跟表格那一列同一個寫法）、
+  講「只能從備份還原」，預設停在「否」。匯出的交易 CSV 拿掉「狀態」欄。
+- 程式：`VoidTransaction` → `DeleteTransaction`、`void_transaction` → `delete_transaction`；`TransactionFilter.status`、
+  `RecordStatus.VOIDED`、`STATUS_NAMES`、`amount_color` 的「已刪除變暗」拿掉；錯誤碼 TRANSACTION_VOIDED、
+  TRANSFER_NOT_ACTIVE、TRANSACTION_STATUS_FILTER_INVALID 退役。
+- 測試：新的 `test_transaction_deletion.py` —— 四張表真的清乾淨、稽核不帶金額、再刪一次是找不到；只被它用過的帳戶與項目
+  刪得掉（先確認刪不掉）；替換轉帳後只剩一筆且外鍵乾淨；刪定存交易後事件仍已確認、外鍵乾淨；v12 → v13 只清已刪除的三種
+  形狀（支出、被替換的舊轉帳、定存交易）。UI：確認框念出是哪一筆、答「否」不動；定存交易多那一句。
+  反向驗證：拿掉事件放手 → 外鍵擋住刪除、拿掉 v13 的第一步 → migration 撞外鍵，各自那一條紅。
+- 文件：ADR-0017、`state-machines.md` §1（圖重畫）與 §3、`glossary.md`（「刪除」只剩一個意思）、`data-model.md`
+  （v13、ER 圖重畫）、`error-codes.md`（退役三個碼）、`ui-workflows.md`、README、`docs/index.md`、ADR-0015 頭部。
+
 ### 類別與項目：同名按鈕合成一排、一次只選一列、再點一次取消選取
 
 使用者問「兩邊都有的同名按鈕（重新命名、排序設定）可以合併嗎？」「點選之後再點一次要可以取消選取」，
