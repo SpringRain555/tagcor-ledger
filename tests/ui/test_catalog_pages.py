@@ -13,7 +13,6 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
-    QMessageBox,
     QPushButton,
     QTabWidget,
 )
@@ -526,20 +525,16 @@ def test_a_new_item_defaults_to_the_category_being_looked_at(window, monkeypatch
     assert choice.default == transport_id
 
 
-def test_the_delete_confirmation_names_what_will_be_deleted(window, monkeypatch) -> None:
+def test_the_delete_confirmation_names_what_will_be_deleted(
+    window, answer_confirmations
+) -> None:
     """確認框念出「刪的是哪一個」，用這一頁自己的名詞 —— 以前寫的是「設定項」。
     按鈕也不再寫「封存／恢復所選項目」：「項目」在這個專案專指第二層。"""
     page = window.operation_settings.categories
     page.refresh()
     row = [str(item["category_id"]) for item in _rows(page)].index("cat_food")
     page.table.selectRow(row)
-    asked: list[str] = []
-
-    def answer(*args: Any, **_kwargs: Any) -> QMessageBox.StandardButton:
-        asked.append(str(args[2]))
-        return QMessageBox.StandardButton.No
-
-    monkeypatch.setattr("tagcor_ledger.ui.pages.catalog.QMessageBox.question", answer)
+    asked = answer_confirmations(False)
     page.delete_selected()
 
     assert "類別「伙食」" in asked[0], asked[0]

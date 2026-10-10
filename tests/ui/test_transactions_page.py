@@ -11,7 +11,6 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QMessageBox,
     QPushButton,
 )
 
@@ -68,7 +67,7 @@ def test_action_buttons_sit_left_to_right_in_the_agreed_order(window) -> None:
 
 
 def test_delete_names_the_transaction_and_then_removes_it_for_real(
-    window, monkeypatch
+    window, answer_confirmations
 ) -> None:
     """「刪除」**真的刪掉**（v13 起，ADR-0017）。
 
@@ -77,14 +76,7 @@ def test_delete_names_the_transaction_and_then_removes_it_for_real(
     """
     _record_lunch(window)
     page = window.transactions
-    answers = [QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes]
-    asked: list[str] = []
-
-    def answer(*args, **kwargs) -> QMessageBox.StandardButton:
-        asked.append(str(args[2]))
-        return answers[len(asked) - 1]
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(answer))
+    asked = answer_confirmations(False, True)
     page.table.selectRow(0)
     page.delete_selected()
     assert page.model.rowCount() == 1, "答「否」不該刪"
@@ -106,7 +98,7 @@ def test_delete_names_the_transaction_and_then_removes_it_for_real(
 
 
 def test_deleting_a_deposit_posting_says_the_draft_will_not_come_back(
-    window, make_deposit, monkeypatch
+    window, make_deposit, answer_confirmations
 ) -> None:
     """定存確認入帳產生的那一筆，刪掉之後那一筆待確認**不會回來**（它已經是「已確認」）——
     使用者會以為刪掉就能重新確認一次，所以確認框要先講。"""
@@ -123,13 +115,7 @@ def test_deleting_a_deposit_posting_says_the_draft_will_not_come_back(
         for index, item in enumerate(page.model.items)
         if item.get("source") == "deposit"
     )
-    asked: list[str] = []
-
-    def answer(*args, **kwargs) -> QMessageBox.StandardButton:
-        asked.append(str(args[2]))
-        return QMessageBox.StandardButton.No
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(answer))
+    asked = answer_confirmations(False)
     page.table.selectRow(row)
     page.delete_selected()
 

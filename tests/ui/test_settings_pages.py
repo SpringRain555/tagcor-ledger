@@ -2,12 +2,10 @@
 
 import re
 from pathlib import Path
-from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
-    QMessageBox,
     QPushButton,
     QTabWidget,
 )
@@ -94,7 +92,9 @@ def test_backup_list_never_shows_a_raw_error_code(window, qtbot, tmp_path: Path)
     assert "BACKUP_" not in page.result.text()
 
 
-def test_deleting_a_broken_backup_from_the_page(window, qtbot, tmp_path: Path, monkeypatch) -> None:
+def test_deleting_a_broken_backup_from_the_page(
+    window, qtbot, tmp_path: Path, answer_confirmations
+) -> None:
     """走**真正的按鈕路徑**：選一列 → 按刪除 → 確認 → 清單少一列、資料夾真的不見。
 
     不呼叫 `controller.delete_backup()` 了事 —— 那樣測不到選取綁定、確認框，
@@ -110,13 +110,7 @@ def test_deleting_a_broken_backup_from_the_page(window, qtbot, tmp_path: Path, m
     page.refresh()
     assert page.list.count() == 2
 
-    asked: list[str] = []
-
-    def confirm(*args: Any, **kwargs: Any) -> QMessageBox.StandardButton:
-        asked.append(str(args[2]))
-        return QMessageBox.StandardButton.Yes
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(confirm))
+    asked = answer_confirmations(True)
 
     row = next(
         index
@@ -139,7 +133,7 @@ def test_the_last_usable_backup_says_so_before_it_goes(
     window,
     qtbot,
     tmp_path: Path,
-    monkeypatch,
+    answer_confirmations,
 ) -> None:
     """**不擋、只講。** 刪掉最後一份可用的備份是使用者的決定，但他要知道。"""
     window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
@@ -149,16 +143,7 @@ def test_the_last_usable_backup_says_so_before_it_goes(
     only = window.controller.create_backup()
     page.refresh()
 
-    asked: list[str] = []
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        staticmethod(
-            lambda *args, **kwargs: (
-                asked.append(str(args[2])) or QMessageBox.StandardButton.No
-            )
-        ),
-    )
+    asked = answer_confirmations(False)
 
     page.list.setCurrentRow(0)
     page.delete_button.click()

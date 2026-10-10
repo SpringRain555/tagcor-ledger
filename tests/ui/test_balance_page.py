@@ -9,7 +9,6 @@ from PySide6.QtCore import QDate, QPoint
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QMessageBox,
     QPushButton,
 )
 
@@ -141,7 +140,7 @@ def test_a_failed_edit_stays_in_the_dialog(window, monkeypatch) -> None:
     assert int(page.model.items[0]["actual_balance_minor"]) == 1000, "取消之後什麼都不該變"
 
 
-def test_deleting_a_snapshot_removes_it_for_real(window, monkeypatch) -> None:
+def test_deleting_a_snapshot_removes_it_for_real(window, answer_confirmations) -> None:
     """「刪除」**真的移除**那一筆（ADR-0015）：清單裡不見了，也沒有「已刪除」篩選可以
     再看到它。確認框要講「找不回來」，而且要說出是哪一天那次盤點。"""
     page = window.balance
@@ -151,13 +150,7 @@ def test_deleting_a_snapshot_removes_it_for_real(window, monkeypatch) -> None:
     buttons = _buttons(window)
     assert buttons["編輯"].isEnabled() and buttons["刪除"].isEnabled()
 
-    asked: list[str] = []
-
-    def confirm(*args, **kwargs) -> QMessageBox.StandardButton:
-        asked.append(str(args[2]))
-        return QMessageBox.StandardButton.Yes
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(confirm))
+    asked = answer_confirmations(True)
     page.delete_selected()
 
     assert "已刪除" in page.result.text(), page.result.text()
@@ -177,7 +170,9 @@ def _amount_in_summary(text: str) -> str:
     return text[index:]
 
 
-def test_deleting_a_transaction_recalculates_the_balance_gap(window, monkeypatch) -> None:
+def test_deleting_a_transaction_recalculates_the_balance_gap(
+    window, answer_confirmations
+) -> None:
     """從交易紀錄刪除一筆帳，餘額盤點的未解釋差額要跟著變。
 
     未解釋差額 ＝ 盤點金額 － 期間內 posting 加總，所以任何一筆交易的增減都會改變它。
@@ -210,10 +205,7 @@ def test_deleting_a_transaction_recalculates_the_balance_gap(window, monkeypatch
 
     # 走真正的按鈕路徑（`delete_selected`），不要自己 emit —— 這條測試要驗的正是
     # 「那顆按鈕有沒有通知別人」。
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.transactions.QMessageBox.question",
-        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
-    )
+    answer_confirmations(True)
     page.delete_selected()
 
     assert _amount_in_summary(window.balance.summary.text()) == before, (

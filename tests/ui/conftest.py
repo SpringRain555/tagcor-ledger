@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PySide6.QtWidgets import QMessageBox
 
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.ui.main_window import MainWindow
@@ -48,6 +49,41 @@ def window(qtbot: Any, tmp_path: Path) -> Iterator[MainWindow]:
     qtbot.addWidget(main_window)
     main_window.show()
     yield main_window
+
+
+@pytest.fixture
+def answer_confirmations(monkeypatch: pytest.MonkeyPatch) -> Callable[..., list[str]]:
+    """把確認框換成**照順序回答**，回傳問過的話（對話框裡的文字）給斷言用：
+
+        asked = answer_confirmations(False, True)   # 第一次按「否」、第二次按「是」
+
+    確認框一律走 `widgets.confirm.confirm()`，它自己建 `QMessageBox` 再 `exec()` ——
+    所以攔的是 `QMessageBox.exec`。2026-10-09 之前攔的是 `QMessageBox.question`，那個靜態
+    函式的按鈕是英文的 Yes／No，`confirm()` 已經不用它了。**Qt 的靜態 `warning()`／
+    `information()` 不受這個替換影響**：它們在 C++ 那一側呼叫 exec，看不到 Python 這邊（實測）。
+
+    答案用完之後又被問一次，測試直接失敗 —— 多問一次就是行為變了。
+    """
+
+    def install(*answers: bool) -> list[str]:
+        asked: list[str] = []
+        remaining = list(answers)
+
+        def fake_exec(box: QMessageBox) -> int:
+            asked.append(box.text())
+            if not remaining:
+                pytest.fail(f"確認框多問了一次：{box.text()!r}")
+            button = (
+                QMessageBox.StandardButton.Yes
+                if remaining.pop(0)
+                else QMessageBox.StandardButton.No
+            )
+            return int(button.value)
+
+        monkeypatch.setattr(QMessageBox, "exec", fake_exec)
+        return asked
+
+    return install
 
 
 @pytest.fixture

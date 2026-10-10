@@ -17,7 +17,6 @@ v0.22.0 之前模板頁的「封存」**等於刪除**：`refresh()` 沒有帶 `
 
 from typing import Any
 
-from PySide6.QtWidgets import QMessageBox
 
 from tagcor_ledger.ui.main_window import MainWindow
 
@@ -46,18 +45,6 @@ def row_of(page: Any, identifier_field: str, identifier: str) -> int:
 
 def status_column(page: Any, row: int) -> str:
     return str(page.model.index(row, page.model.columnCount() - 1).data())
-
-
-def always_yes(monkeypatch: Any) -> list[str]:
-    """把確認框換成「是」，並把問過的話留下來給斷言用。"""
-    asked: list[str] = []
-
-    def confirm(*args: Any, **kwargs: Any) -> QMessageBox.StandardButton:
-        asked.append(str(args[2]))
-        return QMessageBox.StandardButton.Yes
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(confirm))
-    return asked
 
 
 def test_archiving_a_template_keeps_it_on_the_page(window) -> None:
@@ -114,7 +101,7 @@ def test_editing_an_archived_template_does_not_quietly_revive_it(window, monkeyp
     assert status_column(page, row) == "已封存", "編輯把封存的模板復活了"
 
 
-def test_deleting_a_template_says_the_transactions_are_safe(window, monkeypatch) -> None:
+def test_deleting_a_template_says_the_transactions_are_safe(window, answer_confirmations) -> None:
     """模板沒有「未使用」這個條件 —— 沒有任何一張表引用得到它。
 
     確認框必須講出這件事，否則使用者會以為刪模板會連帶影響已經記過的帳。
@@ -122,7 +109,7 @@ def test_deleting_a_template_says_the_transactions_are_safe(window, monkeypatch)
     page = window.operation_settings.templates
     template_id = make_template(window, "早餐")
     page.refresh()
-    asked = always_yes(monkeypatch)
+    asked = answer_confirmations(True)
 
     page.table.selectRow(row_of(page, "template_id", template_id))
     page.delete_selected()
@@ -137,7 +124,7 @@ def test_deleting_a_template_says_the_transactions_are_safe(window, monkeypatch)
     assert "封存" in asked[0], "要提供「其實你想要的是封存」這條路"
 
 
-def test_an_archived_template_no_longer_traps_its_account(window, monkeypatch) -> None:
+def test_an_archived_template_no_longer_traps_its_account(window, answer_confirmations) -> None:
     """**這條是整次改動存在的理由。**
 
     `delete_account()` 的引用檢查涵蓋 `transaction_templates`，所以一個封存的模板
@@ -173,7 +160,7 @@ def test_an_archived_template_no_longer_traps_its_account(window, monkeypatch) -
     page.refresh()
     row = row_of(page, "template_id", str(template.template_id))
     assert status_column(page, row) == "已封存"
-    always_yes(monkeypatch)
+    answer_confirmations(True)
     page.table.selectRow(row)
     page.delete_selected()
 

@@ -5,7 +5,6 @@ monkeypatch 的目標也在那個模組 —— patch 頁面模組的 `ask_form` 
 """
 
 from PySide6.QtCore import QDate
-from PySide6.QtWidgets import QMessageBox
 
 from tagcor_ledger.ui.widgets.deposit_dialog import DepositContractDialog
 from tagcor_ledger.ui.widgets.forms import select_data
@@ -294,7 +293,7 @@ def test_closing_a_contract_hides_it_until_you_ask_to_see_it(window, make_deposi
 
 
 def test_closing_a_contract_with_a_live_term_says_what_to_do_instead(
-    window, make_deposit, monkeypatch
+    window, make_deposit, monkeypatch, answer_confirmations
 ) -> None:
     """擋下來的時候要指出「中途解約」，不能只說不行。"""
     controller = window.controller
@@ -303,10 +302,7 @@ def test_closing_a_contract_with_a_live_term_says_what_to_do_instead(
     page.refresh()
     page.contracts.selectRow(0)
 
-    monkeypatch.setattr(
-        "tagcor_ledger.ui.pages.deposits.QMessageBox.question",
-        staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes),
-    )
+    answer_confirmations(True)
     warnings: list[str] = []
     monkeypatch.setattr(
         "tagcor_ledger.ui.pages.deposits.QMessageBox.warning",

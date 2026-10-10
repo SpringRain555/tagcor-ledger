@@ -159,10 +159,13 @@ flowchart LR
 - **有自由文字欄（名稱、備註）的表要同時指定 `stretch_column`，讓那一欄讓路。** 收寬設的是 `setMaximumWidth`，那是**上限不是保證** —— 名稱一長，`ResizeToContents` 的欄寬總和就超過分頁能給的寬度，欄位照樣溢出、底下冒出橫向捲軸；而這些表是固定高度，捲軸會從那個高度裡扣掉自己的厚度，**最後一列被切掉**，看起來像資料沒載完。指定之後空間夠時 stretch 欄分到的剛好是自己的內容寬度（畫面不變），不夠時只有它被壓縮成 `…`。`setup_table` 另外關掉 `wordWrap` —— 列高釘死成單行，折行只會讓省略看起來像壞掉。
 - **UI 用詞與資料表名稱可以不同**（例如使用者看到「項目」，schema 是 `categories` 的第二層）。已淘汰的 UI 用詞列在 `tests/unit/test_architecture.py` 的 `RETIRED_UI_WORDS`，該測試掃 `ui/` 與 `application/` 的字串常數（docstring 與註解不算）。**已移除的功能名稱也在那份名單上** —— 一顆通往不存在功能的按鈕比錯的用詞更糟。
 - 主要操作按鈕用 `primaryButton`；刪除、重製、還原等高風險操作用 `dangerButton`。
-- **確認框一律用 `widgets/confirm.py` 的 `confirm()`，預設按鈕是「否」。** `QMessageBox.question()`
-  不指定預設按鈕時，焦點落在「是」上 —— 對話框一出來按 Enter 就直接動手（2026-10-09 實測）。
-  文字要講出**要動的是哪一個**與**之後救不救得回來**。`test_every_confirmation_goes_through_the_shared_helper`
-  擋住直接呼叫，`tests/ui/test_confirm.py` 用真的對話框按 Enter。
+- **確認框一律用 `widgets/confirm.py` 的 `confirm()`：按鈕寫「是」「否」，預設是「否」。**
+  `QMessageBox.question()` 不指定預設按鈕時，焦點落在「是」上 —— 對話框一出來按 Enter 就直接動手；
+  而且它的按鈕是 Qt 的英文「Yes／No」（程式沒有載入 Qt 的翻譯），靜態函式改不了（兩件都是 2026-10-09 實測）。
+  所以 `confirm()` 自己建對話框，**不加 `&Y`／`&N` 助記鍵**（加了單按 Y 就是「是」）。文字要講出
+  **要動的是哪一個**與**之後救不救得回來**。`test_every_confirmation_goes_through_the_shared_helper`
+  擋住任何地方呼叫 `question`，`tests/ui/test_confirm.py` 用真的對話框按 Enter、Esc 並看按鈕上的字；
+  其他測試攔確認框一律用 `tests/ui/conftest.py` 的 `answer_confirmations`（攔 `QMessageBox.exec`）。
 - **有些字串照抄程式外面的正本，不得縮短。** `domain/deposits.py` 的
   `MATURITY_ACTION_NAMES` 四個名字逐字照郵局定期儲金存單（`REQ-0007` §列舉 是文件側的
   正本）—— 使用者在那個下拉選單前面做的事就是把實體單據上的打勾抄過來，

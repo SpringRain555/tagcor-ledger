@@ -751,16 +751,11 @@ def test_every_dropdown_comes_from_the_shared_factory() -> None:
         )
 
 
-# 確認框的唯一出口。它固定把預設按鈕設成「否」—— Qt 不指定時焦點在「是」，按 Enter 就是是。
-CONFIRM_HELPER = "ui/widgets/confirm.py"
-
-
-def _question_calls(path: Path) -> int:
-    """這個模組呼叫 `QMessageBox.question(...)` 幾次（AST 的屬性呼叫，不做字串比對）。"""
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+def _question_calls(source: str) -> int:
+    """這段程式呼叫 `QMessageBox.question(...)` 幾次（AST 的屬性呼叫，不做字串比對）。"""
     return sum(
         1
-        for node in ast.walk(tree)
+        for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "question"
@@ -770,24 +765,26 @@ def _question_calls(path: Path) -> int:
 
 
 def test_every_confirmation_goes_through_the_shared_helper() -> None:
-    """**`ui/` 底下不得直接呼叫 `QMessageBox.question`**，一律用 `confirm()`。
+    """**`ui/` 底下不得呼叫 `QMessageBox.question`**，一律用 `widgets.confirm.confirm()`。
 
-    `question()` 不指定預設按鈕時，焦點落在「是」上，對話框一出來按 Enter 就是「是」
-    （2026-10-09 實測）。這條規則以前只寫在 `reset.py` 的 docstring 裡，於是八個確認框裡
-    只有兩個記得 —— 交易、盤點、名冊、模板、定存合約、還原的確認框按 Enter 都會直接動手。
+    兩個理由，都是 2026-10-09 實測的：
+
+    - `question()` 不指定預設按鈕時，焦點落在「是」上，對話框一出來按 Enter 就是「是」。
+      這條規則以前只寫在 `reset.py` 的 docstring 裡，於是八個確認框只有兩個記得。
+    - 它的按鈕是 Qt 的英文「Yes／No」（程式沒有載入 Qt 的翻譯），而靜態函式改不了按鈕上的字。
+      所以 `confirm()` 自己建對話框，**連它自己也不呼叫 `question`**。
     """
-    # 陽性對照：抽取器在 helper 自己身上要認得出那一個呼叫，否則底下會空過。
-    assert _question_calls(SOURCE_ROOT / CONFIRM_HELPER) == 1, "抽取器認不出 QMessageBox.question"
+    # 陽性對照：抽取器要認得出一個呼叫，否則底下會空過。
+    assert _question_calls("QMessageBox.question(None, 't', 'x')") == 1, "抽取器壞了"
+    assert _question_calls("QMessageBox.warning(None, 't', 'x')") == 0
     offenders: list[str] = []
     for path in _modules("ui"):
-        relative = path.relative_to(SOURCE_ROOT).as_posix()
-        if relative == CONFIRM_HELPER:
-            continue
-        count = _question_calls(path)
+        count = _question_calls(path.read_text(encoding="utf-8"))
         if count:
-            offenders.append(f"  {relative} 直接呼叫了 {count} 次 QMessageBox.question")
+            relative = path.relative_to(SOURCE_ROOT).as_posix()
+            offenders.append(f"  {relative} 呼叫了 {count} 次 QMessageBox.question")
     if offenders:
         pytest.fail(
-            "確認框一律用 `widgets.confirm.confirm()`（預設按鈕是「否」）：\n"
+            "確認框一律用 `widgets.confirm.confirm()`（按鈕「是／否」、預設「否」）：\n"
             + "\n".join(offenders)
         )
