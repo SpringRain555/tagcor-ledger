@@ -1,8 +1,27 @@
 # Storage Layout
 
-## 程式與資料是分開的
+## 資料放在哪裡：第一次啟動時選（ADR-0018）
 
-**帳務資料不在專案資料夾裡。** 專案資料夾是程式，推上 remote 公開的只有它；資料放在專案外的另一個位置（由「系統設定 → 資料路徑」指定），永遠不進版控。
+[ADR-0018](../decisions/ADR-0018-choose-data-location-on-first-run.md) 之前，沒設定過路徑的人資料一律在使用者資料夾。
+現在第一次啟動時跳出對話框問，三個選項：
+
+| 選項 | 資料根 | 怎麼記住 |
+|---|---|---|
+| 放在程式資料夾裡（**預選**） | `<程式資料夾>\userdata` | **不寫指標檔**：每次從程式自己的位置往下找，整個資料夾搬走或帶到別台電腦都找得到 |
+| 放在這台電腦的使用者資料夾 | `%LOCALAPPDATA%\TagCor\TagCorLedger` | 不寫指標檔：ADR-0018 之前唯一的預設位置，舊使用者的帳本就在這裡 |
+| 其他位置… | 使用者挑的資料夾 | 寫指標檔 `system_paths.json`（跟「系統設定 → 資料路徑」同一條路）。重灌之後指標檔不見、資料還在，用它接回去 |
+
+**每次啟動都照同樣四步找**（`app/data_location.py`）：指標檔 → `userdata` 裡的帳本 → 使用者資料夾裡的帳本 →
+都沒有才問。「有帳本」＝資料根底下的 `data\ledger.sqlite3` 或 `ledger\ledger.sqlite3`。
+**看的是帳本檔，不是資料夾**：啟動器的預檢在使用者選之前就會建 `logs\`。
+按「確定」當場就建出帳本，所以「問過了沒」不另外記 —— 帳本本身就是證據。按「結束」什麼都不建，下次再問。
+
+**`userdata` 整個在 `.gitignore` 裡** —— 匯出的交易 CSV、備份的 manifest 都不是 `*.sqlite3`，只靠副檔名的規則
+擋不到。`tests/unit/test_data_location.py` 用 `git check-ignore` 守著。「其他位置…」不能挑在程式資料夾裡面
+（`DATA_ROOT_INSIDE_PROGRAM_FOLDER`），理由相同。
+
+**這個 repo 的開發者本機不用 `userdata`**：資料在專案外的資料根，由指標檔指定（CONVENTIONS §11），
+推上 remote 公開的只有程式。
 
 下面的路徑都是**範例**，實際位置由使用者自己決定。
 
@@ -15,10 +34,11 @@
 └── system_paths.json    指標檔：data_root / ledger_dir / backup_dir
 ```
 
-**這個目錄裡沒有帳務資料，所以它不在 `data_root` 底下，也不進備份。**
+**指標檔本身不是帳務資料，所以它不在 `data_root` 底下，也不進備份。**
 `platformdirs.user_config_dir` 在 Windows 預設回傳 LOCALAPPDATA（不是 Roaming），
-所以它與舊版的資料樹會落在同一個父目錄 —— 清理舊資料樹時**只刪六個子資料夾，
-不要整棵刪**，否則會把剛寫好的指標檔一起刪掉（`docs/lessons.md` 2026-08-18）。
+所以它跟「使用者資料夾」那個選項的資料根**是同一個資料夾** —— 清理那裡的資料時**只刪子資料夾，
+不要整棵刪**，否則會把指標檔一起刪掉（`docs/lessons.md` 2026-08-18）。
+選了程式資料夾的人，這裡也會有啟動器預檢留下的 `logs\` 與 `tmp\`（選之前的那一次），沒有帳本。
 
 **舊版會在這裡留下 `window.json`**（上次的視窗大小與位置）。2026-09-27 起每次啟動
 都是預設大小，那個檔案不讀也不寫 —— 放著無害，刪掉也無妨。
@@ -39,6 +59,9 @@ data_root/                       ← 例：D:\Ledger\tagcor-ledger
 ├── logs/
 └── tmp/
 ```
+
+帳本資料夾叫 `ledger\` 或 `data\` 都認得。第一次啟動新建的資料根（三個選項都是）用 `data\`
+（`path_settings.layout_for()`，跟 ADR-0018 之前的使用者資料夾一樣）。
 
 `system_paths.json` 的內容：
 

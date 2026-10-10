@@ -29,6 +29,7 @@ TagCor Ledger 是 Windows-first、本機優先的個人記帳工具。核心資�
   **App 不連網**，法規庫是離線產生的唯讀檔案。
 - 啟動失敗、資料庫被鎖、磁碟不可用等狀況會顯示繁中說明並寫入日誌，不會無聲消失。
 - 電子票證（悠遊卡／一卡通／iCash）只記儲值當下的支出，**不建卡片帳戶、不追蹤卡內餘額**。
+- 第一次開啟時選資料放哪裡：程式資料夾（`userdata`，不進 git）、這台電腦的使用者資料夾，或自己挑。
 - 記帳資料路徑與備份路徑可分開設定。
 - 備份只在使用者手動按下「建立完整備份」時執行。
 - 還原與重製前可勾選「先建立備份」，不再強制自動備份。
@@ -131,12 +132,27 @@ python -m tagcor_ledger --data-dir .\.local-data --init-data --gui
 python -m tagcor_ledger --data-dir .\.local-data --init-data --json
 ```
 
-未指定 `--data-dir` 時，程式會使用外部系統設定檔中的路徑。可在「系統設定 → 資料路徑」設定：
+## 資料放在哪裡
 
-- 記帳資料路徑：存放 `ledger.sqlite3`、`ledger.sqlite3-wal`、`ledger.sqlite3-shm`。
-- 備份路徑：存放 `backup_YYYYMMDD_HHMMSS_xxxxxx/ledger.sqlite3` 與 `backup_manifest.json`。
+**第一次開啟時會問**（[ADR-0018](docs/decisions/ADR-0018-choose-data-location-on-first-run.md)）：
 
-備份路徑不可與記帳資料路徑相同，也不可互相包含。
+| 選項 | 位置 | 適合 |
+|---|---|---|
+| 放在程式資料夾裡（預選） | `<程式資料夾>\userdata` | 想一眼找到資料、整個資料夾帶著走 |
+| 放在這台電腦的使用者資料夾 | `%LOCALAPPDATA%\TagCor\TagCorLedger` | 常常重新下載程式、不想管資料搬家 |
+| 其他位置… | 自己挑 | 放另一顆硬碟；或把以前用過的資料夾接回來（例如重灌之後） |
+
+- **`userdata` 整個不進 git**（`.gitignore`），推自己的 fork 也不會把帳本帶出去。
+- **更新程式**：用 `git pull` 更新的話，`userdata` 不受影響；下載新版 ZIP 的話，先把舊資料夾裡的
+  `userdata` 整個搬到新資料夾再開 —— 沒搬就開，會看到一本空帳本並被再問一次（舊的資料還在舊資料夾裡）。
+- **程式資料夾不要放在 OneDrive 同步的位置**（例如桌面、文件）：SQLite 被雲端同步有損毀的風險。
+- 之後要換位置：「系統設定 → 資料路徑」，可選「切換到既有資料」或「搬移目前資料」：
+  - 記帳資料路徑：存放 `ledger.sqlite3`、`ledger.sqlite3-wal`、`ledger.sqlite3-shm`。
+  - 備份路徑：存放 `backup_YYYYMMDD_HHMMSS_xxxxxx/ledger.sqlite3` 與 `backup_manifest.json`。
+    不可與記帳資料路徑相同，也不可互相包含。
+
+有指標檔（在系統設定或「其他位置…」指定過）就照它，不會再問；細節見
+[儲存配置](docs/architecture/storage-layout.md)。`--data-dir` 是開發與測試用的，永遠不問。
 
 ## 操作方式
 

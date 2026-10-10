@@ -5,7 +5,7 @@
 根本沒有 console，所以實際症狀是「視窗沒出現、沒有訊息、沒有紀錄」。
 
 **每個分支都要給可執行的下一步。** 「發生未預期的錯誤」對使用者毫無幫助；
-「設定檔在這個位置，刪掉它會退回預設路徑，不會損失帳務資料」才有。
+「設定檔在這個位置，刪掉它再開一次就好，不會損失帳務資料」才有。
 """
 
 from __future__ import annotations
@@ -76,22 +76,23 @@ def _path_settings(exc: PathSettingsError) -> StartupFailure:
             "SYSTEM_PATH_SETTINGS_INVALID",
             "路徑設定檔損毀",
             f"設定檔內容不是合法的 JSON：\n{settings_path}\n\n"
-            "**把這個檔案刪掉就會退回預設路徑，不會損失任何帳務資料** —— "
+            "**把這個檔案刪掉再開一次就好，不會損失任何帳務資料** —— "
             "帳本本身是另一個檔案，設定檔只記錄它在哪裡。\n"
-            "刪除後重新開啟程式，再到「系統設定 → 資料路徑」指回原本的資料夾。",
+            "重新開啟後，程式會先找程式資料夾的 userdata 與使用者資料夾，都沒有帳本才問你放哪裡；"
+            "帳本在別的資料夾的話，在詢問時選「其他位置…」，或到「系統設定 → 資料路徑」指回去。",
         )
     if code == "PATH_OUTSIDE_DATA_ROOT":
         return StartupFailure(
             "PATH_OUTSIDE_DATA_ROOT",
             "資料路徑設定越界",
             f"記帳資料路徑或備份路徑不在資料根目錄底下。\n設定檔：{settings_path}\n\n"
-            "可以直接編輯該檔案讓三個路徑一致，或把它刪掉退回預設路徑後重新設定。",
+            "可以直接編輯該檔案讓三個路徑一致，或把它刪掉再開一次、重新指定資料放哪裡。",
             code,
         )
     return StartupFailure(
         "SYSTEM_PATH_SETTINGS_INVALID",
         "路徑設定無法使用",
-        f"設定檔：{settings_path}\n刪掉它會退回預設路徑，不會損失帳務資料。",
+        f"設定檔：{settings_path}\n把它刪掉再開一次、重新指定資料放哪裡，不會損失帳務資料。",
         code,
     )
 

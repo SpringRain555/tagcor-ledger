@@ -67,7 +67,7 @@
 | [REQ-0003 餘額盤點](requirements/REQ-0003-balance-snapshots.md) | 已實作；**「今天還沒盤點」那則提醒在 0.25.0 移除**（[ADR-0014](decisions/ADR-0014-drop-daily-snapshot-reminder.md)）；**刪除改成真的移除**（[ADR-0015](decisions/ADR-0015-delete-balance-snapshots-for-real.md)）|
 | [REQ-0004 設定、路徑與用詞](requirements/REQ-0004-settings-paths-terms.md) | 已實作；操作設定現在是**四個**分頁（定期收支移除，[ADR-0011](decisions/ADR-0011-drop-recurring-schedules.md)；類別與項目 2026-10-05 合成並排的一頁）|
 | [REQ-0005 深色 UI](requirements/REQ-0005-dark-ui-docs.md) | 已實作 |
-| [REQ-0006 資料與程式分離](requirements/REQ-0006-data-program-separation.md) | 已實作 |
+| [REQ-0006 資料與程式分離](requirements/REQ-0006-data-program-separation.md) | 已實作；**下載使用者第一次啟動時可以選把資料放在程式資料夾的 `userdata`**（2026-10-10，[ADR-0018](decisions/ADR-0018-choose-data-location-on-first-run.md)），開發者本機不變 |
 | [REQ-0007 郵局定存](requirements/REQ-0007-time-deposits.md) | 已實作（schema v6–v7、v9–v10）。**v0.23.0 起是「待確認」唯一的來源**（2026-10-05 起待確認住在餘額盤點頁底下，[ADR-0016](decisions/ADR-0016-inbox-under-balance-snapshots.md)）；v0.24.0 補完結束合約與中途解約，並把產生的下界訂在建檔日、建檔改成填存單上那一天（[ADR-0012](decisions/ADR-0012-deposit-events-start-at-record-date.md)）|
 | [REQ-0008 法規參考庫](requirements/REQ-0008-reference-db.md) | 已實作 |
 | [REQ-0009 例外處理與可觀測性](requirements/REQ-0009-observability.md) | 已實作 |
@@ -78,7 +78,7 @@
 - [ADR-0001 文件制度與歷史保存](decisions/ADR-0001-documentation-history.md)
 - [ADR-0002 SQLite 作為 canonical store](decisions/ADR-0002-sqlite-canonical-store.md)
 - [ADR-0003 使用 PySide6](decisions/ADR-0003-pyside6.md)
-- [ADR-0004 資料與程式位置分離](decisions/ADR-0004-data-program-separation.md)
+- [ADR-0004 資料與程式位置分離](decisions/ADR-0004-data-program-separation.md) —— **下載使用者的部分被 ADR-0018 取代**
 - [ADR-0005 法規庫唯讀且離線](decisions/ADR-0005-reference-db-offline.md)
 - [ADR-0006 一律手動輸入](decisions/ADR-0006-manual-entry-only.md)
 - [ADR-0007 定存建模](decisions/ADR-0007-time-deposit-modelling.md)
@@ -92,6 +92,7 @@
 - [ADR-0015 盤點的「刪除」改成真的移除](decisions/ADR-0015-delete-balance-snapshots-for-real.md)
 - [ADR-0016 待確認併進餘額盤點](decisions/ADR-0016-inbox-under-balance-snapshots.md)
 - [ADR-0017 交易的「刪除」改成真的移除](decisions/ADR-0017-delete-transactions-for-real.md)
+- [ADR-0018 第一次啟動時讓使用者選資料位置](decisions/ADR-0018-choose-data-location-on-first-run.md)
 
 ## Architecture
 

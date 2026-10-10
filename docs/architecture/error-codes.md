@@ -166,8 +166,11 @@
 | `LEDGER_BACKUP_PATH_NESTED` | 兩個路徑互相包含 | 設成平輩資料夾 |
 | `PATH_OUTSIDE_DATA_ROOT` | `ledger_dir` 或 `backup_dir` 不在 `data_root` 底下 | 五個資料夾都必須在資料根目錄內 |
 | `SYSTEM_PATH_NOT_WRITABLE` | 資料夾建不出來或寫不進去 | 檢查磁碟是否連接、權限是否足夠、空間是否夠 |
-| `SYSTEM_PATH_SETTINGS_INVALID` | `system_paths.json` 不是合法 JSON | **刪掉它會退回預設路徑**，不會損失帳務資料 |
+| `SYSTEM_PATH_SETTINGS_INVALID` | `system_paths.json` 不是合法 JSON | **刪掉它再開一次**：程式重新找帳本（`userdata` → 使用者資料夾），找不到就問你放哪裡 —— 帳本在別處的話選「其他位置…」指回去。不會損失帳務資料 |
 | `TARGET_LEDGER_ALREADY_EXISTS` | 搬移目標已經有一個資料庫檔 | 換一個空資料夾，或先處理掉目標位置那一份 |
+| `DATA_ROOT_IS_DRIVE_ROOT` | 第一次啟動選「其他位置…」時挑了整顆磁碟（ADR-0018） | 挑磁碟底下的一個資料夾 —— 否則 `data`、`backups`、`logs` 會直接長在磁碟根目錄 |
+| `DATA_ROOT_INSIDE_PROGRAM_FOLDER` | 「其他位置…」挑在程式資料夾裡面 | 要放程式資料夾裡就選第一個選項：**只有 `userdata` 被 git 忽略**，放別處匯出的交易 CSV 可能被 commit |
+| `DATA_ROOT_IS_LEDGER_DIR` | 「其他位置…」挑到放 `ledger.sqlite3` 的那一層 | 改挑它的上一層（資料根目錄）。照用下去會在底下另建一本空帳本，真的那本反而沒接上 |
 | `PATH_SETTINGS_SAVE_FAILED` | **退路碼**：路徑設定儲存失敗，而且原因不是這一節其他任何一個 | **舊設定與舊資料都沒有變動。** 匯出診斷資訊回報 |
 | `PATH_SETTINGS_RELOAD_FAILED` | 指標檔已經寫進新路徑，之後重新接上 service 才失敗 | **搬移過的資料在新位置，沒有遺失。** 重新啟動程式 |
 | `DATABASE_SCHEMA_TOO_NEW` | 資料庫版本比程式支援的新 | **不要繼續使用，先更新程式。** 用舊程式開新資料庫會壞資料 |

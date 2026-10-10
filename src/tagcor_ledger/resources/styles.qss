@@ -459,6 +459,46 @@ QCheckBox::indicator:checked {
     image: url(%CHECK_ICON%);
 }
 
+/* 單選鈕（第一次啟動選資料位置的那個對話框，ADR-0018）。
+   不給樣式的話，Fusion 在這套深色 palette 上畫出來的未選圓圈幾乎看不見、選中的只剩一個
+   灰點 —— 2026-10-10 實機截圖：三個選項看不出選了哪一個。
+   一碰 ::indicator，Fusion 就不再畫自己的圖形，所以兩個狀態都要自己畫完整。
+   跟勾選框一樣用**形狀**當第二個線索：未選＝空心圓，選中＝白圈 ＋ 中間一個白點。
+   圓與點都是 QSS 畫得出來的（border-radius ＋ 放射漸層），不需要像勾號那樣另外給圖。
+   border-radius 是外框的一半：寬 18 ＋ 兩側邊框各 1 ＝ 20。 */
+QRadioButton {
+    color: #E8E8EA;
+    spacing: 8px;
+    background-color: transparent;
+}
+
+QRadioButton:disabled {
+    color: #7A7A85;
+}
+
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #3A3A44;
+    border-radius: 10px;
+    background-color: #16161A;
+}
+
+QRadioButton::indicator:hover {
+    border-color: #B4B4BE;
+}
+
+QRadioButton::indicator:checked {
+    border-color: #E8E8EA;
+    background-color: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5,
+        stop: 0 #E8E8EA, stop: 0.5 #E8E8EA, stop: 0.6 #16161A, stop: 1 #16161A);
+}
+
+QRadioButton::indicator:disabled {
+    border-color: #33333C;
+    background-color: #1F1F25;
+}
+
 QTabWidget::pane {
     border: 0;
     border-top: 1px solid #33333C;

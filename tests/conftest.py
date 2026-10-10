@@ -7,7 +7,8 @@
 在這之前，擋住這件事的只有「每一條測試都記得傳 `tmp_path`」—— 一條靠記性的規則。
 漏掉一次，測試就會在真帳本上建帳戶、寫交易，而且全綠。
 
-這裡把各模組從 `platformdirs` 拿到的位置函式，整個 session 換成暫存目錄底下的假位置。
+這裡把各模組從 `platformdirs` 拿到的位置函式，整個 session 換成暫存目錄底下的假位置；
+程式資料夾（第一次啟動可以選的 `userdata`，ADR-0018）也一起換掉。
 「忘了傳路徑」最壞只會寫進暫存目錄。陽性對照在 `tests/unit/test_user_dir_guard.py`。
 
 ## 為什麼 patch 各模組的名字，不 patch `platformdirs` 本身
@@ -36,6 +37,11 @@ USER_DIR_FUNCTIONS: tuple[tuple[str, str, str], ...] = (
 DATA_DIR_ENV = "TAGCOR_LEDGER_DATA_DIR"
 """`app/paths.py` 認的覆寫變數。開發者的 shell 裡設了它，測試不該跟著指過去。"""
 
+PROGRAM_ROOT_FUNCTION = "tagcor_ledger.app.data_location.program_root"
+"""程式資料夾（repo 本身）。沒有指標檔時第 2 步會去 `<它>\\userdata` 找帳本，第一次啟動
+選「放在程式資料夾裡」也會在那裡建 —— 不換掉的話，測試會在 repo 裡長出一個真的 `userdata`
+（ADR-0018）。它不是 `platformdirs` 的函式，所以不在上面那張表裡，另外換。"""
+
 
 @pytest.fixture(scope="session", autouse=True)
 def fake_user_dirs(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
@@ -45,5 +51,6 @@ def fake_user_dirs(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
         for module, name, folder in USER_DIR_FUNCTIONS:
             target = str(root / folder)
             patch.setattr(f"{module}.{name}", lambda *_args, _to=target, **_kwargs: _to)
+        patch.setattr(PROGRAM_ROOT_FUNCTION, lambda: root / "program")
         patch.delenv(DATA_DIR_ENV, raising=False)
         yield root

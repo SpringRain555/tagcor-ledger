@@ -61,6 +61,11 @@ desktop.ini
 .local-data/
 .local-data-*/
 
+# 第一次啟動選「放在程式資料夾裡」時的資料根（ADR-0018）。**整個資料夾忽略** ——
+# 匯出的交易 CSV、備份的 manifest 都不是 *.sqlite3，只靠下面的副檔名規則擋不到。
+# tests/unit/test_data_location.py 用 git check-ignore 守著。
+/userdata/
+
 # SQLite 是本專案的主要儲存，資料庫檔一律不追蹤 —— 帳本永遠不進 repo
 *.db
 *.db-journal

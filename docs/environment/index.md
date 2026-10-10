@@ -102,7 +102,8 @@ offscreen 沒有中文字型，中文會渲染成豆腐塊。
 | `TAGCOR_LEDGER_DATA_DIR` | `src/tagcor_ledger/app/paths.py` | **開發與測試用的覆寫**：有值時直接當資料根，**完全不讀指標檔**（跟 `--data-dir` 同一條路）。`tests/integration/test_startup_failures.py` 會先把它刪掉，才測得到指標檔那條路 |
 | `TAGCOR_REFERENCE_DB` | `src/tagcor_ledger/application/reference.py` | 換掉法規參考庫的位置（預設是 repo 的 `reference\reference.sqlite3`，它是公開資訊、不是帳務資料）。UI 測試用它指到暫存檔 |
 
-資料根平常只來自指標檔 `%LOCALAPPDATA%\TagCor\TagCorLedger\system_paths.json`。`--data-dir` 與
+資料根平常來自指標檔 `%LOCALAPPDATA%\TagCor\TagCorLedger\system_paths.json`；沒有指標檔時依序找程式資料夾的
+`userdata`、使用者資料夾，都沒有帳本就在第一次啟動時問（[儲存配置](../architecture/storage-layout.md)、ADR-0018）。`--data-dir` 與
 `TAGCOR_LEDGER_DATA_DIR` 是開發與測試用的覆寫 —— **不要把後者設成使用者層環境變數**：它會被每一個行程繼承，
 包括測試（`D:\Projects\_meta\CONVENTIONS.md` §11）。
 

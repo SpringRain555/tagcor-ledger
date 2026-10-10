@@ -180,11 +180,20 @@ ERROR_MESSAGES: dict[str, str] = {
         "資料夾建不出來或寫不進去。請確認磁碟已連接、權限足夠、空間還夠。"
     ),
     "SYSTEM_PATH_SETTINGS_INVALID": (
-        "路徑設定檔不是合法的 JSON。把 system_paths.json 刪掉就會退回預設路徑，"
-        "帳務資料不會損失。"
+        "路徑設定檔不是合法的 JSON。把 system_paths.json 刪掉再開一次，程式會重新找帳本、"
+        "找不到就問你放哪裡，帳務資料不會損失。"
     ),
     "TARGET_LEDGER_ALREADY_EXISTS": (
         "目標資料夾裡已經有一個帳本檔了。請換一個空資料夾，或先處理掉那一份。"
+    ),
+    # 第一次啟動選「其他位置…」時（ADR-0018）。
+    "DATA_ROOT_IS_DRIVE_ROOT": "請選一個資料夾，不要直接選整顆磁碟。",
+    "DATA_ROOT_INSIDE_PROGRAM_FOLDER": (
+        "這個資料夾在程式資料夾裡面。要放在程式資料夾裡，請選第一個選項 —— "
+        "只有 userdata 這個資料夾不會被 git 記錄。"
+    ),
+    "DATA_ROOT_IS_LEDGER_DIR": (
+        "選到的是放帳本檔（ledger.sqlite3）的那一層。請選它的上一層，也就是資料根目錄。"
     ),
     # ---- 定存 ----
     "DEPOSIT_NAME_REQUIRED": "請輸入合約名稱。",

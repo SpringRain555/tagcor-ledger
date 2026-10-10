@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 from pathlib import Path
 import sys
@@ -10,11 +11,19 @@ from typing import Sequence
 
 from tagcor_ledger import __version__
 from tagcor_ledger.app.bootstrap import bootstrap
+from tagcor_ledger.app.data_location import LocationSource
+from tagcor_ledger.app.paths import paths_for_location
 from tagcor_ledger.app.logging_setup import configure_logging, current_log_path, get_logger
 from tagcor_ledger.app import startup_signal
 from tagcor_ledger.app.single_instance import AlreadyRunningError, SingleInstanceGuard
 from tagcor_ledger.app.startup import classify_startup_error, resolve_log_dir
 from tagcor_ledger.infrastructure.database import initialize_database
+
+
+PYSIDE_MISSING = (
+    "PySide6 is not installed. Create the conda environment from "
+    "environment.yaml or install the package with GUI dependencies."
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,6 +86,23 @@ def _run(args: argparse.Namespace) -> int:
     if args.init_data:
         initialized_files = {"database": initialize_database(context.paths)}
     if args.gui:
+        if context.location is LocationSource.CHOOSE_ON_FIRST_RUN and not args.init_data:
+            # 第一次啟動：先問資料放哪裡（ADR-0018），問完才知道鎖、資料庫、日誌在哪。
+            try:
+                from tagcor_ledger.ui.first_run_dialog import choose_data_location
+            except ModuleNotFoundError as exc:
+                if exc.name == "PySide6":
+                    print(PYSIDE_MISSING, file=sys.stderr)
+                    return 1
+                raise
+            # 啟動器等的是預檢算出來的標記檔（這一刻的 paths）；對話框一出現就寫在那裡。
+            chosen = choose_data_location(ready_marker=startup_signal.marker_path(context.paths))
+            if chosen is None:
+                logger.info("first run closed without choosing a data location")
+                return 0
+            context = replace(context, paths=paths_for_location(chosen), location=chosen.source)
+            configure_logging(context.paths.log_dir)
+            logger.info("data location chosen source=%s", chosen.source)
         # 單一實例守門要在開資料庫之前 —— 拿不到鎖就不要再去動別人正在用的檔案。
         guard = SingleInstanceGuard(context.paths.ledger_dir)
         try:
@@ -94,11 +120,7 @@ def _run(args: argparse.Namespace) -> int:
                 from tagcor_ledger.ui.app import run_gui
             except ModuleNotFoundError as exc:
                 if exc.name == "PySide6":
-                    print(
-                        "PySide6 is not installed. Create the conda environment from "
-                        "environment.yaml or install the package with GUI dependencies.",
-                        file=sys.stderr,
-                    )
+                    print(PYSIDE_MISSING, file=sys.stderr)
                     return 1
                 raise
             # 上一次留下的「視窗已開」標記不能讓這一次的啟動器以為已經成功了。
@@ -115,6 +137,9 @@ def _run(args: argparse.Namespace) -> int:
         "config_dir": str(context.paths.config_dir),
         "ledger_dir": str(context.paths.ledger_dir),
         "database_path": str(context.paths.database_path),
+        # `choose_on_first_run` 時上面那些路徑只是暫時的落腳處：GUI 會先問使用者
+        # 資料放哪裡（ADR-0018）。啟動器看到它就不印資料庫路徑。
+        "data_location": str(context.location),
         "backup_dir": str(context.paths.backup_dir),
         "export_dir": str(context.paths.export_dir),
         "log_dir": str(context.paths.log_dir),

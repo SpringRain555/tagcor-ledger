@@ -165,7 +165,12 @@ try {
     )
 }
 Write-Ok "版本 $($info.version)"
-Write-Ok "資料庫 $($info.database_path)"
+# 第一次啟動（ADR-0018）：資料放哪裡要等視窗出來問過才知道，這時印出來的路徑只是暫時的落腳處。
+if ($info.data_location -eq 'choose_on_first_run') {
+    Write-Ok '資料位置：第一次開啟時選擇'
+} else {
+    Write-Ok "資料庫 $($info.database_path)"
+}
 
 # --- 法規參考庫 --------------------------------------------------------------
 # `reference\reference.sqlite3` 是產生物、不進版控；它的來源 `reference\corpus\` 在版控裡。

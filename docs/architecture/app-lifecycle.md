@@ -55,13 +55,25 @@ flowchart TD
 拼出來的會是第二份路徑實作，`--data-dir` 或指標檔換了資料根之後它會安靜地指錯地方，
 症狀是「等了 90 秒還沒看到視窗」而不是路徑錯。
 
+**第一次啟動（ADR-0018）時，預檢回報 `data_location: "choose_on_first_run"`**，啟動器印
+「資料位置：第一次開啟時選擇」而不是資料庫路徑 —— 那時的路徑只是暫時的落腳處（使用者資料夾）。
+選資料位置的對話框**一顯示就寫標記檔**，寫在預檢算出來的那個位置：使用者看得到東西了，主控台
+就可以退場。選完之後路徑換成真正的位置，主視窗照舊在新位置再寫一次（沒有人等它，無害）。
+**對話框不能先 `show()` 再 `exec()`** —— 已經顯示的視窗改不了 modality，`exec()` 給的會是非 modal 的
+對話框（2026-10-10 實機踩到），所以標記接在對話框的 `showEvent` 上。
+
 ## 程式自己：單一實例與六種啟動結果
 
 ```mermaid
 flowchart TD
   M["main：bootstrap 路徑，設定日誌"] --> Q{"有沒有 --gui"}
   Q -->|"沒有"| J["印出路徑 JSON，離開"]
-  Q -->|"有"| K["SingleInstanceGuard.acquire：檔案鎖，在開資料庫之前"]
+  Q -->|"有"| FR{"第一次啟動？指標檔、userdata、使用者資料夾都沒有帳本"}
+  FR -->|"是"| ASK["問資料放哪裡；對話框一顯示就寫啟動器的標記檔"]
+  ASK -->|"結束"| X["什麼都不建，exit 0"]
+  ASK -->|"確定：建好資料夾"| RL["換成選好的路徑，重設日誌"]
+  RL --> K
+  FR -->|"否"| K["SingleInstanceGuard.acquire：檔案鎖，在開資料庫之前"]
   K -->|"拿到鎖"| DB["initialize_database → run_gui"]
   K -->|"拿不到"| P["用具名管道敲既有實例的門"]
   P -->|"敲得到"| Z["對方把視窗叫到最前面，本行程 exit 0"]
@@ -84,7 +96,7 @@ flowchart TD
 | 結果 | 觸發條件 | 使用者應該看到 |
 |---|---|---|
 | 正常啟動 | 一切就緒 | 主視窗 |
-| 設定檔損毀 | `system_paths.json` 不是合法 JSON（`SYSTEM_PATH_SETTINGS_INVALID`） | 繁中對話框：設定檔位置 ＋ 刪掉它會退回預設路徑 |
+| 設定檔損毀 | `system_paths.json` 不是合法 JSON（`SYSTEM_PATH_SETTINGS_INVALID`） | 繁中對話框：設定檔位置 ＋ 刪掉它再開一次就好（重新找帳本，找不到就問） |
 | 路徑越界 | `ledger_dir`／`backup_dir` 不在 `data_root` 底下（`PATH_OUTSIDE_DATA_ROOT`） | 繁中對話框：三個路徑的實際值 |
 | 資料夾不可用 | 磁碟未接、權限不足（`OSError`／`sqlite3.OperationalError`） | 繁中對話框：路徑 ＋ 檢查磁碟是否連接 |
 | **schema 太新** | 資料庫版本 > 程式支援版本（`DATABASE_SCHEMA_TOO_NEW`） | 繁中對話框：**不要繼續，去更新程式** |
@@ -96,6 +108,11 @@ flowchart TD
 
 > 認不出來的例外會落到 `STARTUP_FAILED`。**那個碼出現就代表這張表漏了一種情形** ——
 > 它是待補的訊號，不是正常的終點。
+
+**第一次啟動不是第七種結果**，是「正常啟動」之前多問的一步（ADR-0018）：資料放哪裡的四步都找不到帳本
+（[儲存配置](storage-layout.md)）才問。按「確定」接著走正常啟動；按「結束」、Esc 或關掉視窗什麼都不建，
+以 0 結束 —— 下次再問。`--data-dir` 與 `TAGCOR_LEDGER_DATA_DIR` 永遠不問；`--init-data` 也不問
+（它照舊把帳本建在使用者資料夾）。驗收在 `tests/integration/test_first_run.py`。
 
 ## 關閉
 

@@ -13,11 +13,16 @@ from pathlib import Path
 
 import platformdirs
 
+from tagcor_ledger.app import data_location
 from tagcor_ledger.app.logging_setup import fallback_log_dir
 from tagcor_ledger.app.path_settings import default_settings_path
 from tagcor_ledger.app.paths import APP_AUTHOR, APP_NAME, resolve_app_paths
 
-SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SOURCE_ROOT = PROJECT_ROOT / "src"
+
+REAL_PROGRAM_ROOT = data_location.program_root
+"""在保護網換掉之前拿到的原版。模組在收集階段就 import，那時 session fixture 還沒跑。"""
 
 
 def _platformdirs_imports() -> list[tuple[str, str]]:
@@ -58,6 +63,20 @@ def test_default_resolution_never_reaches_the_real_user_dirs(fake_user_dirs: Pat
     assert fallback_log_dir().is_relative_to(fake_user_dirs)
     for value in resolve_app_paths().as_dict().values():
         assert Path(value).is_relative_to(fake_user_dirs), value
+
+
+def test_the_program_folder_is_redirected_too(fake_user_dirs: Path) -> None:
+    """第一次啟動可以選的 `userdata` 也在假目錄底下 —— 否則測試會在 repo 裡建出真的 `userdata`。"""
+    assert data_location.program_root is not REAL_PROGRAM_ROOT, "保護網沒有換掉 program_root"
+    folder = data_location.program_data_root()
+    assert folder is not None
+    assert folder.is_relative_to(fake_user_dirs)
+
+
+def test_the_real_program_folder_is_this_repo() -> None:
+    """反過來：原版指的是這個 repo。否則上一條證明不了任何事，正式執行時「程式資料夾」
+    那個選項也會被停用（`program_root()` 認不出原始碼資料夾就回 `None`）。"""
+    assert REAL_PROGRAM_ROOT() == PROJECT_ROOT
 
 
 def test_the_real_location_is_somewhere_else(fake_user_dirs: Path) -> None:

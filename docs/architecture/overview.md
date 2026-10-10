@@ -75,13 +75,15 @@ src/tagcor_ledger/
 │   │                   primitives（金額／日期／名稱表）、rows（每一列）、messages
 │   ├── main_window.py  側邊欄、頁面堆疊，以及頁面之間所有的連動
 │   ├── theme.py        apply_dark_theme：Fusion style、字體、palette、QSS
+│   ├── first_run_dialog.py  第一次啟動問資料放哪裡（ADR-0018），在主視窗之前
 │   ├── colors.py       色票的正本
 │   ├── pages/          一個檔案一個畫面（或一頁裡的一塊：inbox.py 是餘額盤點底下的待確認、
 │   │                   category_items.py 是並排類別與項目的那個分頁）
 │   └── widgets/        sidebar、layout、table、forms、filters、simple_form、
 │                       asset_share、template_dialog、deposit_dialog、
 │                       reorder_dialog、sort_editor、confirm（確認框）、notice（提示框）
-└── app/                bootstrap、paths、path_settings、window_state、
+└── app/                bootstrap、paths、path_settings、data_location（沒有指標檔時
+                        去哪裡找帳本、什麼時候要問，ADR-0018）、window_state、
                         logging_setup、single_instance、startup、resources
 ```
 

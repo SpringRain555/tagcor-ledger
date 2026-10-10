@@ -90,13 +90,26 @@ def default_settings_path() -> Path:
     )
 
 
-def default_path_settings() -> SystemPathSettings:
-    root = Path(user_data_dir(APP_NAME, APP_AUTHOR)).expanduser().resolve()
+def default_data_root() -> Path:
+    """這台電腦的使用者資料夾（`%LOCALAPPDATA%\\TagCor\\TagCorLedger`）。
+
+    ADR-0018 之前，沒有指標檔時資料一律放這裡；現在它是第一次啟動的三個選項之一，
+    而舊使用者的帳本仍然在這裡被找到（`app/data_location.py`）。
+    """
+    return Path(user_data_dir(APP_NAME, APP_AUTHOR)).expanduser().resolve()
+
+
+def layout_for(root: Path) -> SystemPathSettings:
+    """新建一個資料根時的布局：帳本在 `data\\`、備份在 `backups\\`。"""
     return SystemPathSettings(
         ledger_dir=root / "data",
         backup_dir=root / "backups",
         data_root=root,
     )
+
+
+def default_path_settings() -> SystemPathSettings:
+    return layout_for(default_data_root())
 
 
 def validate_path_settings(

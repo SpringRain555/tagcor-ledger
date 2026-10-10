@@ -9,12 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
-from tagcor_ledger.app.path_settings import (
-    PathSettingsError,
-    data_root_of,
-    validate_path_settings,
-)
-from tagcor_ledger.app.paths import AppPaths
+from tagcor_ledger.app.path_settings import PathSettingsError, validate_path_settings
+from tagcor_ledger.app.paths import AppPaths, paths_for
 from tagcor_ledger.application.failures import failure
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import SystemPathSettings
@@ -110,16 +106,7 @@ class DataPathSection(ControllerBase):
         return Result.ok("資料路徑設定已更新。")
 
     def _paths_for_settings(self, settings: SystemPathSettings) -> AppPaths:
-        root = data_root_of(settings)
-        return AppPaths(
-            data_dir=root,
-            config_dir=self.paths.config_dir,
-            ledger_dir=settings.ledger_dir,
-            backup_dir=settings.backup_dir,
-            export_dir=root / "exports",
-            log_dir=root / "logs",
-            tmp_dir=root / "tmp",
-        )
+        return paths_for(settings, config_dir=self.paths.config_dir)
 
     def _copy_current_database(self, target_database: Path) -> Path | None:
         """把現有資料庫複製到新位置，回傳複本路徑；沒有東西要複製時回傳 None。

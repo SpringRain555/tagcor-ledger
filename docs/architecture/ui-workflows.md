@@ -194,6 +194,7 @@ flowchart LR
   - **不要覆寫 `QComboBox::drop-down`** —— 箭頭會消失，剩下一塊空白方格。那個很明顯是壞了，所以當場就發現。
   - **`QCheckBox::indicator` 已經覆寫了**（為了方框：Fusion 的外框色是 `palette.window().darker(140)` 推導的，在 `#0D0D0F` 上完全看不見），所以勾號要**自己給圖**，`styles.qss` 的 `:checked` 有一行 `image: url(...)`，路徑由 `theme.py` 的 `resolve_stylesheet()` 在載入時代換。這一次的症狀是一塊**看起來很像設計**的實心白方塊 —— 沒有人發現它壞了。
   - 要給圖只能給 **PNG，而且標準與 `@2x` 兩個尺寸都要**。SVG 需要 Qt SVG image plugin（PySide6 的選配元件，本機的 conda env 就沒有），QSS 的 `url()` 也不吃 `data:` URI —— 兩條都實測過，失敗的樣子都是「那一格靜靜地不畫圖」。圖檔由 `tools/icons/make_check_icon.py` 產生，不要用繪圖軟體改。
+  - **`QRadioButton::indicator` 也覆寫了**（2026-10-10，第一次啟動選資料位置的對話框）。不覆寫的話未選的圓圈完全看不見、選中的只剩一個灰點 —— 實機截圖上三個選項看不出選了哪一個。**單選鈕不需要圖**：圓用 `border-radius`（外框的一半）、選中的那一點用放射漸層，QSS 畫得出來；跟勾選框一樣用形狀當第二個線索（空心圓 vs 白圈加白點）。
 - **主字體必須是中文字型**（`Microsoft JhengHei UI` 排第一），12pt、Medium 字重。理由是 `Segoe UI Variable` 沒有中文字形，中文全靠 fallback，而**字重套不到 fallback 字型上** —— 對它設 Medium 只有數字變粗，中文一點都沒變。字體不打包，順序是 `Microsoft JhengHei UI`、`Microsoft JhengHei`、`Noto Sans TC`、`Segoe UI Variable`、`Segoe UI`、sans-serif。
 - **下拉選單一律用 `combo_box()`，不要自己 `QComboBox()`。** Fusion 把不可編輯的下拉當成選單：
   清單移到讓目前那一項對齊下拉框（選到下面的選項，下次打開整個清單往上跑），而且**不理會
