@@ -215,7 +215,10 @@ function Test-PathDrift {
         Write-Note "沒有使用者層 $userSettings —— 下面兩項只看得到專案層。"
     }
 
-    $wantAsk = @('Read', 'Glob', 'Grep', 'Edit', 'Write') | ForEach-Object { "$_($tree/**)" }
+    # 只看 Read 與 Edit：Claude Code 的檔案權限只比對這兩種（Edit 涵蓋所有寫檔的工具，Read 也套到
+    # Grep／Glob）。Write(...)／Glob(...)／Grep(...) 會被收下但從來不比對（2026-10-11 實測，
+    # CONVENTIONS §11），要求它們在等於要求一條死規則在。
+    $wantAsk = @('Read', 'Edit') | ForEach-Object { "$_($tree/**)" }
     $missingAsk = @($wantAsk | Where-Object { $rules.ask -notcontains $_ })
     if ($missingAsk.Count -eq 0) {
         Write-Pass "<私人資料樹> 整棵是 ask"
@@ -226,12 +229,7 @@ function Test-PathDrift {
 
     # 葉子 deny 一定要用 /** 結尾。單一 * 在 glob 裡只 match 一層，
     # 會涵蓋資料夾本身卻涵蓋不到裡面的檔案。
-    $wantDeny = @()
-    foreach ($verb in @('Edit', 'Write')) {
-        foreach ($leaf in @('**/backups/**', '**/*.sqlite', '**/*.db')) {
-            $wantDeny += "$verb($tree/$leaf)"
-        }
-    }
+    $wantDeny = @('**/backups/**', '**/*.sqlite', '**/*.db') | ForEach-Object { "Edit($tree/$_)" }
     $missingDeny = @($wantDeny | Where-Object { $rules.deny -notcontains $_ })
     if ($missingDeny.Count -eq 0) {
         Write-Pass "備份與資料庫檔的寫入是 deny"

@@ -25,11 +25,17 @@
     "",
     "== 如果你另外維護一層使用者層基線 ==",
     "~/.claude/settings.json 是「你，每個專案」，不管從哪個目錄啟動都生效，而",
-    "permissions 這種清單鍵跨層是合併不是覆蓋。那時把下面的 ask 五條與不綁專案名",
+    "permissions 這種清單鍵跨層是合併不是覆蓋。那時把下面的 ask 兩條與不綁專案名",
     "的葉子 deny 移上去，這一份只留 allow 與這個專案自己的 deny。",
     "注意專案層只在「從專案目錄啟動」時載入 —— 從上層工作區啟動時它完全不生效，",
     "所以真正要硬擋的東西不能只寫在專案層。",
     "下面給的是「沒有基線也能用」的完整版。",
+    "",
+    "== 規則只寫 Read(...) 與 Edit(...) ==",
+    "Claude Code 只比對這兩種：Edit 涵蓋所有寫檔的工具，Read 也套到 Grep／Glob。",
+    "寫成 Write(...)／Glob(...)／Grep(...) 的規則會被收下、但從來不比對（2026-10-11 實測）。",
+    "有使用者層基線時，這裡的 allow 蓋不過基線的 ask（ask 優先於 allow，具體程度不改變順序）——",
+    "讀資料根照樣會先問。",
     "",
     "== 三個極限，不要當成滴水不漏 ==",
     "  1. 攔不住 shell。Get-Content、cat、Select-String 都能讀檔。成文規則才是依據。",
@@ -47,27 +53,17 @@
   "permissions": {
     "allow": [
       "Read(<your-data-root>/**)",
-      "Glob(<your-data-root>/**)",
-      "Grep(<your-data-root>/**)",
-      "Edit(<your-data-root>/*.md)",
-      "Write(<your-data-root>/*.md)"
+      "Edit(<your-data-root>/*.md)"
     ],
     "ask": [
       "Read(<your-private-tree>/**)",
-      "Glob(<your-private-tree>/**)",
-      "Grep(<your-private-tree>/**)",
-      "Edit(<your-private-tree>/**)",
-      "Write(<your-private-tree>/**)"
+      "Edit(<your-private-tree>/**)"
     ],
     "deny": [
       "Edit(<your-data-root>/ledger/**)",
-      "Write(<your-data-root>/ledger/**)",
       "Edit(<your-private-tree>/**/backups/**)",
-      "Write(<your-private-tree>/**/backups/**)",
       "Edit(<your-private-tree>/**/*.sqlite)",
-      "Write(<your-private-tree>/**/*.sqlite)",
-      "Edit(<your-private-tree>/**/*.db)",
-      "Write(<your-private-tree>/**/*.db)"
+      "Edit(<your-private-tree>/**/*.db)"
     ]
   }
 }
