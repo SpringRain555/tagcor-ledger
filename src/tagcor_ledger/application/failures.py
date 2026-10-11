@@ -192,8 +192,9 @@ ERROR_MESSAGES: dict[str, str] = {
         "這個資料夾在程式資料夾裡面。要放在程式資料夾裡，請選第一個選項 —— "
         "只有 userdata 這個資料夾不會被 git 記錄。"
     ),
-    "DATA_ROOT_IS_LEDGER_DIR": (
-        "選到的是放帳本檔（ledger.sqlite3）的那一層。請選它的上一層，也就是資料根目錄。"
+    "DATA_ROOT_INSIDE_DATA_ROOT": (
+        "這個資料夾在一份既有的資料根裡面（上層已經有帳本）。要接上那一份，請選它的資料根目錄"
+        "（放 ledger 資料夾的那一層）；要另開一份，請選資料根以外的地方。"
     ),
     # ---- 定存 ----
     "DEPOSIT_NAME_REQUIRED": "請輸入合約名稱。",

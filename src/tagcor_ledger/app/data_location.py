@@ -167,9 +167,11 @@ def _require_usable_other_folder(root: Path) -> None:
     if program is not None and root.is_relative_to(program):
         # 只有 `userdata` 被 git 忽略。挑程式資料夾裡別的地方，匯出的交易 CSV 就可能被 commit。
         raise PathSettingsError("DATA_ROOT_INSIDE_PROGRAM_FOLDER")
-    if (root / LEDGER_FILE_NAME).is_file():
-        # 挑到的是放帳本檔的那一層。照樣用下去會在它底下另建一本空的，真的那本反而沒被接上。
-        raise PathSettingsError("DATA_ROOT_IS_LEDGER_DIR")
+    if any(find_ledger_dir(parent) is not None for parent in root.parents):
+        # 在一份既有的資料根裡面：放帳本檔的那一層（`ledger`／舊的 `data`）、`backups` 或更深的地方都算。
+        # 照樣用下去會在真的那份裡面另建一本空的，指標檔指過去之後真的那本反而沒被接上。
+        # 2026-10-11 之前只擋放帳本檔的那一層（`DATA_ROOT_IS_LEDGER_DIR`）；上游 CONVENTIONS §11 統一成這一條。
+        raise PathSettingsError("DATA_ROOT_INSIDE_DATA_ROOT")
 
 
 def prepare_location(choice: LocationChoice, *, other_folder: Path | None = None) -> DataLocation:

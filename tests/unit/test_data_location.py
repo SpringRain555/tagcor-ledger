@@ -230,9 +230,27 @@ def test_another_folder_with_a_ledger_is_reconnected_as_it_is(
         (lambda places, tmp: places.program / "inside", "DATA_ROOT_INSIDE_PROGRAM_FOLDER"),
         (lambda places, tmp: places.userdata, "DATA_ROOT_INSIDE_PROGRAM_FOLDER"),
         (lambda places, tmp: Path(tmp.anchor), "DATA_ROOT_IS_DRIVE_ROOT"),
-        (lambda places, tmp: _ledger(tmp / "mine").parent, "DATA_ROOT_IS_LEDGER_DIR"),
+        (lambda places, tmp: _ledger(tmp / "mine").parent, "DATA_ROOT_INSIDE_DATA_ROOT"),
+        (lambda places, tmp: _ledger(tmp / "mine", "ledger").parent, "DATA_ROOT_INSIDE_DATA_ROOT"),
+        # 2026-10-11 之前擋不到的兩種：資料根裡別的子資料夾、更深的地方（CONVENTIONS §11）。
+        (
+            lambda places, tmp: _ledger(tmp / "mine", "ledger").parents[1] / "backups",
+            "DATA_ROOT_INSIDE_DATA_ROOT",
+        ),
+        (
+            lambda places, tmp: _ledger(tmp / "mine").parent / "deeper" / "still",
+            "DATA_ROOT_INSIDE_DATA_ROOT",
+        ),
     ],
-    ids=["inside-program", "userdata-itself", "drive-root", "ledger-dir"],
+    ids=[
+        "inside-program",
+        "userdata-itself",
+        "drive-root",
+        "legacy-data-dir",
+        "ledger-dir",
+        "backups-in-data-root",
+        "deeper-in-data-root",
+    ],
 )
 def test_another_folder_that_cannot_be_a_data_root_is_refused(
     places: Places, tmp_path: Path, make_folder, code: str
