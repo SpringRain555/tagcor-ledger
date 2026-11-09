@@ -13,11 +13,14 @@
 
 | | |
 |---|---|
-| 直譯器 | conda env `tagcor-ledger`，Python **3.12**（`environment.yaml` 釘死 `=3.12`） |
+| 直譯器 | conda env `tagcor-ledger`，Python **≥ 3.12.16、< 3.13**（`environment.yaml` 的安全地板） |
 | GUI | PySide6 6.x，**由 conda 安裝**；`pyproject.toml` 刻意不列它（理由見 [versions.md](versions.md)） |
 | 版本界線 | `requires-python >=3.12`；檢查工具四條有上界，理由在 [versions.md](versions.md) |
 | 機器可讀的定義 | `environment.yaml`（環境）＋ `pyproject.toml`（套件與 `[dev]`），都在根目錄 |
 | **PATH 上那個能不能用** | **不能。** PATH 上的 `python` 幾乎一定是別的直譯器（開發機上是 msys 的 3.14，裸的），沒有 PySide6。一律用 conda 環境的**完整路徑**：`tools\Launch.ps1`／`tools\Verify.ps1` 會自己找，找不到時設 `TAGCOR_PYTHON`（見 §5） |
+
+`environment.yaml` 明列 `nodefaults`：全域 condarc 是 defaults＋flexible，沒有這一列時，
+未指定來源的相依可能從 defaults 安裝；目前環境約有 20 個套件來自 defaults。
 
 ## 2. 怎麼建
 
@@ -45,7 +48,7 @@ profile，`conda activate` 會回報成功、退出碼 0、實際上什麼都沒
 ## 3. 怎麼驗證
 
 ```powershell
-.\tools\Verify.ps1               # 路徑漂移 → Qt 型別 stub → agent 檔同步 → ruff → mypy --strict → pytest
+.\tools\Verify.ps1               # 路徑漂移 → Qt 型別 stub → agent 檔同步 → 版本地板 → ruff → mypy --strict → pytest
 .\tools\Verify.ps1 -Ui           # 加跑 tests\ui（自動設 QT_QPA_PLATFORM=offscreen；改過 UI 就用這個）
 .\tools\Verify.ps1 -Performance  # 加跑 20 萬筆的效能測試
 ```
@@ -71,6 +74,13 @@ offscreen 沒有中文字型，中文會渲染成豆腐塊。
 第一次 clone 要跑一次 `git config core.hooksPath .githooks`。
 
 ## 4. 怎麼更新
+
+`conda env update -f environment.yaml --prune` 不會升級傳遞相依（例如 libexpat、OpenSSL），
+也不會把已從 defaults 安裝的套件換成 conda-forge 版本。更新安全版本時，重建環境
+（`conda env remove -n tagcor-ledger` 後 `conda env create -f environment.yaml`），
+或執行 `conda update -n tagcor-ledger --all`。**每次升版本號之後都要重跑**
+`python -m pip install -e ".[dev]"`，否則 editable 安裝 metadata 可能與 `pyproject.toml` 不同，
+版本地板檢查會失敗。
 
 1. **升一個套件**：改 `environment.yaml`（**與 `pyproject.toml` 的 `[dev]` 同一條要一起改** ——
    四條檢查工具兩邊都宣告，只改一邊本機與 CI 就會不同，[versions.md](versions.md)），然後
@@ -126,6 +136,17 @@ offscreen 沒有中文字型，中文會渲染成豆腐塊。
 - **`core.autocrlf = true` 的機器上，工作樹的行尾不是統一的**：git 存 LF、簽出多半 CRLF，但有些檔案
   簽出來就是 LF。腳本要「改一下再還原」某個檔案時一律走 bytes，片段裡的 `\n` 換成那個檔案自己的換行；
   「內容到底有沒有變」用 `git hash-object` 比，不看 `git status` 的 ` M`（[`lessons.md`](../lessons.md) 2026-08-22）。
+- **不要用 `conda.bat` 傳含 `>`、`<` 的版本規格**：PowerShell 呼叫 `.bat` 會經過 `cmd.exe`，
+  `pkg>=1.2` 的 `>` 會被當成輸出重導向，在目前目錄建立以版本號命名的檔案，指令本身不會印出內容
+  （2026-11-08 在 repo 根目錄曾產生 6 個檔案）。改用 `Scripts\conda.exe`，或把規格寫進
+  `environment.yaml`。
+- **待辦（2026-11-09 記）：research runtime 落後安全修補。** `tools\law_sync\fetch_laws.py`、`tools\fetch.py`
+  用的那一個 runtime 是 Python 3.12.13＋certifi 2026-07 版（3.12.16 修了 ssl 撤銷外洩的中繼 CA 等）。
+  這一輪沒有升，障礙兩個：`D:\Claude_Workspace\claude-skills` 的治理工具只在 runtime 壞掉時才重建
+  （沒有「依 lock 重建」的開關，而 `~\.claude\runtimes` 只能由治理工具改）；uv 管的 3.12 是共用的
+  次版本連結，`sandbox-spectrum` 的 venv（實驗基準保留）也掛在上面，升 patch 會把它一起換掉。
+  要修的地方在 claude-skills：讓 `runtime -Apply` 能依 lock 重建、Python 釘到 patch 並用獨立安裝目錄。
+  在那之前，抓回來的稅務數字一律經使用者看過差異與出處才 commit（REQ-0011）。
 
 ## 環境快照
 

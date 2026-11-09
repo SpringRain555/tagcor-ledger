@@ -8,6 +8,21 @@
 
 ## 未發布
 
+### 環境：安全下界、版本地板檢查、CI 釘 commit SHA
+
+環境中的 Python、Qt、OpenSSL、Expat、SQLite 與建置套件有已知漏洞或支援期限；只改套件清單，
+傳遞相依與 CI 仍可能留在舊版。新增安全版本地板，並讓本機驗證和 CI 宣告保持一致。
+
+- `environment.yaml` 明列 `nodefaults`，避免全域 condarc 的 defaults＋flexible 導入 defaults 套件；
+  抬高安全版本下界，`pyproject.toml` 同步 setuptools 與 filelock。
+- `tools/env_floors.json` 記錄可機器檢查的安全地板，`tools/check_env_floors.py` 探測目前直譯器與
+  editable metadata；`Verify.ps1` 在 ruff 前增加「版本地板」步驟。原因與更新方式寫在
+  `docs/environment/versions.md`，建環境與更新方式寫在 `docs/environment/index.md`。
+- CI 固定 checkout、setup-python 的完整 commit SHA，並把 PySide6 釘在與 conda 相同的 6.11.3；
+  tag 可以被改寫指向其他 commit，固定 SHA 避免 action 更新來源悄悄改變。
+- 無網路守門擴大到標準庫、Qt 網路模組與常數字串動態匯入，陽性對照確認檢查器確實抓得到違規。
+- App 行為不變。
+
 ### 稅務系統的規格：提醒、判斷與試算（REQ-0011、ADR-0019、ADR-0020，2026-11-09）
 
 稅務從「查得到條文」變成有實際作用的第一步 —— 規格先行，程式由後續各包照它實作。

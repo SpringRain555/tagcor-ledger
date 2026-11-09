@@ -4,7 +4,7 @@
     TagCor Ledger 的本機驗證閘門。
 
 .DESCRIPTION
-    依序跑：路徑漂移檢查 -> Qt 型別 stub -> agent 檔同步 -> ruff -> mypy --strict -> pytest。
+    依序跑：路徑漂移檢查 -> Qt 型別 stub -> agent 檔同步 -> 版本地板 -> ruff -> mypy --strict -> pytest。
     任何一項失敗都會讓整支腳本以非零 exit code 結束，並在最後列出所有失敗項。
 
     這支腳本刻意「只報矛盾、不自動修」。漂移檢查發現的問題要由人決定怎麼處理。
@@ -276,6 +276,14 @@ try {
     Write-Section 'agent 檔同步'
     & (Join-Path $PSScriptRoot 'Sync-AgentDocs.ps1') -Check
     if ($LASTEXITCODE -ne 0) { Add-Failure 'AGENTS.md 與 CLAUDE.md 的本文不同（跑 .\tools\Sync-AgentDocs.ps1）' }
+
+    Write-Section '版本地板'
+    & $Python (Join-Path $PSScriptRoot 'check_env_floors.py')
+    if ($LASTEXITCODE -ne 0) {
+        Add-Failure '版本地板：環境低於安全下界或 metadata 版本不符（重建環境，見 docs\environment\index.md §4）'
+    } else {
+        Write-Pass '版本地板'
+    }
 
     Invoke-Step -Name 'ruff' -Arguments @('-m', 'ruff', 'check', '--no-cache', '.')
     Invoke-Step -Name 'mypy --strict' -Arguments @('-m', 'mypy', '--no-incremental', 'src')

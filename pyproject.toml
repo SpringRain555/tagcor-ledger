@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77.0"]
+requires = ["setuptools>=78.1.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,7 +11,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
-    "filelock>=3.13",
+    "filelock>=3.20.3",
     "platformdirs>=4.2",
     # `zoneinfo.ZoneInfo("Asia/Taipei")` 要有 IANA 時區資料庫，而 **Windows 沒有系統
     # 層的那一份**。conda 的 Python 附了 tzdata，所以這個相依一直是隱形的 ——

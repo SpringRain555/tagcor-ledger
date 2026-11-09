@@ -238,24 +238,142 @@ def test_staleness_is_six_months() -> None:
 # --- App 不連網 -------------------------------------------------------------
 
 
-def test_app_package_never_imports_a_network_library() -> None:
-    """抓取工具在 `tools/`，**不在 `src/`**。App 永遠不發網路請求。"""
+FORBIDDEN_NETWORK_MODULES = {
+    "httpx",
+    "requests",
+    "urllib3",
+    "aiohttp",
+    "socket",
+    "http",
+    "ssl",
+    "ftplib",
+    "smtplib",
+    "poplib",
+    "imaplib",
+    "telnetlib",
+    "xmlrpc",
+    "socketserver",
+    "websocket",
+    "websockets",
+    "webbrowser",
+}
+LOCAL_QT_NETWORK_TYPES = {"QLocalServer", "QLocalSocket"}
+
+
+def _network_import_offenders(source: str, filename: str = "<source>") -> list[str]:
+    """Return forbidden static or constant-string dynamic imports from Python source."""
     import ast
 
-    forbidden = {"httpx", "requests", "urllib3", "aiohttp", "socket", "http"}
+    tree = ast.parse(source, filename=filename)
+    importlib_aliases: set[str] = set()
+    import_module_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] == "importlib":
+                    importlib_aliases.add(alias.asname or "importlib")
+        elif isinstance(node, ast.ImportFrom) and node.module == "importlib":
+            for alias in node.names:
+                if alias.name == "import_module":
+                    import_module_aliases.add(alias.asname or alias.name)
+
+    offenders: list[str] = []
+
+    def add_if_forbidden(module: str, imported_names: set[str] | None = None) -> None:
+        if module.split(".")[0] in FORBIDDEN_NETWORK_MODULES:
+            offenders.append(f"{filename} -> {module}")
+        elif module == "urllib.request":
+            offenders.append(f"{filename} -> {module}")
+        elif module == "urllib" and imported_names and "request" in imported_names:
+            offenders.append(f"{filename} -> urllib.request")
+        elif module == "PySide6.QtNetwork":
+            names = imported_names or set()
+            if not names or not names.issubset(LOCAL_QT_NETWORK_TYPES):
+                offenders.append(f"{filename} -> {module}")
+        elif module.startswith("PySide6.QtWeb") or module == "PySide6.QtHttpServer":
+            offenders.append(f"{filename} -> {module}")
+        elif module == "PySide6" and imported_names:
+            for name in sorted(imported_names):
+                if name == "QtNetwork" or name == "QtHttpServer" or name.startswith("QtWeb"):
+                    offenders.append(f"{filename} -> PySide6.{name}")
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                add_if_forbidden(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            add_if_forbidden(node.module, {alias.name for alias in node.names})
+        elif isinstance(node, ast.Call):
+            is_dynamic_import = isinstance(node.func, ast.Name) and node.func.id == "__import__"
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "import_module":
+                is_dynamic_import = isinstance(node.func.value, ast.Name) and (
+                    node.func.value.id in importlib_aliases
+                )
+            elif isinstance(node.func, ast.Name) and node.func.id in import_module_aliases:
+                is_dynamic_import = True
+            if is_dynamic_import and (node.args or node.keywords):
+                argument = node.args[0] if node.args else next(
+                    (keyword.value for keyword in node.keywords if keyword.arg == "name"), None
+                )
+                if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                    add_if_forbidden(argument.value)
+    return offenders
+
+
+def test_app_package_never_imports_a_network_library() -> None:
+    """抓取工具在 `tools/`，**不在 `src/`**。App 永遠不發網路請求。"""
     offenders: list[str] = []
     for path in (PROJECT_ROOT / "src").rglob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            names: list[str] = []
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                names = [node.module]
-            for name in names:
-                if name.split(".")[0] in forbidden:
-                    offenders.append(f"  {path.relative_to(PROJECT_ROOT)} -> {name}")
+        source = path.read_text(encoding="utf-8")
+        offenders.extend(_network_import_offenders(source, str(path.relative_to(PROJECT_ROOT))))
     assert not offenders, "App 不得依賴任何網路函式庫：\n" + "\n".join(offenders)
+
+
+def test_network_import_checker_positive_control() -> None:
+    """陽性對照涵蓋禁用清單、Qt 限定例外與常數字串動態匯入。"""
+    source = '''
+import httpx, requests, urllib3, aiohttp, socket, http
+import ssl, ftplib, smtplib, poplib, imaplib, telnetlib
+import xmlrpc, socketserver, websocket, websockets, webbrowser
+import urllib.request
+from urllib import request as url_request, parse
+import PySide6.QtNetwork
+from PySide6.QtNetwork import QLocalServer, QTcpSocket
+import PySide6.QtWebEngineWidgets
+import PySide6.QtHttpServer
+from PySide6 import QtNetwork, QtWebEngineWidgets, QtHttpServer
+import importlib as il
+il.import_module("urllib.request")
+il.import_module(name="ssl")
+from importlib import import_module as load_module
+load_module("PySide6.QtWebEngineWidgets")
+load_module(name="ssl")
+__import__("ssl")
+__import__(name="ssl")
+__import__("PySide6.QtNetwork")
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+import urllib.parse
+'''
+    offenders = _network_import_offenders(source, "positive_control.py")
+    assert not _network_import_offenders(
+        "from PySide6.QtNetwork import QLocalServer, QLocalSocket\nimport urllib.parse"
+    )
+    for module in FORBIDDEN_NETWORK_MODULES:
+        assert any(f"-> {module}" in offender for offender in offenders), module
+    assert any("urllib.request" in offender for offender in offenders)
+    assert any("PySide6.QtNetwork" in offender for offender in offenders)
+    assert any("PySide6.QtWebEngineWidgets" in offender for offender in offenders)
+    assert any("PySide6.QtHttpServer" in offender for offender in offenders)
+
+    dynamic_imports = (
+        'import importlib\nimportlib.import_module("ssl")',
+        'import importlib as il\nil.import_module("ssl")',
+        'from importlib import import_module as load\nload("ssl")',
+        '__import__("ssl")',
+        '__import__(name="ssl")',
+    )
+    for snippet in dynamic_imports:
+        assert any("-> ssl" in item for item in _network_import_offenders(snippet))
 
 
 def test_law_sync_tools_run_without_the_app_environment() -> None:

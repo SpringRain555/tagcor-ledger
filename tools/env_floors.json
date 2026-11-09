@@ -1,0 +1,70 @@
+{
+  "_readme": "這份清單與 environment.yaml／pyproject.toml／verify.yml 要一起維護，測試守著。",
+  "floors": [
+    {
+      "name": "python",
+      "probe": "python",
+      "min": "3.12.16",
+      "max_exclusive": "3.13",
+      "why": "CVE-2026-115557（ssl 撤銷外洩的 eMudhra 中繼 CA）、CVE-2026-114583（tarfile tar_filter 連結覆蓋）、CVE-2024-3220（Windows 預設讀 mimetypes.knownfiles）。",
+      "declared_in": ["environment.yaml"]
+    },
+    {
+      "name": "libexpat",
+      "probe": "expat",
+      "min": "2.9.0",
+      "why": "CVE-2026-77214、CVE-2026-102633；conda 的 Python 連結這份 libexpat，不是原始碼內附的版本。",
+      "declared_in": ["environment.yaml"]
+    },
+    {
+      "name": "openssl",
+      "probe": "openssl",
+      "min": "3.5.9",
+      "max_exclusive": "3.6",
+      "why": "OpenSSL 3.6 線於 2026-11-01 停止支援後不再接收 CVE 安全修補；3.5 LTS 支援到 2030-04-08，Python 3.12 的 conda build 要求 OpenSSL 小於 4。",
+      "declared_in": ["environment.yaml"]
+    },
+    {
+      "name": "libsqlite",
+      "probe": "sqlite",
+      "min": "3.54.0",
+      "why": "CVE-2026-119378（R-Tree use-after-free）、CVE-2026-119374（FTS5 secure-delete 溢位）；3.53.2 另修 CVE-2026-11822／CVE-2026-11824。App 使用 FTS5。",
+      "declared_in": ["environment.yaml"]
+    },
+    {
+      "name": "qt",
+      "probe": "qt",
+      "min": "6.11.3",
+      "why": "Qt 6.11.2／6.11.3 修補 CVE-2026-19248、CVE-2026-78253、CVE-2026-76151、CVE-2026-105946、CVE-2026-79616、CVE-2026-105923。",
+      "declared_in": ["environment.yaml"]
+    },
+    {
+      "name": "pyside6",
+      "probe": "pyside6",
+      "min": "6.11.3",
+      "why": "PySide6 與 Qt 同步到含 CVE-2026-19248、CVE-2026-78253、CVE-2026-76151、CVE-2026-105946、CVE-2026-79616、CVE-2026-105923 修補的版本。",
+      "declared_in": ["environment.yaml", ".github/workflows/verify.yml"]
+    },
+    {
+      "name": "pip",
+      "probe": "dist:pip",
+      "min": "26.2",
+      "why": "pip 安全修補版本：CVE-2026-1703、CVE-2026-6357、CVE-2026-8643、CVE-2026-13346。",
+      "declared_in": ["environment.yaml"]
+    },
+    {
+      "name": "setuptools",
+      "probe": "dist:setuptools",
+      "min": "78.1.1",
+      "why": "setuptools 修補 CVE-2025-47273。",
+      "declared_in": ["environment.yaml", "pyproject.toml"]
+    },
+    {
+      "name": "filelock",
+      "probe": "dist:filelock",
+      "min": "3.20.3",
+      "why": "filelock 修補 CVE-2025-68146、CVE-2026-22701。",
+      "declared_in": ["environment.yaml", "pyproject.toml"]
+    }
+  ]
+}
