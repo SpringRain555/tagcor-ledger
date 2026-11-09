@@ -59,6 +59,8 @@ class TaxYearInputs:
     dependents_have_income: bool
     filer_70_plus: bool
     dependents: int
+    # 名字沿用，意思是「受扶養人中免稅額增加百分之五十的人數」：受扶養直系尊親屬年滿 70 歲，
+    # 115 年度起也包括未成年的受扶養子女（所得稅法第 17 條 115-09-11 修正；REQ-0011 第 8 步）。
     dependents_70_plus: int
     official_tax_minor: int | None
     official_balance_minor: int | None
