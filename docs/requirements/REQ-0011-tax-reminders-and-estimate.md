@@ -144,14 +144,18 @@ UTF-8、**無 BOM**、繁體中文。金額一律整數元；比率一律 **ppm 
 - `income_tax` 的鍵是**所得年度**（西元）。
 - `typical` 是法定的典型期間、**不含假日順延**；`years` 是公告過的實際期間。順延只會延後截止，所以用典型期間當預估永遠偏安全。
 - 規則清單（`interest_withholding`、`nhi_supplementary_premium`）依 `effective_from` 取「那一天適用的那一條」。
+- **每個欄位都要寫出來，沒有值就寫 `null`、不要省略。** 可以是 `null` 的只有：`reviewed_at`、`next_review_on`、
+  `sources[].published_on`、`calendar.years` 各期間的 `note`、級距最後一列的 `up_to`。
 
 **驗證規則**（App 載入時與 `validate.py` 都跑同一份；任何一條不過 → 整份視為格式錯）：
 
-1. `schema_version == 1`；日期都是合法 ISO 日期；`reviewed_at` 為 `null` 表示尚未建立（骨架）。
+1. `schema_version == 1`；日期都是合法 ISO 日期；`reviewed_at` 為 `null` 表示尚未建立（骨架）；
+   `reviewed_at` 有值時 `next_review_on` 也要有值、而且晚於 `reviewed_at`（漏寫的話 App 永遠不會再提醒複查）。
 2. `sources[].id` 唯一且符合 `^[a-z0-9][a-z0-9-]*$`；`url` 是 https；`sha256` 是 64 個小寫十六進位。
 3. 每個被引用的 source id 都存在；**沒有沒被引用的 source**；每個值物件的 `source_ids` 非空。
 4. `typical` 是合法 `MM-DD` 且 start ≤ end（不跨年）；`years` 的鍵是四位數年份、日期落在該年內、start ≤ end；稅目只能是上表五種。
-5. 金額是整數（**拒絕布林值**）且 ≥ 0；`exemption_70_plus` ≥ `exemption`。
+5. 金額是整數（**拒絕布林值**）且 ≥ 0；`rate_ppm` 是整數且 0 < `rate_ppm` < 1,000,000（稅率不會是 0 或 100% 以上，
+   10% 多打一個 0 就會被抓到）；`exemption_70_plus` ≥ `exemption`。
 6. 級距：至少 2 列；`up_to` 嚴格遞增、最後一列是 `null`；`rate_ppm` 嚴格遞增；第一列累進差額為 0；
    第 i 列累進差額 = 第 i−1 列累進差額 + 第 i−1 列 `up_to` ×（第 i 列 − 第 i−1 列 `rate_ppm`）÷ 1,000,000，**必須整除且相等**
    —— 抄錯一個數字就會被抓到。
