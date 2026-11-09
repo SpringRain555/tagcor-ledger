@@ -83,6 +83,9 @@ docs/research/sources/text/
 # corpus 是手寫＋抓取的文字，**要進版控**；下面這些不進。
 reference/reference.sqlite3
 reference/raw/
+# 稅務來源的原始頁面與擷取文字可由 tools/fetch.py 依 manifest 重抓比對；只追蹤 dataset 與 manifest。
+reference/tax/raw/
+reference/tax/text/
 
 # VS Code 的專案設定進版控（直譯器走 ${env:TAGCOR_PYTHON}，裡面沒有機器路徑）；
 # 基底把 .vscode/* 全忽略，這裡只放行這一個檔。

@@ -9,6 +9,9 @@
 文字檔可以 diff、可以在 PR 裡審閱、可以看出「這次複查改了哪一句」。
 `reference.sqlite3` 是從它產生的，隨時可以重建，所以不進版控。
 這條分界和專案其他地方一致：手寫的進版控，產生物不進。
+
+`reviewed_at` 表示有人複查過，不是上次重建的時間。REQ-0011 的 `law_review_due`
+依它判斷法規參考庫是否完成年度複查，因此重建時沿用既有日期；新增條文則必須明確給複查日期。
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -47,15 +51,64 @@ def frontmatter(values: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def build(reference_dir: Path, *, today: str) -> int:
+class ReviewedAtRequired(ValueError):
+    """有新 corpus 條文但呼叫者未提供複查日期。"""
+
+    def __init__(self, articles: list[str]) -> None:
+        super().__init__(", ".join(articles))
+        self.articles = articles
+
+
+def parse_reviewed_at(value: str) -> str:
+    """驗證複查日期必須是完整 ISO 日期。"""
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("複查日期必須是合法的 YYYY-MM-DD。") from error
+    if parsed.isoformat() != value:
+        raise argparse.ArgumentTypeError("複查日期必須是 YYYY-MM-DD 格式。")
+    return value
+
+
+def existing_reviewed_at(path: Path) -> str | None:
+    """讀取既有 Markdown frontmatter 中的合法複查日期。"""
+    if not path.is_file():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return None
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        match = _REVIEWED_AT.fullmatch(line)
+        if match is None:
+            continue
+        try:
+            parsed = date.fromisoformat(match.group(1))
+        except ValueError:
+            return None
+        return match.group(1) if parsed.isoformat() == match.group(1) else None
+    return None
+
+
+_REVIEWED_AT = re.compile(r"^\s*reviewed_at:\s*(\d{4}-\d{2}-\d{2})\s*$")
+
+
+def build(reference_dir: Path, *, reviewed_at: str | None) -> int:
+    if reviewed_at is not None:
+        parse_reviewed_at(reviewed_at)
     sources = json.loads((reference_dir / "sources.json").read_text(encoding="utf-8"))
     summaries = json.loads((reference_dir / "summaries.json").read_text(encoding="utf-8"))[
         "summaries"
     ]
     manifest = load_manifest(reference_dir / "manifest.jsonl")
     corpus_dir = reference_dir / "corpus"
-    written = 0
+    documents: list[tuple[Path, str]] = []
     missing_summary: list[str] = []
+    missing_review_date: list[str] = []
 
     for topic in sources["topics"]:
         for law in topic["laws"]:
@@ -74,7 +127,10 @@ def build(reference_dir: Path, *, today: str) -> int:
                     continue
 
                 target = corpus_dir / topic["topic"] / f"{law['pcode']}-{flno}.md"
-                target.parent.mkdir(parents=True, exist_ok=True)
+                document_reviewed_at = reviewed_at or existing_reviewed_at(target)
+                if document_reviewed_at is None:
+                    missing_review_date.append(key)
+                    continue
                 document = "\n".join(
                     [
                         frontmatter(
@@ -93,7 +149,7 @@ def build(reference_dir: Path, *, today: str) -> int:
                                 ),
                                 "fetched_at": fetched.get("fetched_at", ""),
                                 "source_sha256": fetched.get("sha256", ""),
-                                "reviewed_at": today,
+                                "reviewed_at": document_reviewed_at,
                             }
                         ),
                         "",
@@ -117,13 +173,19 @@ def build(reference_dir: Path, *, today: str) -> int:
                         "",
                     ]
                 )
-                target.write_text(document, encoding="utf-8")
-                written += 1
+                documents.append((target, document))
+
+    if missing_review_date:
+        raise ReviewedAtRequired(missing_review_date)
+
+    for target, document in documents:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(document, encoding="utf-8")
 
     if missing_summary:
         print(f"  以下條文沒有摘要，未產生：{', '.join(missing_summary)}")
-    print(f"corpus 產生 {written} 篇，位置 {corpus_dir}")
-    return written
+    print(f"corpus 產生 {len(documents)} 篇，位置 {corpus_dir}")
+    return len(documents)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -131,11 +193,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reference", type=Path, default=REFERENCE_DIR)
     parser.add_argument(
         "--reviewed-at",
-        default=date.today().isoformat(),
-        help="複查日期，預設今天",
+        type=parse_reviewed_at,
+        default=None,
+        help="這次由人複查的日期，格式 YYYY-MM-DD",
     )
     args = parser.parse_args(argv)
-    build(args.reference, today=args.reviewed_at)
+    try:
+        build(args.reference, reviewed_at=args.reviewed_at)
+    except ReviewedAtRequired as error:
+        print(f"以下新條文需要提供 --reviewed-at，未寫入任何 corpus：{', '.join(error.articles)}")
+        return 2
     return 0
 
 

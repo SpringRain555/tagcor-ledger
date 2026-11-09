@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "reviewed_at": null,
+  "next_review_on": null,
+  "notes": [
+    "尚未建立：照 docs/operations/tax-data-runbook.md 填入。"
+  ],
+  "sources": [],
+  "calendar": {
+    "typical": {},
+    "years": {}
+  },
+  "income_tax": {},
+  "basic_living_expense": {},
+  "interest_withholding": [],
+  "nhi_supplementary_premium": []
+}
