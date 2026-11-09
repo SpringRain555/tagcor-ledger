@@ -38,6 +38,8 @@ def _amount(value: int) -> SourcedAmount:
 
 
 def _parameters(**changes: object) -> IncomeTaxParameters:
+    # 數字是任意的測試值，不是任何年度的公告值（例：
+    # 基本生活費 210,000 不是 114 年度的 213,000）。
     parameters = IncomeTaxParameters(
         income_year=2025,
         exemption=_amount(97_000),
@@ -45,7 +47,6 @@ def _parameters(**changes: object) -> IncomeTaxParameters:
         standard_deduction_single=_amount(131_000),
         salary_special_deduction_cap=_amount(218_000),
         savings_investment_cap=_amount(270_000),
-        basic_living_expense=_amount(210_000),
         writing_lecture_exemption_cap=_amount(180_000),
         foreign_income_amt_threshold=_amount(1_000_000),
         amt_basic_exemption=_amount(7_500_000),
@@ -110,6 +111,7 @@ def _line_map(estimate):
 def _estimate(
     *,
     parameters: IncomeTaxParameters | None = None,
+    basic_living: SourcedAmount | None = _amount(210_000),
     inputs: TaxYearInputs | None = None,
     overrides: dict[IncomeKind, TaxYearOverride] | None = None,
     ledger: LedgerIncome | None = None,
@@ -119,6 +121,7 @@ def _estimate(
         income_year=2025,
         dataset_available=dataset_available,
         parameters=_parameters() if parameters is None else parameters,
+        basic_living=basic_living,
         inputs=_inputs() if inputs is None else inputs,
         overrides=overrides or {},
         ledger=ledger or _ledger(),
@@ -205,12 +208,14 @@ def test_progressive_tax_is_continuous_at_the_bracket_cutoff() -> None:
 def test_golden_case_basic_living_expense_and_refund_balance() -> None:
     result = _estimate(
         inputs=_inputs(dependents=3),
+        basic_living=SourcedAmount(210_000, ("basic-living-test",)),
         overrides={IncomeKind.SALARY: _override(IncomeKind.SALARY, 1_500_000, 30_000)},
     )
     lines = _line_map(result)
 
     assert lines[EstimateStep.EXEMPTION].amount_minor == 388_000
     assert lines[EstimateStep.BASIC_LIVING].amount_minor == 321_000
+    assert lines[EstimateStep.BASIC_LIVING].source_ids == ("basic-living-test",)
     assert lines[EstimateStep.GROSS_INCOME].amount_minor == 1_282_000
     assert lines[EstimateStep.NET_INCOME].amount_minor == 442_000
     assert result.tax_minor == 22_100
@@ -249,6 +254,7 @@ def test_golden_case_interest_override_uses_ledger_withholding_independently() -
     [
         (UnsupportedReason.DATASET_UNAVAILABLE, "dataset"),
         (UnsupportedReason.PARAMETERS_MISSING, "parameters"),
+        (UnsupportedReason.BASIC_LIVING_PENDING, "basic_living"),
         (UnsupportedReason.INPUTS_MISSING, "inputs"),
         (UnsupportedReason.UNMAPPED_INCOME, "unmapped"),
         (UnsupportedReason.WITH_SPOUSE, "spouse"),
@@ -270,11 +276,14 @@ def test_each_unsupported_reason_refuses_without_any_amounts(
     ledger = _ledger()
     overrides: dict[IncomeKind, TaxYearOverride] = {}
     available = True
+    basic_living: SourcedAmount | None = _amount(210_000)
     if case == "dataset":
         parameters = None
         available = False
     elif case == "parameters":
         parameters = None
+    elif case == "basic_living":
+        basic_living = None
     elif case == "inputs":
         inputs = None
     elif case == "unmapped":
@@ -303,6 +312,7 @@ def test_each_unsupported_reason_refuses_without_any_amounts(
         income_year=2025,
         dataset_available=available,
         parameters=parameters,
+        basic_living=basic_living,
         inputs=inputs,
         overrides=overrides,
         ledger=ledger,
@@ -319,10 +329,12 @@ def test_each_unsupported_reason_refuses_without_any_amounts(
 
 
 def test_multiple_refusal_reasons_are_complete_and_in_declaration_order() -> None:
+    """REQ-0011 §拒算：全部原因都列出來。資料不可用時只是不另外報參數與基本生活費。"""
     result = estimate_income_tax(
         income_year=2025,
         dataset_available=False,
         parameters=None,
+        basic_living=None,
         inputs=None,
         overrides={},
         ledger=_ledger(
@@ -338,7 +350,33 @@ def test_multiple_refusal_reasons_are_complete_and_in_declaration_order() -> Non
         UnsupportedReason.UNSUPPORTED_INCOME,
     )
     assert UnsupportedReason.PARAMETERS_MISSING not in result.refused
+    assert UnsupportedReason.BASIC_LIVING_PENDING not in result.refused
     assert result.lines == () and result.tax_minor is None
+
+
+def test_missing_parameters_does_not_also_report_basic_living_pending() -> None:
+    result = estimate_income_tax(
+        income_year=2025,
+        dataset_available=True,
+        parameters=None,
+        basic_living=None,
+        inputs=_inputs(),
+        overrides={},
+        ledger=_ledger(),
+    )
+
+    assert result.refused == (UnsupportedReason.PARAMETERS_MISSING,)
+    assert result.lines == () and result.tax_minor is None
+
+
+def test_negative_official_balance_does_not_block_estimation() -> None:
+    result = _estimate(
+        inputs=_inputs(official_balance_minor=-7_900),
+        overrides={IncomeKind.SALARY: _override(IncomeKind.SALARY, 800_000)},
+    )
+
+    assert result.refused == ()
+    assert result.tax_minor == 17_700
 
 
 def test_writing_lecture_cap_accepts_the_limit_and_override_takes_precedence() -> None:
@@ -421,7 +459,12 @@ def test_official_tax_difference_and_prize_cautions() -> None:
 
 
 def test_fixture_names_and_fixable_reasons_follow_declared_order() -> None:
-    assert FIXABLE_REASONS == tuple(UnsupportedReason)[:4]
+    assert FIXABLE_REASONS == (
+        UnsupportedReason.DATASET_UNAVAILABLE,
+        UnsupportedReason.PARAMETERS_MISSING,
+        UnsupportedReason.INPUTS_MISSING,
+        UnsupportedReason.UNMAPPED_INCOME,
+    )
     assert tuple(ESTIMATE_STEP_NAMES) == tuple(EstimateStep)
     assert set(ESTIMATE_CAUTION_NAMES) == set(EstimateCaution)
 
@@ -441,6 +484,8 @@ def test_fixture_names_and_fixable_reasons_follow_declared_order() -> None:
             _inputs(),
         ),
         ({}, _ledger(), _inputs(dependents=0, dependents_70_plus=1)),
+        ({}, _ledger(), _inputs(official_balance_minor=True)),
+        ({}, _ledger(), _inputs(official_balance_minor=7_900.0)),
     ],
 )
 def test_invalid_override_and_input_shapes_raise_value_error(

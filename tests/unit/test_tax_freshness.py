@@ -16,6 +16,7 @@ from tagcor_ledger.domain.tax.freshness import (
     FreshnessProblem,
     assess_freshness,
     missing_exact_windows,
+    required_basic_living_years,
     required_parameter_years,
 )
 from tagcor_ledger.domain.tax.kinds import TaxKind
@@ -82,6 +83,12 @@ def test_parameter_years_change_on_december_15() -> None:
     assert required_parameter_years(date(2026, 12, 15)) == (2025, 2026, 2027)
 
 
+def test_basic_living_years_change_on_december_15() -> None:
+    assert required_basic_living_years(date(2026, 11, 9)) == (2025,)
+    assert required_basic_living_years(date(2026, 12, 14)) == (2025,)
+    assert required_basic_living_years(date(2026, 12, 15)) == (2025, 2026)
+
+
 def test_parameter_gaps_match_required_years_and_are_sorted(dataset) -> None:
     assert _assess(dataset, date(2026, 11, 9)) == ()
     due = _assess(dataset, date(2026, 12, 15))
@@ -90,6 +97,62 @@ def test_parameter_gaps_match_required_years_and_are_sorted(dataset) -> None:
     )
     january = _assess(dataset, date(2027, 1, 5))
     assert FreshnessProblem(FreshnessIssue.PARAMETERS_MISSING, years=(2027,)) in january
+
+
+def test_basic_living_gap_starts_on_december_15(dataset) -> None:
+    remaining = {
+        year: amount
+        for year, amount in dataset.basic_living_expense.items()
+        if year != 2026
+    }
+    changed = replace(dataset, basic_living_expense=remaining)
+
+    assert _assess(changed, date(2026, 11, 9)) == ()
+    december = next(
+        problem
+        for problem in _assess(changed, date(2026, 12, 15))
+        if problem.issue is FreshnessIssue.PARAMETERS_MISSING
+    )
+    assert december.years == (2026, 2027)
+
+
+def test_missing_prior_year_basic_living_is_reported(dataset) -> None:
+    changed = replace(
+        dataset,
+        basic_living_expense={
+            year: amount
+            for year, amount in dataset.basic_living_expense.items()
+            if year != 2025
+        },
+    )
+
+    due = _assess(changed, date(2026, 11, 9))
+
+    assert due == (
+        FreshnessProblem(FreshnessIssue.PARAMETERS_MISSING, years=(2025,)),
+    )
+
+
+def test_missing_income_and_basic_living_same_year_is_listed_once(dataset) -> None:
+    changed = replace(
+        dataset,
+        income_tax={
+            year: parameters
+            for year, parameters in dataset.income_tax.items()
+            if year != 2025
+        },
+        basic_living_expense={
+            year: amount
+            for year, amount in dataset.basic_living_expense.items()
+            if year != 2025
+        },
+    )
+
+    due = _assess(changed, date(2026, 11, 9))
+
+    assert due == (
+        FreshnessProblem(FreshnessIssue.PARAMETERS_MISSING, years=(2025,)),
+    )
 
 
 def test_parameter_gap_precedes_review_due(dataset) -> None:

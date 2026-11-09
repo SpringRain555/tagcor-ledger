@@ -5,9 +5,14 @@ from enum import StrEnum
 from typing import Mapping
 
 from tagcor_ledger.domain.tax.arithmetic import Rounding, apply_rate
-from tagcor_ledger.domain.tax.dataset import Bracket, IncomeTaxParameters
+from tagcor_ledger.domain.tax.dataset import Bracket, IncomeTaxParameters, SourcedAmount
+from tagcor_ledger.domain.tax.estimate_lines import _build_estimate_lines, _income_amounts
+from tagcor_ledger.domain.tax.estimate_inputs import (
+    _override_amount,
+    _used_withholding,
+    _validate_inputs,
+)
 from tagcor_ledger.domain.tax.kinds import (
-    OVERRIDABLE_INCOME_KINDS,
     DeductionChoice,
     FilingStatus,
     IncomeKind,
@@ -20,6 +25,7 @@ class UnsupportedReason(StrEnum):
 
     DATASET_UNAVAILABLE = "dataset_unavailable"
     PARAMETERS_MISSING = "parameters_missing"
+    BASIC_LIVING_PENDING = "basic_living_pending"
     INPUTS_MISSING = "inputs_missing"
     UNMAPPED_INCOME = "unmapped_income"
     WITH_SPOUSE = "with_spouse"
@@ -36,6 +42,9 @@ class UnsupportedReason(StrEnum):
 UNSUPPORTED_REASON_NAMES = {
     UnsupportedReason.DATASET_UNAVAILABLE: "稅務資料不可用。",
     UnsupportedReason.PARAMETERS_MISSING: "稅務資料缺這一年度的參數。",
+    UnsupportedReason.BASIC_LIVING_PENDING: (
+        "這一年的基本生活費還沒有資料：財政部每年 11 月底才公告當年度的金額。"
+    ),
     UnsupportedReason.INPUTS_MISSING: "這一年的申報狀況還沒填。",
     UnsupportedReason.UNMAPPED_INCOME: "有收入還沒歸類。",
     UnsupportedReason.WITH_SPOUSE: "與配偶合併申報不在試算範圍內。",
@@ -53,7 +62,12 @@ UNSUPPORTED_REASON_NAMES = {
     UnsupportedReason.AMT_POSSIBLE: "所得淨額超過最低稅負的免稅額，可能要繳基本稅額，試算不支援。",
 }
 
-FIXABLE_REASONS = tuple(UnsupportedReason)[:4]
+FIXABLE_REASONS = (
+    UnsupportedReason.DATASET_UNAVAILABLE,
+    UnsupportedReason.PARAMETERS_MISSING,
+    UnsupportedReason.INPUTS_MISSING,
+    UnsupportedReason.UNMAPPED_INCOME,
+)
 
 
 class EstimateStep(StrEnum):
@@ -184,6 +198,19 @@ class Estimate:
     cautions: tuple[EstimateCaution, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _IncomeCalculation:
+    salary_income: int
+    gross_income: int
+    exemption: int
+    regular_count: int
+    elderly_count: int
+    standard: int
+    savings: int
+    basic_living: int
+    net_income: int
+
+
 def progressive_tax(
     net_minor: int,
     brackets: tuple[Bracket, ...],
@@ -202,104 +229,6 @@ def progressive_tax(
     raise ValueError("brackets 必須包含最後一個無上限級距")
 
 
-def _nonnegative(value: int | None, name: str) -> None:
-    if value is None:
-        return
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{name} 必須是非負整數")
-
-
-def _validate_inputs(
-    overrides: Mapping[IncomeKind, TaxYearOverride], ledger: LedgerIncome, inputs: TaxYearInputs | None
-) -> None:
-    for kind, override in overrides.items():
-        if kind not in OVERRIDABLE_INCOME_KINDS:
-            raise ValueError("overrides 含不支援覆寫的所得類別")
-        if kind is not override.income_kind:
-            raise ValueError("overrides 鍵必須與 TaxYearOverride.income_kind 一致")
-        _nonnegative(override.gross_minor, "gross_minor")
-        _nonnegative(override.withheld_minor, "withheld_minor")
-    for kind, total in ledger.by_kind.items():
-        _nonnegative(total.count, f"{kind}.count")
-        _nonnegative(total.net_minor, f"{kind}.net_minor")
-        _nonnegative(total.withheld_tax_minor, f"{kind}.withheld_tax_minor")
-        _nonnegative(total.nhi_premium_minor, f"{kind}.nhi_premium_minor")
-    _nonnegative(ledger.unmapped.count, "unmapped.count")
-    _nonnegative(ledger.unmapped.net_minor, "unmapped.net_minor")
-    _nonnegative(ledger.unmapped.withheld_tax_minor, "unmapped.withheld_tax_minor")
-    _nonnegative(ledger.unmapped.nhi_premium_minor, "unmapped.nhi_premium_minor")
-    if inputs is not None:
-        _nonnegative(inputs.dependents, "dependents")
-        _nonnegative(inputs.dependents_70_plus, "dependents_70_plus")
-        _nonnegative(inputs.official_tax_minor, "official_tax_minor")
-        _nonnegative(inputs.official_balance_minor, "official_balance_minor")
-        if inputs.dependents_70_plus > inputs.dependents:
-            raise ValueError("dependents_70_plus 不得大於 dependents")
-
-
-def _override_amount(
-    overrides: Mapping[IncomeKind, TaxYearOverride], kind: IncomeKind, field: str
-) -> int | None:
-    override = overrides.get(kind)
-    if override is None:
-        return None
-    if field == "gross":
-        return override.gross_minor
-    return override.withheld_minor
-
-
-def _amount_sources(*groups: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(source_id for group in groups for source_id in group))
-
-
-def _line(
-    step: EstimateStep,
-    amount: int,
-    source: LineSource = LineSource.COMPUTED,
-    *,
-    count: int | None = None,
-    source_ids: tuple[str, ...] = (),
-    included: bool = True,
-) -> EstimateLine:
-    return EstimateLine(step, amount, source, count, source_ids, included)
-
-
-def _income_amounts(
-    overrides: Mapping[IncomeKind, TaxYearOverride], ledger: LedgerIncome
-) -> tuple[dict[IncomeKind, int], dict[IncomeKind, int], dict[IncomeKind, bool]]:
-    gross: dict[IncomeKind, int] = {}
-    counts: dict[IncomeKind, int] = {}
-    manual: dict[IncomeKind, bool] = {}
-    for kind in (
-        IncomeKind.SALARY,
-        IncomeKind.INTEREST_TAXABLE,
-        IncomeKind.PRIZE,
-        IncomeKind.WRITING_LECTURE,
-    ):
-        total = ledger.total(kind)
-        override_amount = _override_amount(overrides, kind, "gross")
-        manual[kind] = override_amount is not None
-        counts[kind] = total.count
-        if override_amount is not None:
-            gross[kind] = override_amount
-        elif kind is IncomeKind.INTEREST_TAXABLE:
-            gross[kind] = total.net_minor + total.withheld_tax_minor + total.nhi_premium_minor
-        else:
-            gross[kind] = total.net_minor
-    for kind in (
-        IncomeKind.FOREIGN_INCOME,
-        IncomeKind.INTEREST_EXEMPT,
-        IncomeKind.EXEMPT_INCOME,
-        IncomeKind.OTHER_INCOME,
-        IncomeKind.EXCLUDED,
-    ):
-        total = ledger.total(kind)
-        gross[kind] = total.net_minor
-        counts[kind] = total.count
-        manual[kind] = False
-    return gross, counts, manual
-
-
 def _refusal_reasons(
     *,
     dataset_available: bool,
@@ -308,12 +237,18 @@ def _refusal_reasons(
     overrides: Mapping[IncomeKind, TaxYearOverride],
     ledger: LedgerIncome,
     amounts: Mapping[IncomeKind, int],
+    calculation: _IncomeCalculation | None,
+    basic_living: SourcedAmount | None,
 ) -> tuple[UnsupportedReason, ...]:
     reasons: list[UnsupportedReason] = []
+    # 資料不可用時，參數與基本生活費本來就拿不到，不另外報那兩個；
+    # 其他原因照樣全部列出（REQ-0011 §拒算：全部原因都列出來）。
     if not dataset_available:
         reasons.append(UnsupportedReason.DATASET_UNAVAILABLE)
     elif parameters is None:
         reasons.append(UnsupportedReason.PARAMETERS_MISSING)
+    elif basic_living is None:
+        reasons.append(UnsupportedReason.BASIC_LIVING_PENDING)
     if inputs is None:
         reasons.append(UnsupportedReason.INPUTS_MISSING)
     if ledger.unmapped.count > 0:
@@ -331,7 +266,7 @@ def _refusal_reasons(
             reasons.append(UnsupportedReason.OTHER_SPECIAL_DEDUCTIONS)
     if ledger.total(IncomeKind.UNSUPPORTED).count > 0:
         reasons.append(UnsupportedReason.UNSUPPORTED_INCOME)
-    if parameters is not None:
+    if dataset_available and parameters is not None:
         writing_override = _override_amount(overrides, IncomeKind.WRITING_LECTURE, "gross")
         writing_total = (
             writing_override
@@ -352,23 +287,25 @@ def _refusal_reasons(
             UnsupportedReason.ITEMIZED_DEDUCTION,
             UnsupportedReason.OTHER_SPECIAL_DEDUCTIONS,
         }
-        if inputs is not None and not any(reason in input_reasons for reason in reasons):
-            net = _net_income(parameters, inputs, amounts)
-            if net > parameters.amt_basic_exemption.value:
+        if (
+            inputs is not None
+            and calculation is not None
+            and not any(reason in input_reasons for reason in reasons)
+        ):
+            if calculation.net_income > parameters.amt_basic_exemption.value:
                 reasons.append(UnsupportedReason.AMT_POSSIBLE)
     reason_order = {reason: index for index, reason in enumerate(UnsupportedReason)}
     return tuple(sorted(set(reasons), key=lambda reason: reason_order[reason]))
 
 
-def _net_income(
+def _income_calculation(
     parameters: IncomeTaxParameters,
     inputs: TaxYearInputs,
     amounts: Mapping[IncomeKind, int],
-) -> int:
-    salary_income = max(
-        0,
-        amounts[IncomeKind.SALARY]
-        - min(amounts[IncomeKind.SALARY], parameters.salary_special_deduction_cap.value),
+    basic_living: SourcedAmount,
+) -> _IncomeCalculation:
+    salary_income = amounts[IncomeKind.SALARY] - min(
+        amounts[IncomeKind.SALARY], parameters.salary_special_deduction_cap.value
     )
     gross_income = (
         salary_income
@@ -376,17 +313,28 @@ def _net_income(
         + amounts[IncomeKind.PRIZE]
         + amounts[IncomeKind.OTHER_INCOME]
     )
-    exemptions, _, _ = _exemption_amount(parameters, inputs)
+    exemptions, regular_count, elderly_count = _exemption_amount(parameters, inputs)
     standard = parameters.standard_deduction_single.value
     savings = min(
         amounts[IncomeKind.INTEREST_TAXABLE], parameters.savings_investment_cap.value
     )
-    basic = max(
+    basic_amount = max(
         0,
-        parameters.basic_living_expense.value * (1 + inputs.dependents)
+        basic_living.value * (1 + inputs.dependents)
         - (exemptions + standard + savings),
     )
-    return max(0, gross_income - exemptions - standard - savings - basic)
+    net_income = max(0, gross_income - exemptions - standard - savings - basic_amount)
+    return _IncomeCalculation(
+        salary_income=salary_income,
+        gross_income=gross_income,
+        exemption=exemptions,
+        regular_count=regular_count,
+        elderly_count=elderly_count,
+        standard=standard,
+        savings=savings,
+        basic_living=basic_amount,
+        net_income=net_income,
+    )
 
 
 def _exemption_amount(
@@ -402,27 +350,6 @@ def _exemption_amount(
     return exemption, regular_count, elderly_count
 
 
-def _used_withholding(
-    ledger: LedgerIncome,
-    overrides: Mapping[IncomeKind, TaxYearOverride],
-) -> int:
-    kinds = (
-        IncomeKind.SALARY,
-        IncomeKind.INTEREST_TAXABLE,
-        IncomeKind.PRIZE,
-        IncomeKind.WRITING_LECTURE,
-    )
-    total = 0
-    for kind in kinds:
-        override_withheld = _override_amount(overrides, kind, "withheld")
-        total += (
-            override_withheld
-            if override_withheld is not None
-            else ledger.total(kind).withheld_tax_minor
-        )
-    return total
-
-
 def _refused_estimate(income_year: int, refused: tuple[UnsupportedReason, ...]) -> Estimate:
     return Estimate(income_year, refused, (), None, None, None, None, None, ())
 
@@ -432,6 +359,7 @@ def estimate_income_tax(
     income_year: int,
     dataset_available: bool,
     parameters: IncomeTaxParameters | None,
+    basic_living: SourcedAmount | None,
     inputs: TaxYearInputs | None,
     overrides: Mapping[IncomeKind, TaxYearOverride],
     ledger: LedgerIncome,
@@ -439,6 +367,14 @@ def estimate_income_tax(
     """整合帳本與使用者資料試算所得稅；有拒算原因時不回任何稅額。"""
     _validate_inputs(overrides, ledger, inputs)
     amounts, counts, manual = _income_amounts(overrides, ledger)
+    calculation = (
+        _income_calculation(parameters, inputs, amounts, basic_living)
+        if dataset_available
+        and parameters is not None
+        and inputs is not None
+        and basic_living is not None
+        else None
+    )
     refused = _refusal_reasons(
         dataset_available=dataset_available,
         parameters=parameters,
@@ -446,124 +382,30 @@ def estimate_income_tax(
         overrides=overrides,
         ledger=ledger,
         amounts=amounts,
+        calculation=calculation,
+        basic_living=basic_living,
     )
     if refused:
         return _refused_estimate(income_year, refused)
-    if parameters is None or inputs is None:
+    if parameters is None or basic_living is None or inputs is None or calculation is None:
         raise ValueError("拒算檢查漏掉必要輸入")
 
-    salary_gross = amounts[IncomeKind.SALARY]
-    salary_deduction = min(salary_gross, parameters.salary_special_deduction_cap.value)
-    salary_income = salary_gross - salary_deduction
-    taxable_interest = amounts[IncomeKind.INTEREST_TAXABLE]
-    prize = amounts[IncomeKind.PRIZE]
-    other = amounts[IncomeKind.OTHER_INCOME]
-    gross_income = salary_income + taxable_interest + prize + other
-    exemption, _, elderly_count = _exemption_amount(parameters, inputs)
-    standard = parameters.standard_deduction_single.value
-    savings = min(taxable_interest, parameters.savings_investment_cap.value)
-    basic_living = max(
-        0,
-        parameters.basic_living_expense.value * (1 + inputs.dependents)
-        - (exemption + standard + savings),
+    tax = progressive_tax(
+        calculation.net_income, parameters.brackets, parameters.tax_rounding
     )
-    net_income = max(0, gross_income - exemption - standard - savings - basic_living)
-    tax = progressive_tax(net_income, parameters.brackets, parameters.tax_rounding)
     withheld = _used_withholding(ledger, overrides)
     balance = tax - withheld
-
-    lines: list[EstimateLine] = []
     salary_count = counts[IncomeKind.SALARY]
-    if salary_count > 0 or manual[IncomeKind.SALARY]:
-        salary_source = LineSource.MANUAL if manual[IncomeKind.SALARY] else LineSource.LEDGER
-        lines.append(
-            _line(
-                EstimateStep.SALARY_GROSS,
-                salary_gross,
-                salary_source,
-                count=salary_count if salary_source is LineSource.LEDGER else None,
-            )
-        )
-        lines.append(
-            _line(
-                EstimateStep.SALARY_DEDUCTION,
-                salary_deduction,
-                source_ids=parameters.salary_special_deduction_cap.source_ids,
-            )
-        )
-        lines.append(_line(EstimateStep.SALARY_INCOME, salary_income))
-
-    for kind, step in (
-        (IncomeKind.INTEREST_TAXABLE, EstimateStep.INTEREST),
-        (IncomeKind.PRIZE, EstimateStep.PRIZE),
-        (IncomeKind.OTHER_INCOME, EstimateStep.OTHER),
-        (IncomeKind.WRITING_LECTURE, EstimateStep.WRITING_LECTURE),
-        (IncomeKind.FOREIGN_INCOME, EstimateStep.FOREIGN),
-        (IncomeKind.INTEREST_EXEMPT, EstimateStep.INTEREST_EXEMPT),
-        (IncomeKind.EXEMPT_INCOME, EstimateStep.EXEMPT_INCOME),
-        (IncomeKind.EXCLUDED, EstimateStep.EXCLUDED),
-    ):
-        count = counts[kind]
-        if count == 0 and not manual.get(kind, False):
-            continue
-        source = LineSource.MANUAL if manual.get(kind, False) else LineSource.LEDGER
-        included = step not in {
-            EstimateStep.WRITING_LECTURE,
-            EstimateStep.FOREIGN,
-            EstimateStep.INTEREST_EXEMPT,
-            EstimateStep.EXEMPT_INCOME,
-            EstimateStep.EXCLUDED,
-        }
-        lines.append(
-            _line(
-                step,
-                amounts[kind],
-                source,
-                count=count if source is LineSource.LEDGER else None,
-                included=included,
-            )
-        )
-
-    lines.extend(
-        (
-            _line(EstimateStep.GROSS_INCOME, gross_income),
-            _line(
-                EstimateStep.EXEMPTION,
-                exemption,
-                LineSource.DATASET,
-                source_ids=_amount_sources(
-                    parameters.exemption.source_ids,
-                    parameters.exemption_70_plus.source_ids if elderly_count else (),
-                ),
-            ),
-            _line(
-                EstimateStep.STANDARD_DEDUCTION,
-                standard,
-                LineSource.DATASET,
-                source_ids=parameters.standard_deduction_single.source_ids,
-            ),
-            _line(
-                EstimateStep.SAVINGS_DEDUCTION,
-                savings,
-                source_ids=parameters.savings_investment_cap.source_ids,
-            ),
-            _line(
-                EstimateStep.BASIC_LIVING,
-                basic_living,
-                source_ids=parameters.basic_living_expense.source_ids,
-            ),
-            _line(EstimateStep.NET_INCOME, net_income),
-            _line(
-                EstimateStep.TAX,
-                tax,
-                source_ids=_amount_sources(
-                    parameters.brackets_source_ids,
-                    parameters.tax_rounding_source_ids,
-                ),
-            ),
-            _line(EstimateStep.WITHHELD, withheld),
-            _line(EstimateStep.BALANCE, balance),
-        )
+    lines = _build_estimate_lines(
+        parameters=parameters,
+        basic_living=basic_living,
+        amounts=amounts,
+        counts=counts,
+        manual=manual,
+        calculation=calculation,
+        tax=tax,
+        withheld=withheld,
+        balance=balance,
     )
 
     cautions: list[EstimateCaution] = []
@@ -571,18 +413,21 @@ def estimate_income_tax(
         cautions.append(EstimateCaution.SALARY_FROM_LEDGER)
     if counts[IncomeKind.PRIZE] > 0 and not manual[IncomeKind.PRIZE]:
         cautions.append(EstimateCaution.PRIZE_FROM_LEDGER)
-    if prize > 0:
+    if amounts[IncomeKind.PRIZE] > 0:
         cautions.append(EstimateCaution.PRIZE_EXPENSES_NOT_DEDUCTED)
     official_diff = (
         tax - inputs.official_tax_minor
         if inputs.official_tax_minor is not None
         else None
     )
-    filing_exempt = gross_income <= exemption + standard and withheld == 0
+    filing_exempt = (
+        calculation.gross_income <= calculation.exemption + calculation.standard
+        and withheld == 0
+    )
     return Estimate(
         income_year=income_year,
         refused=(),
-        lines=tuple(lines),
+        lines=lines,
         tax_minor=tax,
         withheld_minor=withheld,
         balance_minor=balance,

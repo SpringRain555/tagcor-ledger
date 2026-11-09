@@ -49,6 +49,7 @@ def _skeleton() -> dict[str, object]:
         "sources": [],
         "calendar": {"typical": {}, "years": {}},
         "income_tax": {},
+        "basic_living_expense": {},
         "interest_withholding": [],
         "nhi_supplementary_premium": [],
     }
@@ -86,6 +87,9 @@ def _skeleton() -> dict[str, object]:
         (("income_tax", "2025", "exemption", "value"), True, "exemption.value："),
         (("income_tax", "2025", "exemption", "value"), -1, "exemption.value："),
         (("income_tax", "2025", "exemption", "value"), Decimal("1.25"), "exemption.value："),
+        (("basic_living_expense", "2025", "value"), True, "basic_living_expense.2025.value："),
+        (("basic_living_expense", "2025", "value"), -1, "basic_living_expense.2025.value：不得小於 0。"),
+        (("basic_living_expense", "2025", "source_ids"), [], "basic_living_expense.2025.source_ids：至少要引用一個來源。"),
         (("income_tax", "2025", "exemption_70_plus", "value"), 99_999, "exemption_70_plus.value："),
         (("income_tax", "2025", "brackets", "rows"), [
             {"up_to": 590000, "rate_ppm": 50000, "progressive_difference": 0}
@@ -138,6 +142,9 @@ def test_fixture_is_valid_and_parses_into_dataset(sample_raw: dict[str, object])
     assert len(dataset.sources) == 3
     assert dataset.parameters_for(2025) is not None
     assert dataset.parameters_for(2025).brackets[2].progressive_difference == 147700
+    assert dataset.basic_living_for(2025) is not None
+    assert dataset.basic_living_for(2025).value == 500000
+    assert dataset.basic_living_for(2040) is None
     assert dataset.source("income-example") is not None
 
 
@@ -196,6 +203,50 @@ def test_calendar_year_key_must_be_four_digits(sample_raw: dict[str, object]) ->
     problems = validate_tax_dataset(sample_raw)
 
     assert any("calendar.years.26：年度鍵必須是四位數" in problem for problem in problems)
+
+
+def test_basic_living_year_key_must_be_four_digits(sample_raw: dict[str, object]) -> None:
+    years = cast(dict[str, object], sample_raw["basic_living_expense"])
+    years["25"] = years.pop("2025")
+
+    problems = validate_tax_dataset(sample_raw)
+
+    assert any(
+        "basic_living_expense.25：所得年度鍵必須是四位數西元年。" in problem
+        for problem in problems
+    )
+
+
+def test_basic_living_expense_is_required_but_may_be_empty(
+    sample_raw: dict[str, object],
+) -> None:
+    sample_raw["basic_living_expense"] = {}
+    assert validate_tax_dataset(sample_raw) == []
+
+    del sample_raw["basic_living_expense"]
+    problems = validate_tax_dataset(sample_raw)
+    assert any(
+        "dataset.basic_living_expense：缺少必要欄位。" in problem
+        for problem in problems
+    )
+
+
+def test_income_tax_rejects_nested_basic_living_expense(
+    sample_raw: dict[str, object],
+) -> None:
+    parameters = cast(dict[str, object], cast(dict[str, object], sample_raw["income_tax"])["2025"])
+    parameters["basic_living_expense"] = {
+        "value": 500000,
+        "source_ids": ["income-example"],
+    }
+
+    problems = validate_tax_dataset(sample_raw)
+
+    assert any(
+        "income_tax.2025.basic_living_expense：應移至最上層 basic_living_expense 序列。"
+        in problem
+        for problem in problems
+    )
 
 
 def test_rule_effective_dates_must_increase(sample_raw: dict[str, object]) -> None:
@@ -278,6 +329,8 @@ def test_dataset_mappings_are_immutable_after_parsing(sample_raw: dict[str, obje
 
     with pytest.raises(TypeError):
         dataset.typical[TaxKind.INCOME_TAX] = dataset.typical[TaxKind.HOUSE_TAX]
+    with pytest.raises(TypeError):
+        dataset.basic_living_expense[2025] = dataset.basic_living_expense[2026]
 
 
 def test_rounding_model_contains_the_supported_values() -> None:

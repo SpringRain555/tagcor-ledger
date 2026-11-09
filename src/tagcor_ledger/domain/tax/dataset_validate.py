@@ -21,7 +21,6 @@ _AMOUNT_FIELDS = (
     "standard_deduction_single",
     "salary_special_deduction_cap",
     "savings_investment_cap",
-    "basic_living_expense",
     "writing_lecture_exemption_cap",
     "foreign_income_amt_threshold",
     "amt_basic_exemption",
@@ -300,6 +299,23 @@ def _sourced_amount(
     return amount
 
 
+def _validate_basic_living(
+    value: object,
+    problems: list[str],
+    references: list[tuple[str, str]],
+) -> None:
+    """最上層的基本生活費序列：所得年度 → 金額與出處（公告時程與 income_tax 差一年，見 dataset.py）。"""
+    years = _mapping(value, "basic_living_expense", problems)
+    if years is None:
+        return
+    for raw_year, amount in years.items():
+        path = f"basic_living_expense.{raw_year}"
+        if _YEAR.fullmatch(str(raw_year)) is None or int(raw_year) == 0:
+            problems.append(f"{path}：所得年度鍵必須是四位數西元年。")
+            continue
+        _sourced_amount(amount, path, problems, references)
+
+
 def _validate_rounding(
     value: object,
     path: str,
@@ -334,6 +350,10 @@ def _validate_income_tax(
         parameters = _mapping(raw_parameters, path, problems)
         if parameters is None:
             continue
+        if "basic_living_expense" in parameters:
+            problems.append(
+                f"{path}.basic_living_expense：應移至最上層 basic_living_expense 序列。"
+            )
         amounts: dict[str, int | None] = {}
         for field in _AMOUNT_FIELDS:
             amounts[field] = _sourced_amount(
@@ -522,6 +542,9 @@ def validate_tax_dataset(raw: object) -> list[str]:
     )
     _validate_calendar(_required(root, "calendar", "dataset", problems), problems, references)
     _validate_income_tax(_required(root, "income_tax", "dataset", problems), problems, references)
+    _validate_basic_living(
+        _required(root, "basic_living_expense", "dataset", problems), problems, references
+    )
     _validate_rule_list(
         _required(root, "interest_withholding", "dataset", problems),
         "interest_withholding",

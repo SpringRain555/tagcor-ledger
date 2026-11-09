@@ -68,6 +68,14 @@ def required_parameter_years(today: date) -> tuple[int, ...]:
     return years
 
 
+def required_basic_living_years(today: date) -> tuple[int, ...]:
+    """回傳依基本生活費公告時程目前應備妥的所得年度。"""
+    years = (today.year - 1,)
+    if (today.month, today.day) >= (12, 15):
+        return (*years, today.year)
+    return years
+
+
 def assess_freshness(
     *,
     today: date,
@@ -90,9 +98,15 @@ def assess_freshness(
     if dataset.reviewed_at is None:
         return (FreshnessProblem(FreshnessIssue.NOT_POPULATED),)
 
-    missing_years = tuple(
+    missing_parameter_years = {
         year for year in required_parameter_years(today) if dataset.parameters_for(year) is None
-    )
+    }
+    missing_basic_living_years = {
+        year
+        for year in required_basic_living_years(today)
+        if dataset.basic_living_for(year) is None
+    }
+    missing_years = tuple(sorted(missing_parameter_years | missing_basic_living_years))
     problems: list[FreshnessProblem] = []
     if missing_years:
         problems.append(

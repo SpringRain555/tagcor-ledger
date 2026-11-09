@@ -78,7 +78,6 @@ def _parameters(year: int, raw: object) -> IncomeTaxParameters:
         standard_deduction_single=_amount(obj["standard_deduction_single"]),
         salary_special_deduction_cap=_amount(obj["salary_special_deduction_cap"]),
         savings_investment_cap=_amount(obj["savings_investment_cap"]),
-        basic_living_expense=_amount(obj["basic_living_expense"]),
         writing_lecture_exemption_cap=_amount(obj["writing_lecture_exemption_cap"]),
         foreign_income_amt_threshold=_amount(obj["foreign_income_amt_threshold"]),
         amt_basic_exemption=_amount(obj["amt_basic_exemption"]),
@@ -161,6 +160,10 @@ def parse_tax_dataset(raw: object) -> TaxDataset:
         int(raw_year): _parameters(int(raw_year), parameters)
         for raw_year, parameters in _obj(root["income_tax"]).items()
     }
+    basic_living_expense = {
+        int(raw_year): _amount(amount)
+        for raw_year, amount in _obj(root["basic_living_expense"]).items()
+    }
     withholding = tuple(
         _withholding_rule(item) for item in cast(list[object], root["interest_withholding"])
     )
@@ -184,6 +187,7 @@ def parse_tax_dataset(raw: object) -> TaxDataset:
         typical=typical,
         years=years,
         income_tax=income_tax,
+        basic_living_expense=basic_living_expense,
         interest_withholding=withholding,
         nhi_supplementary_premium=premium,
     )

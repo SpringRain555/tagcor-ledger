@@ -1,4 +1,10 @@
-"""公開稅務資料的不可變模型與查詢方法。"""
+"""公開稅務資料的不可變模型與查詢方法。
+
+所得年度 X 的免稅額、扣除額與級距在 X−1 年 11 月底公告，基本生活費則要到 X 年
+11 月底才公告（納稅者權利保護法第 4 條，依主計總處前一年的每人可支配所得中位數）。
+若把兩者放在同一個 income_tax[X]，X 年度參數會有大半年不齊，而那段時間沒有資料可補；
+因此基本生活費獨立成序列，依自己的公告時程判斷資料新鮮度。
+"""
 
 from dataclasses import dataclass
 from datetime import date
@@ -63,7 +69,6 @@ class IncomeTaxParameters:
     standard_deduction_single: SourcedAmount
     salary_special_deduction_cap: SourcedAmount
     savings_investment_cap: SourcedAmount
-    basic_living_expense: SourcedAmount
     writing_lecture_exemption_cap: SourcedAmount
     foreign_income_amt_threshold: SourcedAmount
     amt_basic_exemption: SourcedAmount
@@ -102,6 +107,7 @@ class TaxDataset:
     typical: Mapping[TaxKind, TypicalWindow]
     years: Mapping[int, Mapping[TaxKind, Window]]
     income_tax: Mapping[int, IncomeTaxParameters]
+    basic_living_expense: Mapping[int, SourcedAmount]
     interest_withholding: tuple[InterestWithholdingRule, ...]
     nhi_supplementary_premium: tuple[NhiPremiumRule, ...]
 
@@ -113,6 +119,9 @@ class TaxDataset:
         }
         object.__setattr__(self, "years", MappingProxyType(year_windows))
         object.__setattr__(self, "income_tax", MappingProxyType(dict(self.income_tax)))
+        object.__setattr__(
+            self, "basic_living_expense", MappingProxyType(dict(self.basic_living_expense))
+        )
 
     @property
     def populated(self) -> bool:
@@ -145,6 +154,10 @@ class TaxDataset:
     def parameters_for(self, income_year: int) -> IncomeTaxParameters | None:
         """取得指定所得年度的綜所稅參數。"""
         return self.income_tax.get(income_year)
+
+    def basic_living_for(self, income_year: int) -> SourcedAmount | None:
+        """取得指定所得年度的基本生活費公告值。"""
+        return self.basic_living_expense.get(income_year)
 
     def withholding_rule_on(self, day: date) -> InterestWithholdingRule | None:
         """取得指定日期已生效的最後一條利息扣繳規則。"""

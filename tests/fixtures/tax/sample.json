@@ -98,7 +98,6 @@
       "standard_deduction_single": {"value": 200000, "source_ids": ["income-example"]},
       "salary_special_deduction_cap": {"value": 300000, "source_ids": ["income-example"]},
       "savings_investment_cap": {"value": 400000, "source_ids": ["income-example"]},
-      "basic_living_expense": {"value": 500000, "source_ids": ["income-example"]},
       "writing_lecture_exemption_cap": {"value": 600000, "source_ids": ["income-example"]},
       "foreign_income_amt_threshold": {"value": 700000, "source_ids": ["income-example"]},
       "amt_basic_exemption": {"value": 800000, "source_ids": ["income-example"]},
@@ -120,7 +119,6 @@
       "standard_deduction_single": {"value": 210000, "source_ids": ["income-example"]},
       "salary_special_deduction_cap": {"value": 310000, "source_ids": ["income-example"]},
       "savings_investment_cap": {"value": 410000, "source_ids": ["income-example"]},
-      "basic_living_expense": {"value": 510000, "source_ids": ["income-example"]},
       "writing_lecture_exemption_cap": {"value": 610000, "source_ids": ["income-example"]},
       "foreign_income_amt_threshold": {"value": 710000, "source_ids": ["income-example"]},
       "amt_basic_exemption": {"value": 810000, "source_ids": ["income-example"]},
@@ -136,6 +134,10 @@
       },
       "tax_rounding": {"value": "half_up", "source_ids": ["income-example"]}
     }
+  },
+  "basic_living_expense": {
+    "2025": {"value": 500000, "source_ids": ["income-example"]},
+    "2026": {"value": 510000, "source_ids": ["income-example"]}
   },
   "interest_withholding": [
     {
