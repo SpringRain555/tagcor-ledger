@@ -30,6 +30,8 @@ class TaxMappingRow:
     archived: bool
     income_kind: IncomeKind | None
     expense_kind: TaxKind | None
+    parent_income_kind: IncomeKind | None
+    parent_expense_kind: TaxKind | None
     effective_income_kind: IncomeKind | None
     effective_expense_kind: TaxKind | None
     own_year_count: int

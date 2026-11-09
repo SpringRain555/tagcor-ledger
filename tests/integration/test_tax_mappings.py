@@ -417,6 +417,40 @@ def test_mapping_rows_sort_unmapped_first_and_include_archived_history(
     assert archived_empty.category_id not in by_id
 
 
+def test_mapping_rows_include_parent_mappings_for_override_detection(
+    ledger: tuple[AppPaths, LedgerStore],
+) -> None:
+    _paths, store = ledger
+    mapped_parent = store.create_category(name="上層有對應")
+    mapped_child = store.create_category(name="自己的對應", parent_id=mapped_parent.category_id)
+    bare_parent = store.create_category(name="上層沒有對應")
+    bare_child = store.create_category(name="沒有覆蓋", parent_id=bare_parent.category_id)
+    store.set_tax_mapping(
+        category_id=mapped_parent.category_id,
+        flow=Flow.INCOME,
+        tax_kind=IncomeKind.SALARY.value,
+    )
+    store.set_tax_mapping(
+        category_id=mapped_parent.category_id,
+        flow=Flow.EXPENSE,
+        tax_kind=TaxKind.HOUSE_TAX.value,
+    )
+    store.set_tax_mapping(
+        category_id=mapped_child.category_id,
+        flow=Flow.INCOME,
+        tax_kind=IncomeKind.INTEREST_TAXABLE.value,
+    )
+
+    rows = {row.category_id: row for row in store.list_tax_mapping_rows(2026)}
+
+    assert rows[mapped_child.category_id].parent_income_kind is IncomeKind.SALARY
+    assert rows[mapped_child.category_id].parent_expense_kind is TaxKind.HOUSE_TAX
+    assert rows[bare_child.category_id].parent_income_kind is None
+    assert rows[bare_child.category_id].parent_expense_kind is None
+    assert rows[mapped_parent.category_id].parent_income_kind is None
+    assert rows[mapped_parent.category_id].parent_expense_kind is None
+
+
 def test_moving_item_keeps_own_mapping_and_changes_inherited_mapping(
     ledger: tuple[AppPaths, LedgerStore],
 ) -> None:

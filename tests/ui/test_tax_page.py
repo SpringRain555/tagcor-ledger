@@ -48,7 +48,7 @@ def _write_calendar(
     return target
 
 
-def test_tax_page_exposes_the_declared_order_and_falls_back_to_reminders(window) -> None:
+def test_tax_page_exposes_and_routes_the_declared_tabs(window) -> None:
     assert [tab.value for tab in TaxTab] == [
         "reminders",
         "estimate",
@@ -58,15 +58,38 @@ def test_tax_page_exposes_the_declared_order_and_falls_back_to_reminders(window)
     ]
     assert [window.tax.tabs.tabText(i) for i in range(window.tax.tabs.count())] == [
         TAX_TAB_LABELS["reminders"],
+        TAX_TAB_LABELS["estimate"],
+        TAX_TAB_LABELS["mapping"],
         TAX_TAB_LABELS["data"],
         TAX_TAB_LABELS["law"],
     ]
 
-    for tab in (TaxTab.ESTIMATE, TaxTab.MAPPING):
+    for tab, page in (
+        (TaxTab.ESTIMATE, window.tax.estimate),
+        (TaxTab.MAPPING, window.tax.mapping),
+    ):
         window.tax.show_tab(tab)
-        assert window.tax.tabs.currentWidget() is window.tax.reminders
+        assert window.tax.tabs.currentWidget() is page
     window.show_page(PageId.TAX)
     assert window.current_page_widget() is window.tax
+
+
+def test_switch_changes_refresh_when_returning_from_data_tab(window) -> None:
+    page = window.tax
+    page.tabs.setCurrentWidget(page.data)
+    assert window.controller.save_tax_reminder_switch(
+        TaxKind.INCOME_TAX, ReminderSwitch.OFF
+    ).success
+
+    page.refresh()
+    page.tabs.setCurrentWidget(page.reminders)
+
+    row = next(
+        index
+        for index, item in enumerate(page.reminders.model.items)
+        if item["view"].kind is TaxKind.INCOME_TAX
+    )
+    assert page.reminders.model.index(row, 1).data() == "關"
 
 
 def test_reminders_show_five_tax_items_and_switch_changes_persist(window) -> None:

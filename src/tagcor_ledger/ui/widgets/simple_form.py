@@ -28,7 +28,7 @@ if values is None:      # 使用者按了取消
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
@@ -80,6 +80,7 @@ class ChoiceField:
     label: str
     options: Sequence[tuple[str, Any]] = field(default_factory=tuple)
     default: Any = None
+    notes: Mapping[Any, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +134,18 @@ class SimpleFormDialog(QDialog):
                     select_data(combo, spec.default)
                 self._widgets[spec.key] = combo
                 form.addRow(spec.label, combo)
+                if spec.notes:
+                    note = QLabel()
+                    note.setObjectName("hintLabel")
+                    note.setWordWrap(True)
+                    note.setMaximumWidth(640)
+                    form.addRow("", note)
+                    combo.currentIndexChanged.connect(
+                        lambda _index, field=spec, picker=combo, label=note: self._sync_note(
+                            field, picker, label
+                        )
+                    )
+                    self._sync_note(spec, combo, note)
                 continue
             if isinstance(spec, DateField):
                 stamp = QDate.fromString(spec.default, "yyyy-MM-dd")
@@ -187,6 +200,12 @@ class SimpleFormDialog(QDialog):
     def _accept_if_ready(self) -> None:
         if self.is_ready():
             self.accept()
+
+    @staticmethod
+    def _sync_note(spec: ChoiceField, combo: QComboBox, label: QLabel) -> None:
+        note = spec.notes.get(combo.currentData(), "")
+        label.setText(note)
+        label.setVisible(bool(note))
 
     def is_ready(self) -> bool:
         for spec in self._fields:

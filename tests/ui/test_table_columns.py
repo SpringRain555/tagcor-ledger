@@ -31,7 +31,9 @@ from tagcor_ledger.ui import formatting
 from tagcor_ledger.ui.pages.catalog import AccountsPage, CategoriesPage, ItemsPage
 from tagcor_ledger.application.reference import ReferenceEntry
 from tagcor_ledger.domain.tax.dataset import TaxSource, Window
-from tagcor_ledger.domain.tax.kinds import TaxKind
+from tagcor_ledger.domain.tax.estimate import EstimateLine, EstimateStep, LineSource
+from tagcor_ledger.domain.tax.kinds import IncomeKind, TaxKind
+from tagcor_ledger.domain.tax.records import TaxMappingRow
 from tagcor_ledger.domain.tax.reminders import (
     ReminderCycle,
     ReminderState,
@@ -173,6 +175,36 @@ SAMPLES: dict[str, dict[str, Any]] = {
             "2026-01-02T00:00:00+08:00",
         )
     },
+    "estimate_line_values": {
+        "line": EstimateLine(
+            EstimateStep.SALARY_GROSS,
+            120_000,
+            LineSource.LEDGER,
+            1,
+            (),
+            True,
+        ),
+        "sources": {},
+    },
+    "tax_mapping_values": {
+        "row": TaxMappingRow(
+            "category-1",
+            None,
+            "薪資",
+            None,
+            False,
+            IncomeKind.SALARY,
+            None,
+            None,
+            None,
+            IncomeKind.SALARY,
+            None,
+            1,
+            100_000,
+            1,
+            100_000,
+        )
+    },
     "tax_law_entry_values": {
         "entry": ReferenceEntry(
             "test-entry",
@@ -250,6 +282,10 @@ def _header_values(headers: ast.expr) -> list[str] | None:
 
 def _sample_values(mapper_name: str) -> list[str]:
     sample = SAMPLES[mapper_name]
+    if mapper_name == "estimate_line_values":
+        return formatting.estimate_line_values(sample["line"], sources=sample["sources"])
+    if mapper_name == "tax_mapping_values":
+        return formatting.tax_mapping_values(sample["row"])
     if mapper_name == "tax_reminder_values":
         return formatting.tax_reminder_values(
             sample["view"], switch=sample["switch"], today=sample["today"]

@@ -31,6 +31,12 @@ class TaxFilingSection(TaxServiceBase):
             official_balance_minor=None,
         )
 
+    def prefill_source_year(self, income_year: int) -> int | None:
+        if self.store.get_tax_year_inputs(income_year) is not None:
+            return None
+        previous = self.store.latest_tax_year_inputs_before(income_year)
+        return previous.income_year if previous is not None else None
+
     def save_tax_year_inputs(self, inputs: TaxYearInputs) -> Result:
         try:
             self.store.save_tax_year_inputs(inputs)

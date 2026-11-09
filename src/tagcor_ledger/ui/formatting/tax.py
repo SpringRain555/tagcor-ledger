@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,13 +11,7 @@ from tagcor_ledger.application.reference import ReferenceEntry
 from tagcor_ledger.application.tax.data import TaxDataStatus
 from tagcor_ledger.domain.tax.dataset import TaxSource
 from tagcor_ledger.domain.tax.estimate import (
-    ESTIMATE_CAUTION_NAMES,
-    ESTIMATE_STEP_NAMES,
-    UNSUPPORTED_REASON_NAMES,
     Estimate,
-    EstimateLine,
-    EstimateStep,
-    LineSource,
     UnsupportedReason,
 )
 from tagcor_ledger.domain.tax.freshness import (
@@ -31,7 +25,6 @@ from tagcor_ledger.domain.tax.kinds import (
     IncomeKind,
     TaxKind,
 )
-from tagcor_ledger.domain.tax.records import TaxMappingRow
 from tagcor_ledger.domain.tax.reminders import (
     ReminderState,
     ReminderSwitch,
@@ -76,7 +69,6 @@ INCOME_KIND_SHORT = {
     IncomeKind.UNSUPPORTED: "不支援",
 }
 
-ESTIMATE_FOOTER = "這是估計，不是申報；以財政部稅額試算為準；不會改動帳本任何金額。"
 QUESTION_INSTRUCTION = "問稅務問題：請依 docs/operations/tax-questions.md 回答："
 TAX_PAGE_NOTE = "提醒與試算是估計，以主管機關公告與財政部稅額試算為準。"
 TAX_PAGE_TITLE = "稅務"
@@ -351,83 +343,6 @@ def update_instruction(
     )
 
 
-def estimate_status(estimate: Estimate) -> str:
-    if estimate.refused or estimate.balance_minor is None:
-        return "這一年不試算。"
-    balance = estimate.balance_minor
-    if balance > 0:
-        status = f"估計：應補 {group_digits(balance)} 元"
-    elif balance < 0:
-        status = f"估計：應退 {group_digits(abs(balance))} 元"
-    else:
-        status = "估計：不用補也沒得退"
-    if estimate.filing_exempt:
-        status += "；所得沒有超過免稅額加標準扣除額，依所得稅法第 71 條可以不申報。"
-    return status
-
-
-def refusal_lines(estimate: Estimate) -> list[str]:
-    lines: list[str] = []
-    for reason in estimate.refused:
-        if reason in {
-            UnsupportedReason.DATASET_UNAVAILABLE,
-            UnsupportedReason.PARAMETERS_MISSING,
-        }:
-            advice = "照資料狀態分頁的指示更新資料。"
-        elif reason is UnsupportedReason.BASIC_LIVING_PENDING:
-            advice = "等財政部 11 月底公告後再更新資料。"
-        elif reason is UnsupportedReason.INPUTS_MISSING:
-            advice = "先填這一年的申報狀況。"
-        elif reason is UnsupportedReason.UNMAPPED_INCOME:
-            advice = "到所得歸類分頁把收入歸類。"
-        else:
-            advice = "請改用財政部稅額試算。"
-        lines.append(f"{UNSUPPORTED_REASON_NAMES[reason]} {advice}")
-    return lines
-
-
-def estimate_line_values(
-    line: EstimateLine, *, sources: Mapping[str, TaxSource]
-) -> list[str]:
-    amount = (
-        f"−{group_digits(abs(line.amount_minor))}"
-        if line.step is EstimateStep.BALANCE and line.amount_minor < 0
-        else group_digits(line.amount_minor)
-    )
-    titles = [
-        sources[source_id].title if source_id in sources else source_id
-        for source_id in line.source_ids
-    ]
-    if line.source is LineSource.LEDGER:
-        basis = f"帳本 {line.ledger_count} 筆"
-    elif line.source is LineSource.MANUAL:
-        basis = "扣繳憑單（你填的）"
-    elif line.source is LineSource.DATASET:
-        basis = "財政部公告" + (f"：{'、'.join(titles)}" if titles else "")
-    else:
-        basis = f"計算（{'、'.join(titles)}）" if titles else "計算"
-    if line.step is EstimateStep.EXEMPT_INCOME:
-        basis += "（依你的歸類）"
-    return [ESTIMATE_STEP_NAMES[line.step], amount, basis]
-
-
-def caution_lines(estimate: Estimate) -> list[str]:
-    return [ESTIMATE_CAUTION_NAMES[caution] for caution in estimate.cautions]
-
-
-def official_diff_text(estimate: Estimate) -> str | None:
-    difference = estimate.official_diff_minor
-    if difference is None:
-        return None
-    if difference == 0:
-        return "與財政部相同。"
-    sign = "+" if difference > 0 else "−"
-    return (
-        f"與財政部相差 {sign}{group_digits(abs(difference))} 元。"
-        "常見原因：用了實領而非給付總額、漏記收入、扣繳沒填、歸類錯。"
-    )
-
-
 def tax_reminder_values(
     view: ReminderView,
     *,
@@ -458,36 +373,6 @@ def tax_reminder_values(
         REMINDER_STATE_NAMES[view.state],
         paid_text,
         note,
-    ]
-
-
-def tax_mapping_values(row: TaxMappingRow) -> list[str]:
-    income_kind = row.income_kind
-    if row.unmapped:
-        state = "未歸類"
-    elif income_kind is not None and row.parent_id is not None:
-        state = "已歸類（覆蓋類別）"
-    elif income_kind is not None:
-        state = "已歸類"
-    elif row.effective_income_kind is not None:
-        state = f"沿用類別：{INCOME_KIND_SHORT[row.effective_income_kind]}"
-    else:
-        state = "—"
-
-    income_text = INCOME_KIND_SHORT[income_kind] if income_kind is not None else "—"
-    expense_text = TAX_KIND_NAMES[row.expense_kind] if row.expense_kind is not None else "—"
-    annual_income = (
-        f"{row.year_count} 筆 {group_digits(row.year_minor)} 元"
-        if row.year_count > 0
-        else "—"
-    )
-    return [
-        row.category_name,
-        row.item_name or "—",
-        income_text,
-        expense_text,
-        annual_income,
-        state,
     ]
 
 

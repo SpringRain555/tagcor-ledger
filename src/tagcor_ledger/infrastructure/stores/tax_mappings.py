@@ -99,6 +99,8 @@ class TaxMappingStore(StoreBase):
                        category_node.status,
                        income_mapping.tax_kind AS income_kind,
                        expense_mapping.tax_kind AS expense_kind,
+                       parent_income_mapping.tax_kind AS parent_income_kind,
+                       parent_expense_mapping.tax_kind AS parent_expense_kind,
                        COALESCE(income_mapping.tax_kind, parent_income_mapping.tax_kind)
                            AS effective_income_kind,
                        COALESCE(expense_mapping.tax_kind, parent_expense_mapping.tax_kind)
@@ -278,6 +280,8 @@ class TaxMappingStore(StoreBase):
 def _row_to_tax_mapping_row(row: sqlite3.Row) -> TaxMappingRow:
     income_kind = row["income_kind"]
     expense_kind = row["expense_kind"]
+    parent_income_kind = row["parent_income_kind"]
+    parent_expense_kind = row["parent_expense_kind"]
     effective_income_kind = row["effective_income_kind"]
     effective_expense_kind = row["effective_expense_kind"]
     item_name = row["item_name"]
@@ -289,6 +293,12 @@ def _row_to_tax_mapping_row(row: sqlite3.Row) -> TaxMappingRow:
         archived=str(row["status"]) == "archived",
         income_kind=IncomeKind(str(income_kind)) if income_kind is not None else None,
         expense_kind=TaxKind(str(expense_kind)) if expense_kind is not None else None,
+        parent_income_kind=(
+            IncomeKind(str(parent_income_kind)) if parent_income_kind is not None else None
+        ),
+        parent_expense_kind=(
+            TaxKind(str(parent_expense_kind)) if parent_expense_kind is not None else None
+        ),
         effective_income_kind=(
             IncomeKind(str(effective_income_kind))
             if effective_income_kind is not None

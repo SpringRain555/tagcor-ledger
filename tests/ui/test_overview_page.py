@@ -270,7 +270,7 @@ def _new_window(qtbot, tmp_path: Path) -> MainWindow:
     return window
 
 
-def test_income_tax_row_routes_to_the_unbuilt_tab_for_each_refusal(
+def test_income_tax_row_routes_to_estimate_and_mapping_tabs(
     qtbot, tmp_path: Path, monkeypatch
 ) -> None:
     _tax_window_data(tmp_path, monkeypatch, kinds=(TaxKind.INCOME_TAX,))
@@ -284,8 +284,10 @@ def test_income_tax_row_routes_to_the_unbuilt_tab_for_each_refusal(
     assert row_signal.count() == 1
     assert row_signal.at(0)[0] == "estimate"
     assert window.current_page_widget() is window.tax
-    # 試算分頁尚未建置，show_tab 依約先停在提醒。
-    assert window.tax.tabs.currentWidget() is window.tax.reminders
+    assert window.tax.tabs.currentWidget() is window.tax.estimate
+    estimate_year = window.tax.estimate.year.findData(2025)
+    assert estimate_year >= 0
+    window.tax.estimate.year.setCurrentIndex(estimate_year)
 
     assert window.controller.save_tax_year_inputs(
         TaxYearInputs(
@@ -314,7 +316,11 @@ def test_income_tax_row_routes_to_the_unbuilt_tab_for_each_refusal(
     window.overview.tax_buttons[0].click()
     assert row_signal.count() == 2
     assert row_signal.at(1)[0] == "mapping"
-    assert window.tax.tabs.currentWidget() is window.tax.reminders
+    assert window.tax.tabs.currentWidget() is window.tax.mapping
+    mapping_year = window.tax.mapping.year.findData(2025)
+    assert mapping_year >= 0
+    window.tax.mapping.year.setCurrentIndex(mapping_year)
+    assert "未歸類" in window.tax.mapping.warning.text()
 
 
 def test_missing_dataset_status_opens_data_and_supported_reminder_opens_reminders(

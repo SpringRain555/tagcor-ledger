@@ -9,7 +9,9 @@ from PySide6.QtWidgets import QLabel, QTabWidget, QWidget
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import TAX_PAGE_NOTE, TAX_PAGE_TITLE, TAX_TAB_LABELS
 from tagcor_ledger.ui.pages.tax_data import TaxDataTab
+from tagcor_ledger.ui.pages.tax_estimate import TaxEstimateTab
 from tagcor_ledger.ui.pages.tax_law import TaxLawTab
+from tagcor_ledger.ui.pages.tax_mapping import TaxMappingTab
 from tagcor_ledger.ui.pages.tax_reminders import TaxRemindersTab
 from tagcor_ledger.ui.widgets.layout import TABLE_WIDTH, page_layout
 
@@ -22,7 +24,7 @@ class TaxTab(StrEnum):
     LAW = "law"
 
 
-TaxTabPage = TaxRemindersTab | TaxDataTab | TaxLawTab
+TaxTabPage = TaxRemindersTab | TaxEstimateTab | TaxMappingTab | TaxDataTab | TaxLawTab
 
 
 class TaxPage(QWidget):
@@ -32,14 +34,19 @@ class TaxPage(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setObjectName("taxTabs")
         self.reminders = TaxRemindersTab(controller)
+        self.estimate = TaxEstimateTab(controller)
+        self.mapping = TaxMappingTab(controller)
         self.data = TaxDataTab(controller)
         self.law = TaxLawTab(controller)
         self._tab_pages: dict[TaxTab, TaxTabPage] = {
             TaxTab.REMINDERS: self.reminders,
+            TaxTab.ESTIMATE: self.estimate,
+            TaxTab.MAPPING: self.mapping,
             TaxTab.DATA: self.data,
             TaxTab.LAW: self.law,
         }
         self._build()
+        self.tabs.currentChanged.connect(self._tab_changed)
 
     def _build(self) -> None:
         title = QLabel(TAX_PAGE_TITLE)
@@ -60,14 +67,19 @@ class TaxPage(QWidget):
 
     def refresh(self) -> None:
         page = self.tabs.currentWidget()
-        if isinstance(page, (TaxRemindersTab, TaxDataTab, TaxLawTab)):
+        if isinstance(page, (TaxRemindersTab, TaxEstimateTab, TaxMappingTab, TaxDataTab, TaxLawTab)):
+            page.refresh()
+
+    def _tab_changed(self, index: int) -> None:
+        page = self.tabs.widget(index)
+        if isinstance(page, (TaxRemindersTab, TaxEstimateTab, TaxMappingTab, TaxDataTab, TaxLawTab)):
             page.refresh()
 
     def show_tab(self, tab: TaxTab | str) -> None:
-        """切到指定分頁；尚未建置的試算／所得歸類鍵會先回到提醒。"""
+        """切到指定稅務分頁。"""
         try:
             selected = TaxTab(tab)
         except (TypeError, ValueError):
             selected = TaxTab.REMINDERS
-        page = self._tab_pages.get(selected, self.reminders)
+        page = self._tab_pages[selected]
         self.tabs.setCurrentWidget(page)

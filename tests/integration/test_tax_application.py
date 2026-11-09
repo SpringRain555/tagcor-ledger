@@ -359,6 +359,18 @@ def test_filing_prefills_last_year_without_carrying_official_results(
     assert service.prefilled_inputs(2026) == current
 
 
+def test_filing_prefill_source_year_distinguishes_saved_and_previous_inputs(
+    tax_app: tuple[AppPaths, LedgerStore, TaxService],
+) -> None:
+    _, _, service = tax_app
+
+    assert service.prefill_source_year(2026) is None
+    assert service.save_tax_year_inputs(_inputs(2025)).success
+    assert service.prefill_source_year(2026) == 2025
+    assert service.save_tax_year_inputs(_inputs(2026)).success
+    assert service.prefill_source_year(2026) is None
+
+
 def test_filing_write_results_cover_success_and_known_store_failures(
     tax_app: tuple[AppPaths, LedgerStore, TaxService],
 ) -> None:

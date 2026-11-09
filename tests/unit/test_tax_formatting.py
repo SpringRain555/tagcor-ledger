@@ -27,7 +27,13 @@ from tagcor_ledger.domain.tax.freshness import (
     FreshnessIssue,
     FreshnessProblem,
 )
-from tagcor_ledger.domain.tax.kinds import IncomeKind, TaxKind
+from tagcor_ledger.domain.tax.kinds import (
+    INCOME_KIND_NAMES,
+    TAX_KIND_NAMES,
+    Flow,
+    IncomeKind,
+    TaxKind,
+)
 from tagcor_ledger.domain.tax.records import PaymentFact, TaxMappingRow
 from tagcor_ledger.domain.tax.reminders import (
     ReminderCycle,
@@ -37,28 +43,36 @@ from tagcor_ledger.domain.tax.reminders import (
 )
 from tagcor_ledger.ui.controller.tax import TaxOverview
 from tagcor_ledger.ui.formatting.tax import (
-    ESTIMATE_FOOTER,
     INCOME_KIND_SHORT,
     QUESTION_INSTRUCTION,
     REMINDER_STATE_NAMES,
     SWITCH_NAMES,
     TAX_KIND_SHORT_NAMES,
-    caution_lines,
     coverage_lines,
     dataset_location_text,
-    estimate_line_values,
-    estimate_status,
     folded_sentence,
     freshness_sentence,
-    official_diff_text,
-    refusal_lines,
     reminder_sentence,
     status_sentence,
-    tax_mapping_values,
     tax_reminder_values,
     tax_source_values,
     unset_sentence,
     update_instruction,
+)
+from tagcor_ledger.ui.formatting.tax_estimate import (
+    ESTIMATE_FOOTER,
+    TAX_ESTIMATE_REFUSAL_FOOTER,
+    caution_lines,
+    estimate_line_values,
+    estimate_status,
+    official_diff_text,
+    refusal_lines,
+    tax_estimate_unsaved_note,
+)
+from tagcor_ledger.ui.formatting.tax_mapping import (
+    tax_mapping_expense_options,
+    tax_mapping_income_options,
+    tax_mapping_values,
 )
 from tagcor_ledger.domain.tax.dataset import Window
 from tools.tax_data.validate import _freshness_message
@@ -413,7 +427,72 @@ def test_refusal_lines_pair_reason_and_advice(
 ) -> None:
     estimate = _estimate(refused=(reason,), balance=None, filing_exempt=None)
 
-    assert refusal_lines(estimate) == [f"{UNSUPPORTED_REASON_NAMES[reason]} {advice}"]
+    expected = (
+        [UNSUPPORTED_REASON_NAMES[reason], TAX_ESTIMATE_REFUSAL_FOOTER]
+        if advice == TAX_ESTIMATE_REFUSAL_FOOTER
+        else [f"{UNSUPPORTED_REASON_NAMES[reason]} {advice}"]
+    )
+    assert refusal_lines(estimate) == expected
+
+
+def test_refusal_lines_coalesce_multiple_official_estimate_recommendations() -> None:
+    estimate = _estimate(
+        refused=(
+            UnsupportedReason.WITH_SPOUSE,
+            UnsupportedReason.ITEMIZED_DEDUCTION,
+        ),
+        balance=None,
+        filing_exempt=None,
+    )
+
+    lines = refusal_lines(estimate)
+
+    assert lines[:2] == [
+        UNSUPPORTED_REASON_NAMES[UnsupportedReason.WITH_SPOUSE],
+        UNSUPPORTED_REASON_NAMES[UnsupportedReason.ITEMIZED_DEDUCTION],
+    ]
+    assert lines.count(TAX_ESTIMATE_REFUSAL_FOOTER) == 1
+
+
+def test_refusal_lines_keep_fixable_advice_and_one_official_estimate_recommendation() -> None:
+    estimate = _estimate(
+        refused=(UnsupportedReason.INPUTS_MISSING, UnsupportedReason.WITH_SPOUSE),
+        balance=None,
+        filing_exempt=None,
+    )
+
+    lines = refusal_lines(estimate)
+
+    assert lines == [
+        "這一年的申報狀況還沒填。 先填這一年的申報狀況。",
+        UNSUPPORTED_REASON_NAMES[UnsupportedReason.WITH_SPOUSE],
+        TAX_ESTIMATE_REFUSAL_FOOTER,
+    ]
+
+
+def test_refusal_lines_only_show_fixable_advice_when_every_reason_is_fixable() -> None:
+    estimate = _estimate(
+        refused=(UnsupportedReason.INPUTS_MISSING, UnsupportedReason.UNMAPPED_INCOME),
+        balance=None,
+        filing_exempt=None,
+    )
+
+    lines = refusal_lines(estimate)
+
+    assert lines == [
+        "這一年的申報狀況還沒填。 先填這一年的申報狀況。",
+        "有收入還沒歸類。 到所得歸類分頁把收入歸類。",
+    ]
+
+
+def test_unsaved_estimate_note_uses_the_source_year_or_default_summary() -> None:
+    assert tax_estimate_unsaved_note(2025) == (
+        "這一年還沒存過，先帶入 2025 年度的設定；按「儲存並試算」才會算。"
+    )
+    assert tax_estimate_unsaved_note(None) == (
+        "這一年還沒存過，先用預設值（自己單獨申報、標準扣除、沒有受扶養人）；"
+        "按「儲存並試算」才會算。"
+    )
 
 
 def test_estimate_line_values_format_sources_and_negative_balance() -> None:
@@ -488,6 +567,8 @@ def _mapping_row(**changes: object) -> TaxMappingRow:
         "archived": False,
         "income_kind": None,
         "expense_kind": None,
+        "parent_income_kind": None,
+        "parent_expense_kind": None,
         "effective_income_kind": None,
         "effective_expense_kind": None,
         "own_year_count": 0,
@@ -497,6 +578,51 @@ def _mapping_row(**changes: object) -> TaxMappingRow:
     }
     values.update(changes)
     return TaxMappingRow(**values)  # type: ignore[arg-type]
+
+
+def test_tax_mapping_category_options_keep_unmapped_and_no_expense_choices() -> None:
+    row = _mapping_row()
+
+    assert tax_mapping_income_options(row)[0] == ("未歸類", None)
+    assert tax_mapping_expense_options(row)[0] == ("無", None)
+
+
+@pytest.mark.parametrize(
+    ("row", "flow", "expected"),
+    [
+        (
+            _mapping_row(parent_id="parent", parent_income_kind=IncomeKind.SALARY),
+            Flow.INCOME,
+            f"沿用類別：{INCOME_KIND_NAMES[IncomeKind.SALARY]}",
+        ),
+        (
+            _mapping_row(parent_id="parent"),
+            Flow.INCOME,
+            "沿用類別（類別還沒歸類）",
+        ),
+        (
+            _mapping_row(parent_id="parent", parent_expense_kind=TaxKind.HOUSE_TAX),
+            Flow.EXPENSE,
+            f"沿用類別：{TAX_KIND_NAMES[TaxKind.HOUSE_TAX]}",
+        ),
+        (
+            _mapping_row(parent_id="parent"),
+            Flow.EXPENSE,
+            "沿用類別（無）",
+        ),
+    ],
+)
+def test_tax_mapping_item_options_describe_the_inherited_value(
+    row: TaxMappingRow, flow: Flow, expected: str
+) -> None:
+    options = (
+        tax_mapping_income_options(row)
+        if flow is Flow.INCOME
+        else tax_mapping_expense_options(row)
+    )
+
+    assert options[0] == (expected, None)
+    assert all(value is not None for _label, value in options[1:])
 
 
 @pytest.mark.parametrize(
@@ -512,6 +638,7 @@ def _mapping_row(**changes: object) -> TaxMappingRow:
                 parent_id="parent",
                 item_name="薪資項目",
                 income_kind=IncomeKind.SALARY,
+                parent_income_kind=IncomeKind.SALARY,
                 effective_income_kind=IncomeKind.SALARY,
             ),
             "已歸類（覆蓋類別）",
@@ -539,6 +666,7 @@ def test_tax_mapping_values_show_category_item_kind_and_annual_income() -> None:
         category_name="薪資",
         item_name="月薪",
         income_kind=IncomeKind.SALARY,
+        parent_income_kind=IncomeKind.SALARY,
         expense_kind=TaxKind.HOUSE_TAX,
         year_count=3,
         year_minor=123456,
@@ -552,6 +680,28 @@ def test_tax_mapping_values_show_category_item_kind_and_annual_income() -> None:
         "3 筆 123,456 元",
         "已歸類（覆蓋類別）",
     ]
+
+
+def test_tax_mapping_values_marks_own_kind_as_override_when_parent_has_mapping() -> None:
+    row = _mapping_row(
+        parent_id="parent",
+        item_name="薪資項目",
+        income_kind=IncomeKind.SALARY,
+        parent_income_kind=IncomeKind.INTEREST_TAXABLE,
+    )
+
+    assert tax_mapping_values(row)[-1] == "已歸類（覆蓋類別）"
+
+
+def test_tax_mapping_values_does_not_call_own_kind_an_override_without_parent_mapping() -> None:
+    row = _mapping_row(
+        parent_id="parent",
+        item_name="薪資項目",
+        income_kind=IncomeKind.SALARY,
+        parent_income_kind=None,
+    )
+
+    assert tax_mapping_values(row)[-1] == "已歸類"
 
 
 def test_tax_source_values_and_dataset_location_are_compact() -> None:

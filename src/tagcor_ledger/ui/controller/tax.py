@@ -62,6 +62,9 @@ class TaxSection(ControllerBase):
     def tax_prefilled_inputs(self, income_year: int) -> TaxYearInputs | None:
         return self.tax.prefilled_inputs(income_year)
 
+    def tax_prefill_source_year(self, income_year: int) -> int | None:
+        return self.tax.prefill_source_year(income_year)
+
     def save_tax_year_inputs(self, inputs: TaxYearInputs) -> Result:
         return self.tax.save_tax_year_inputs(inputs)
 
