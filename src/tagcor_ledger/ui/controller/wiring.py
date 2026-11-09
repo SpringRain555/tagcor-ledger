@@ -7,7 +7,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import date
+from typing import Any, Callable
 
 from tagcor_ledger.app.path_settings import PathSettingsService
 from tagcor_ledger.app.paths import AppPaths
@@ -18,6 +19,7 @@ from tagcor_ledger.application.diagnostics import DiagnosticsService
 from tagcor_ledger.application.reference import ReferenceLibrary
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.application.settings import SettingsService
+from tagcor_ledger.application.tax import TaxService
 from tagcor_ledger.application.templates import TemplateService
 from tagcor_ledger.application.transaction_service import (
     AddTransaction,
@@ -27,6 +29,7 @@ from tagcor_ledger.application.transaction_service import (
     ReplaceTransfer,
     UpdateTransaction,
 )
+from tagcor_ledger.infrastructure.clock import today_taipei
 from tagcor_ledger.infrastructure.maintenance import MaintenanceService
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
@@ -35,8 +38,10 @@ class ControllerBase:
     """持有 `AppPaths` 與全部 service，並提供 section 共用的解包工具。"""
 
     def __init__(self, paths: AppPaths) -> None:
+        """UI 測試換掉它來釘住日期；正式程式不改它。"""
         self.paths = paths
         self.path_settings = PathSettingsService()
+        self.today_provider: Callable[[], date] = today_taipei
         self._wire_services()
         self._run_startup_tasks()
 
@@ -57,6 +62,13 @@ class ControllerBase:
         self.deposits = DepositService(self.paths, self.store)
         # 法規庫在專案底下、與帳務資料無關，所以不隨資料路徑重新接線。
         self.reference = ReferenceLibrary()
+        # 稅務資料服務持有資料路徑、帳本、設定與法規庫；路徑變更時要一起重接。
+        self.tax = TaxService(
+            self.paths,
+            self.store,
+            reference=self.reference,
+            settings=self.settings,
+        )
         self.add_transaction = AddTransaction(self.paths, self.store)
         self.add_transfer = AddTransfer(self.paths, self.store)
         self.list_transaction_records = ListTransactions(self.paths, self.store)

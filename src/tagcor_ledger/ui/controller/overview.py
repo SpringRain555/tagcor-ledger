@@ -4,7 +4,7 @@
 
 其餘每一個 section 都只繼承 `ControllerBase`，彼此不呼叫對方（跟 `stores/` 底下
 六個 store 一樣的紀律）。這裡是明說的例外：資產總覽這一頁的內容**就是**
-「帳戶 ＋ 定存 ＋ 待確認 ＋ 盤點差額」四件事湊起來的，那不是耦合，那是它的定義。
+帳戶、定存、待確認、盤點差額與稅務概況湊起來的，那不是耦合，那是它的定義。
 
 寫成繼承而不是「呼叫服務再自己解包一次」，是因為後者會把
 `latest_balance_gap()` 那三行判斷複製一份 —— 而複製出來的那一份遲早會分岔。
@@ -17,10 +17,13 @@ from typing import Any
 from tagcor_ledger.ui.controller.balance import BalanceSection
 from tagcor_ledger.ui.controller.deposits import DepositSection
 from tagcor_ledger.ui.controller.ledger import LedgerSection
+from tagcor_ledger.ui.controller.tax import TaxSection
 from tagcor_ledger.ui.controller.templates import TemplateSection
 
 
-class OverviewSection(LedgerSection, TemplateSection, DepositSection, BalanceSection):
+class OverviewSection(
+    LedgerSection, TemplateSection, DepositSection, BalanceSection, TaxSection
+):
     def overview_snapshot(self) -> dict[str, Any]:
         """資產總覽要顯示的每一項，一次組好。
 
@@ -58,6 +61,7 @@ class OverviewSection(LedgerSection, TemplateSection, DepositSection, BalanceSec
                 if default_account is not None
                 else None
             ),
+            "tax": self.tax_overview(),
         }
 
     def _next_deposit_term(self) -> dict[str, Any] | None:

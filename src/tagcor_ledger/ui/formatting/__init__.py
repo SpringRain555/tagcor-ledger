@@ -7,8 +7,8 @@
 **頁面自己的一次性訊息不搬進來**（「備份已建立：…」「CSV 已匯出：…」這類）。
 分界是**「這句話會不會在別的地方也要用同一個講法」**。
 
-三個模組：`primitives`（金額、日期、名稱表）、`rows`（每一張表的一列）、
-`messages`（操作結果與例外翻譯）。**呼叫端一律從這個套件 import**，
+四個模組：`primitives`（金額、日期、名稱表）、`rows`（一般表格列）、
+`messages`（操作結果與例外翻譯）、`tax`（稅務句子與資料列）。**呼叫端一律從這個套件 import**，
 不要指名子模組 —— 切法日後可能再調整，那是這個 `__init__` 的存在理由。
 """
 
@@ -47,33 +47,77 @@ from tagcor_ledger.ui.formatting.rows import (
     transaction_summary,
     transaction_values,
 )
+from tagcor_ledger.ui.formatting.tax import (
+    ESTIMATE_FOOTER,
+    INCOME_KIND_SHORT,
+    QUESTION_INSTRUCTION,
+    REMINDER_STATE_NAMES,
+    SWITCH_NAMES,
+    caution_lines,
+    coverage_lines,
+    dataset_location_text,
+    estimate_line_values,
+    estimate_status,
+    folded_sentence,
+    freshness_sentence,
+    official_diff_text,
+    refusal_lines,
+    reminder_sentence,
+    status_sentence,
+    tax_mapping_values,
+    tax_reminder_values,
+    tax_source_values,
+    unset_sentence,
+    update_instruction,
+)
 
 __all__ = [
     "BACKUP_STATE_LABELS",
     "DEPOSIT_TERM_STATUS_NAMES",
     "ENTRY_NAMES",
+    "ESTIMATE_FOOTER",
+    "INCOME_KIND_SHORT",
+    "QUESTION_INSTRUCTION",
+    "REMINDER_STATE_NAMES",
+    "SWITCH_NAMES",
     "account_values",
     "backup_row_text",
     "backup_state_text",
     "balance_gap_values",
     "category_values",
+    "caution_lines",
     "deposit_contract_values",
     "deposit_event_values",
     "deposit_term_values",
     "display_date",
     "display_datetime",
+    "coverage_lines",
+    "dataset_location_text",
+    "estimate_line_values",
+    "estimate_status",
     "error_text",
+    "folded_sentence",
+    "freshness_sentence",
     "group_digits",
     "item_values",
     "minor_text",
+    "official_diff_text",
     "overview_account_values",
     "ppm_digits",
     "rate_input_text",
     "rate_text",
     "reference_entry_values",
+    "refusal_lines",
+    "reminder_sentence",
     "result_message",
     "signed_amount_text",
+    "status_sentence",
+    "tax_mapping_values",
+    "tax_reminder_values",
+    "tax_source_values",
     "template_values",
     "transaction_summary",
     "transaction_values",
+    "unset_sentence",
+    "update_instruction",
 ]

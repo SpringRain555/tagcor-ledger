@@ -19,6 +19,7 @@ from tagcor_ledger.domain.tax.dataset_validate import validate_tax_dataset  # no
 from tagcor_ledger.domain.tax.freshness import (  # noqa: E402
     DatasetLoad,
     DatasetLoadState,
+    FRESHNESS_SENTENCES,
     FreshnessProblem,
     assess_freshness,
 )
@@ -151,20 +152,10 @@ def _oldest_law_reviewed_at(corpus: Path) -> date | None:
 
 
 def _freshness_message(problem: FreshnessProblem) -> str:
-    if problem.issue.value == "dataset_missing":
-        return "新鮮度：稅務資料不在，稅務提醒與試算暫停。"
-    if problem.issue.value == "dataset_invalid":
-        return "新鮮度：稅務資料格式有誤，稅務提醒與試算暫停。"
-    if problem.issue.value == "not_populated":
-        return "新鮮度：稅務資料還沒建立。"
-    if problem.issue.value == "parameters_missing":
-        years = "、".join(str(year) for year in problem.years)
-        return f"新鮮度：稅務資料缺 {years} 年度的參數，該更新了。"
-    if problem.issue.value == "review_due" and problem.due_on is not None:
-        return f"新鮮度：稅務資料該複查了（預定 {problem.due_on.isoformat()}）。"
-    if problem.issue.value == "law_review_due":
-        return "新鮮度：報稅季前，法規參考庫該全面複查一次。"
-    return f"新鮮度：{problem.issue.value}。"
+    return FRESHNESS_SENTENCES[problem.issue].format(
+        years="、".join(str(year) for year in problem.years),
+        due=problem.due_on.isoformat() if problem.due_on is not None else "",
+    )
 
 
 def _freshness_json(problem: FreshnessProblem) -> dict[str, object]:

@@ -71,10 +71,10 @@ src/tagcor_ledger/
 ├── ui/
 │   ├── navigation.py   PageId、側邊欄順序、顯示文字（改 LABELS 不影響任何查表）
 │   ├── controller/     LedgerController：UI 唯一的入口。用繼承把 wiring／ledger／
-│   │                   templates／deposits／balance／maintenance／data_paths／
+│   │                   templates／deposits／balance／tax／maintenance／data_paths／
 │   │                   overview 幾段組起來，`__init__.py` 只放組裝不放方法
 │   ├── formatting/     dict → 顯示字串（唯一決定畫面中文長相的地方）。
-│   │                   primitives（金額／日期／名稱表）、rows（每一列）、messages
+│   │                   primitives（金額／日期／名稱表）、rows（每一列）、messages、tax
 │   ├── main_window.py  側邊欄、頁面堆疊，以及頁面之間所有的連動
 │   ├── theme.py        apply_dark_theme：Fusion style、字體、palette、QSS
 │   ├── first_run_dialog.py  第一次啟動問資料放哪裡（ADR-0018），在主視窗之前

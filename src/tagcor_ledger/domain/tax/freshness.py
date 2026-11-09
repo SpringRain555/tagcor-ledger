@@ -45,6 +45,16 @@ class FreshnessIssue(StrEnum):
     LAW_REVIEW_DUE = "law_review_due"
 
 
+FRESHNESS_SENTENCES: dict[FreshnessIssue, str] = {
+    FreshnessIssue.DATASET_MISSING: "稅務資料不在，稅務提醒與試算暫停。",
+    FreshnessIssue.DATASET_INVALID: "稅務資料格式有誤，稅務提醒與試算暫停。",
+    FreshnessIssue.NOT_POPULATED: "稅務資料還沒建立。",
+    FreshnessIssue.PARAMETERS_MISSING: "稅務資料缺 {years} 年度的參數，該更新了。",
+    FreshnessIssue.REVIEW_DUE: "稅務資料該複查了（預定 {due}）。",
+    FreshnessIssue.LAW_REVIEW_DUE: "報稅季前，法規參考庫該全面複查一次。",
+}
+
+
 BLOCKING_ISSUES = (
     FreshnessIssue.DATASET_MISSING,
     FreshnessIssue.DATASET_INVALID,
