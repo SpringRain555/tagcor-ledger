@@ -19,6 +19,7 @@ from tagcor_ledger.domain.deposits import (
     DepositTermStatus,
     InterestMethod,
     MaturityAction,
+    derive_annual_rate_ppm,
     suggest_interest_minor,
     suggest_monthly_interest_minor,
 )
@@ -853,3 +854,175 @@ def test_a_deposit_that_does_not_renew_is_recorded_as_the_term_on_the_passbook(
     terms = service.store.list_terms(contract_id=contract_id)
     assert (terms[0].start_date, terms[0].sequence) == ("2023-11-15", 1)
     assert int(service.generate_due(today="2026-08-23").details["generated"]) == 0
+
+
+@pytest.mark.parametrize(
+    ("withheld_tax_minor", "nhi_premium_minor"),
+    [(-1, None), (None, -1)],
+)
+def test_negative_deposit_deductions_are_rejected(
+    service: DepositService,
+    withheld_tax_minor: int | None,
+    nhi_premium_minor: int | None,
+) -> None:
+    _make_contract(
+        service,
+        interest_method=str(InterestMethod.LUMP_SUM),
+        maturity_action=str(MaturityAction.NONE),
+    )
+    service.generate_due(today="2027-02-15")
+    event = service.store.list_pending_events()[0]
+
+    result = service.confirm(
+        event.event_id,
+        actual_amount_minor=1_500,
+        withheld_tax_minor=withheld_tax_minor,
+        nhi_premium_minor=nhi_premium_minor,
+    )
+
+    assert not result.success
+    assert result.error_code == "DEPOSIT_DEDUCTION_INVALID"
+    assert result.message == "扣繳與補充保費不能是負的。"
+    assert service.store.get_event(event.event_id).status == "pending"
+
+
+def test_installment_events_reject_any_recorded_deduction(service: DepositService) -> None:
+    _make_contract(
+        service,
+        interest_method=str(InterestMethod.INSTALLMENT_SAVINGS),
+        maturity_action=str(MaturityAction.NONE),
+        principal="0",
+        monthly_deposit="3000",
+    )
+    service.generate_due(today="2026-06-20")
+    event = next(
+        item
+        for item in service.store.list_pending_events()
+        if item.event_type == DepositEventType.INSTALLMENT
+    )
+
+    result = service.confirm(event.event_id, actual_amount_minor=3_000, withheld_tax_minor=0)
+
+    assert not result.success
+    assert result.error_code == "DEPOSIT_DEDUCTION_INVALID"
+    assert service.store.get_event(event.event_id).status == "pending"
+
+
+def test_blank_deductions_are_persisted_as_null_and_do_not_change_the_actual_amount(
+    service: DepositService,
+) -> None:
+    _make_contract(
+        service,
+        interest_method=str(InterestMethod.LUMP_SUM),
+        maturity_action=str(MaturityAction.NONE),
+    )
+    service.generate_due(today="2027-02-15")
+    event = service.store.list_pending_events()[0]
+
+    result = service.confirm(event.event_id, actual_amount_minor=1_500)
+
+    assert result.success, result.message
+    confirmed = service.store.get_event(event.event_id)
+    assert confirmed.actual_amount_minor == 1_500
+    assert confirmed.withheld_tax_minor is None
+    assert confirmed.nhi_premium_minor is None
+
+
+def test_maturity_rate_uses_gross_interest_while_actual_interest_stays_net(
+    service: DepositService,
+) -> None:
+    contract_id = _make_contract(
+        service,
+        interest_method=str(InterestMethod.LUMP_SUM),
+        maturity_action=str(MaturityAction.NONE),
+    )
+    service.generate_due(today="2027-02-15")
+    event = service.store.list_pending_events()[0]
+
+    planned = service.plan_postings(event, 17_579)
+    assert [(item.entry_type, item.amount_minor) for item in planned] == [
+        ("income", 17_579),
+        ("transfer", 100_000),
+    ]
+    result = service.confirm(
+        event.event_id,
+        actual_amount_minor=17_579,
+        withheld_tax_minor=2_000,
+        nhi_premium_minor=422,
+    )
+
+    assert result.success, result.message
+    term = service.store.list_terms(contract_id=contract_id)[0]
+    assert term.actual_interest_minor == 17_579
+    assert term.effective_rate_ppm == derive_annual_rate_ppm(
+        interest_method=str(InterestMethod.LUMP_SUM),
+        principal_minor=100_000,
+        interest_minor=20_001,
+        term_months=12,
+    )
+
+
+def test_monthly_interest_rate_sums_confirmed_gross_payouts_in_sql(
+    service: DepositService,
+) -> None:
+    contract_id = _make_contract(
+        service,
+        interest_method=str(InterestMethod.MONTHLY_INTEREST),
+        maturity_action=str(MaturityAction.NONE),
+    )
+    service.generate_due(today="2027-02-15")
+    events = service.store.list_pending_events()
+    payouts = [item for item in events if item.event_type == DepositEventType.INTEREST_PAYOUT]
+    maturity = next(item for item in events if item.event_type == DepositEventType.MATURITY)
+    assert len(payouts) == 12
+
+    for payout in payouts:
+        result = service.confirm(
+            payout.event_id,
+            actual_amount_minor=100,
+            withheld_tax_minor=10,
+            nhi_premium_minor=23,
+        )
+        assert result.success, result.message
+    result = service.confirm(maturity.event_id, actual_amount_minor=0)
+
+    assert result.success, result.message
+    term = service.store.list_terms(contract_id=contract_id)[0]
+    assert term.actual_interest_minor == 1_200
+    assert term.effective_rate_ppm == derive_annual_rate_ppm(
+        interest_method=str(InterestMethod.MONTHLY_INTEREST),
+        principal_minor=100_000,
+        interest_minor=1_596,
+        term_months=12,
+    )
+
+
+@pytest.mark.parametrize(
+    ("children", "expected_name"),
+    [
+        (("活儲利息", "定存利息"), "定存利息"),
+        (("活儲利息",), "活儲利息"),
+        ((), "定存利息"),
+    ],
+)
+def test_interest_category_prefers_the_named_deposit_item_and_falls_back(
+    service: DepositService, children: tuple[str, ...], expected_name: str
+) -> None:
+    parent = service.store.create_category(name="利息收入")
+    created = [
+        service.store.create_category(name=name, parent_id=parent.category_id)
+        for name in children
+    ]
+
+    category_id = service._interest_category_id()
+
+    selected = next(
+        item
+        for item in service.store.list_categories(parent_id=parent.category_id)
+        if item.category_id == category_id
+    )
+    assert selected.name == expected_name
+    if not children:
+        assert len(service.store.list_categories(parent_id=parent.category_id)) == 1
+    else:
+        assert len(service.store.list_categories(parent_id=parent.category_id)) == len(created)

@@ -92,18 +92,23 @@ class DepositEventStore(StoreBase):
         *,
         status: str,
         actual_amount_minor: int | None = None,
+        withheld_tax_minor: int | None = None,
+        nhi_premium_minor: int | None = None,
         transaction_id: str | None = None,
     ) -> None:
         with database_transaction(self.paths.database_path) as connection:
             changed = connection.execute(
                 """
                 UPDATE deposit_events
-                SET status = ?, actual_amount_minor = ?, transaction_id = ?, updated_at = ?
+                SET status = ?, actual_amount_minor = ?, withheld_tax_minor = ?,
+                    nhi_premium_minor = ?, transaction_id = ?, updated_at = ?
                 WHERE event_id = ? AND status = ?
                 """,
                 (
                     status,
                     actual_amount_minor,
+                    withheld_tax_minor,
+                    nhi_premium_minor,
                     transaction_id,
                     now_iso(),
                     event_id,
@@ -156,6 +161,26 @@ class DepositEventStore(StoreBase):
             ).fetchone()
         return int(row["total"]) if row is not None else 0
 
+    def sum_confirmed_gross_amount(self, term_id: str, event_type: str) -> int:
+        """這一期已確認事件的毛額合計。扣款未記錄時視為 0，並在 SQL 內加總。"""
+        with connect_database(self.paths.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT COALESCE(
+                    SUM(
+                        COALESCE(actual_amount_minor, 0)
+                        + COALESCE(withheld_tax_minor, 0)
+                        + COALESCE(nhi_premium_minor, 0)
+                    ),
+                    0
+                ) AS total
+                FROM deposit_events
+                WHERE term_id = ? AND event_type = ? AND status = 'confirmed'
+                """,
+                (term_id, event_type),
+            ).fetchone()
+        return int(row["total"]) if row is not None else 0
+
     def list_pending_events_for_term(self, term_id: str) -> list[DepositEvent]:
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
@@ -168,7 +193,8 @@ class DepositEventStore(StoreBase):
 _EVENT_SELECT = """
 SELECT e.event_id, e.term_id, t.contract_id, c.name AS contract_name,
        e.event_type, e.due_date, e.status, e.suggested_amount_minor,
-       e.actual_amount_minor, e.transaction_id, e.note
+       e.actual_amount_minor, e.withheld_tax_minor, e.nhi_premium_minor,
+       e.transaction_id, e.note
 FROM deposit_events e
 JOIN deposit_terms t ON t.term_id = e.term_id
 JOIN deposit_contracts c ON c.contract_id = t.contract_id
@@ -191,6 +217,12 @@ def _row_to_event(row: sqlite3.Row) -> DepositEvent:
         ),
         actual_amount_minor=(
             int(row["actual_amount_minor"]) if row["actual_amount_minor"] is not None else None
+        ),
+        withheld_tax_minor=(
+            int(row["withheld_tax_minor"]) if row["withheld_tax_minor"] is not None else None
+        ),
+        nhi_premium_minor=(
+            int(row["nhi_premium_minor"]) if row["nhi_premium_minor"] is not None else None
         ),
         transaction_id=(
             str(row["transaction_id"]) if row["transaction_id"] is not None else None

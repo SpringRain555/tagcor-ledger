@@ -217,6 +217,7 @@ ERROR_MESSAGES: dict[str, str] = {
         "這筆定存項目已經確認或略過了，不能再改 —— 兩者都是終點。"
         "要改結果就去刪除它產生的交易。"
     ),
+    "DEPOSIT_DEDUCTION_INVALID": "扣繳與補充保費不能是負的。",
     "DEPOSIT_CONTRACT_IN_USE": (
         "這個定存已經有入帳紀錄，不能刪除。請改用「結束合約」—— 否則帳本裡那些"
         "交易會失去來歷。"

@@ -27,9 +27,6 @@ from tagcor_ledger.ui.formatting.primitives import (
     rate_text,
     signed_amount_text,
 )
-
-
-
 def balance_gap_values(item: dict[str, Any]) -> list[str]:
     """盤點紀錄的一列：盤點日期／實際金額／預期金額／未解釋差額／備註。
 
@@ -208,7 +205,7 @@ def deposit_term_values(item: dict[str, Any]) -> list[str]:
 
 
 def deposit_event_values(item: dict[str, Any]) -> list[str]:
-    """待確認那張表的一列：到期日／定存合約／事件／建議金額。
+    """待確認那張表的一列：到期日／定存合約／事件／建議淨額。
 
     **日期要走 `display_date()`。** 這個函式在 v0.23.0 之前沒有任何頁面用它
     （待確認走的是自己的 `inbox_values()`，而那一份有轉格式），所以它印 ISO 字串
@@ -220,7 +217,7 @@ def deposit_event_values(item: dict[str, Any]) -> list[str]:
     **金額欄寫「需照存摺填寫」而不是 0。** 建議值是程式試算的，權威值在存摺上；
     印一個 0 會讓人以為那就是答案。
     """
-    suggested = item.get("suggested_amount_minor")
+    suggested = item.get("expected_amount_minor", item.get("suggested_amount_minor"))
     return [
         display_date(str(item["due_date"])),
         str(item["contract_name"]),

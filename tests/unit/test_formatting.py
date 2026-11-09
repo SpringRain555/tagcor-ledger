@@ -23,6 +23,7 @@ from tagcor_ledger.ui.formatting import (
     backup_row_text,
     backup_state_text,
     category_values,
+    deposit_confirm_note,
     deposit_event_values,
     deposit_term_values,
     display_date,
@@ -286,16 +287,30 @@ def test_a_deposit_event_without_a_suggestion_points_at_the_passbook() -> None:
     # 於是它一直印 ISO 字串而沒有人看到。待確認改用它的時候差點就把畫面換掉了。
     assert unknown == ["2026/09/01", "郵局一年期", "到期", "需照存摺填寫"]
 
-    known = deposit_event_values(
-        {
-            "due_date": "2026-09-01",
-            "contract_name": "郵局一年期",
-            "event_type": "interest_payout",
-            "suggested_amount_minor": 1_000,
-        }
-    )
+    known_item = {
+        "due_date": "2026-09-01",
+        "contract_name": "郵局一年期",
+        "event_type": "interest_payout",
+        "suggested_amount_minor": 20_001,
+        "suggested_withheld_tax_minor": 2_000,
+        "suggested_nhi_premium_minor": 422,
+        "expected_amount_minor": 17_579,
+    }
+    known = deposit_event_values(known_item)
     assert known[2] == "領息"
-    assert known[3] == "1,000"
+    assert known[3] == "17,579"
+    assert len(known) == 4
+    assert deposit_confirm_note(known_item) == (
+        "試算：利息 20,001 − 扣繳 2,000 − 補充保費 422 ＝ 預期入帳 17,579。"
+        "三格都以存摺為準。"
+    )
+
+    unknown_rate = {
+        "event_type": "interest_payout",
+        "suggested_amount_minor": None,
+        "interest_suggestion_unavailable": True,
+    }
+    assert deposit_confirm_note(unknown_rate) == "利率尚未填寫，利息與扣款請照存摺填。"
 
 
 def test_a_deposit_term_prefers_the_rate_derived_from_what_actually_happened() -> None:

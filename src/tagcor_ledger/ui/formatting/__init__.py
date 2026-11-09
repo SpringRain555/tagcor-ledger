@@ -33,6 +33,15 @@ from tagcor_ledger.ui.formatting.primitives import (
     rate_text,
     signed_amount_text,
 )
+from tagcor_ledger.ui.formatting.deposits import (
+    DEPOSIT_INTEREST_UNKNOWN_NOTE,
+    DEPOSIT_NHI_PREMIUM_LABEL,
+    DEPOSIT_TAX_DATA_UNAVAILABLE_NOTE,
+    DEPOSIT_WITHHELD_TAX_LABEL,
+    deposit_confirm_note,
+    deposit_deduction_note,
+    deposit_event_calculation_text,
+)
 from tagcor_ledger.ui.formatting.rows import (
     account_values,
     balance_gap_values,
@@ -165,6 +174,10 @@ from tagcor_ledger.ui.formatting.tax_mapping import (
 __all__ = [
     "BACKUP_STATE_LABELS",
     "DEPOSIT_TERM_STATUS_NAMES",
+    "DEPOSIT_INTEREST_UNKNOWN_NOTE",
+    "DEPOSIT_NHI_PREMIUM_LABEL",
+    "DEPOSIT_TAX_DATA_UNAVAILABLE_NOTE",
+    "DEPOSIT_WITHHELD_TAX_LABEL",
     "ENTRY_NAMES",
     "ESTIMATE_FOOTER",
     "INCOME_KIND_SHORT",
@@ -253,6 +266,9 @@ __all__ = [
     "caution_lines",
     "deposit_contract_values",
     "deposit_event_values",
+    "deposit_confirm_note",
+    "deposit_deduction_note",
+    "deposit_event_calculation_text",
     "deposit_term_values",
     "display_date",
     "display_datetime",

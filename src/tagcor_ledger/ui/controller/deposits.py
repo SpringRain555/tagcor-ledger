@@ -7,9 +7,11 @@ v0.23.0 之前那裡還要跟定期收支合成一張表；現在只剩定存一
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from tagcor_ledger.application.result import Result
+from tagcor_ledger.domain.deposits import DepositEventType
 from tagcor_ledger.ui.controller.wiring import ControllerBase
 
 
@@ -52,7 +54,49 @@ class DepositSection(ControllerBase):
         return self.deposits.generate_due()
 
     def list_deposit_pending(self) -> list[dict[str, Any]]:
-        return self._rows(self.deposits.list_pending(), "events")
+        events = self._rows(self.deposits.list_pending(), "events")
+        for item in events:
+            self._suggest_interest_deductions(item)
+        return events
+
+    def _suggest_interest_deductions(self, item: dict[str, Any]) -> None:
+        """待確認列的建議金額為淨額；稅務服務只在 controller 計算扣款。"""
+        event_type = DepositEventType(str(item["event_type"]))
+        gross = item.get("suggested_amount_minor")
+        if event_type is DepositEventType.INSTALLMENT:
+            item["expected_amount_minor"] = gross
+            item["suggested_withheld_tax_minor"] = None
+            item["suggested_nhi_premium_minor"] = None
+            item["deduction_data_unavailable"] = False
+            item["interest_suggestion_unavailable"] = False
+            return
+
+        if gross is None:
+            withheld = premium = 0
+            unavailable = False
+            interest_unknown = True
+        else:
+            deductions = self.tax.interest_deductions(
+                int(gross), on=date.fromisoformat(str(item["due_date"]))
+            )
+            if deductions is None or not (
+                deductions.withholding_rule_found or deductions.premium_rule_found
+            ):
+                withheld = premium = 0
+                unavailable = True
+            else:
+                withheld = deductions.withheld_tax_minor
+                premium = deductions.nhi_premium_minor
+                unavailable = False
+            interest_unknown = False
+
+        item["suggested_withheld_tax_minor"] = withheld
+        item["suggested_nhi_premium_minor"] = premium
+        item["expected_amount_minor"] = (
+            None if gross is None else int(gross) - withheld - premium
+        )
+        item["deduction_data_unavailable"] = unavailable
+        item["interest_suggestion_unavailable"] = interest_unknown
 
     def count_deposit_pending(self) -> int:
         return int(self.deposits.count_pending().details.get("count", 0))
@@ -63,10 +107,16 @@ class DepositSection(ControllerBase):
         *,
         actual_amount_minor: int | None = None,
         occurred_on: str | None = None,
+        withheld_tax_minor: int | None = None,
+        nhi_premium_minor: int | None = None,
     ) -> Result:
         """`occurred_on` 是交易日期（ISO 日期），不傳就用事件的到期日。"""
         return self.deposits.confirm(
-            event_id, actual_amount_minor=actual_amount_minor, occurred_on=occurred_on
+            event_id,
+            actual_amount_minor=actual_amount_minor,
+            occurred_on=occurred_on,
+            withheld_tax_minor=withheld_tax_minor,
+            nhi_premium_minor=nhi_premium_minor,
         )
 
     def skip_deposit_event(self, event_id: str) -> Result:

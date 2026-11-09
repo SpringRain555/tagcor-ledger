@@ -269,9 +269,16 @@ def _header_values(headers: ast.expr) -> list[str] | None:
     if isinstance(headers, ast.List):
         values: list[str] = []
         for item in headers.elts:
+            if isinstance(item, ast.Constant) and isinstance(item.value, str):
+                values.append(item.value)
+                continue
+            if isinstance(item, ast.Name):
+                value = getattr(formatting, item.id, None)
+                if isinstance(value, str):
+                    values.append(value)
+                    continue
             if not isinstance(item, ast.Constant) or not isinstance(item.value, str):
                 return None
-            values.append(item.value)
         return values
     if isinstance(headers, ast.Name):
         value = getattr(formatting, headers.id, None)

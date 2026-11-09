@@ -223,6 +223,8 @@ class DepositEvent:
     actual_amount_minor: int | None
     transaction_id: str | None
     note: str
+    withheld_tax_minor: int | None = None
+    nhi_premium_minor: int | None = None
 
 
 def monthly_rate(annual_rate_ppm: int) -> Decimal:

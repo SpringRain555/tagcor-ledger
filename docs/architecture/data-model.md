@@ -23,14 +23,14 @@
   見 [ADR-0012](../decisions/ADR-0012-deposit-events-start-at-record-date.md)。
   **`deposit_terms.start_date` 是第三個日期**：這一期的起存日，由 `current_term()` 算。
 - `deposit_terms`：定存的**每一期**。續存產生新的一期，舊的不改寫，所以歷次利率留得下來。
-- `deposit_events`：定存的到期與領息，等待使用者確認。**這是「待確認」頁唯一的來源**
+- `deposit_events`：定存的到期與領息，等待使用者確認；v14 起確認時也寫入扣繳與補充保費。**這是「待確認」頁唯一的來源**
   —— v0.23.0 移除定期收支之後（[ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)），
   `recurring_schedules` 與 `scheduled_occurrences` 兩張表由 `migrate_v8` 砍掉。
 - `tax_category_mappings`：類別或項目依收支方向對應所得類別或繳款稅目；刪除類別時 cascade。
 - `tax_reminder_marks`：稅目 × 期間年的已處理／本年不適用標記。
 - `tax_year_inputs`：所得年度的申報狀況、受扶養人與財政部結果。
 - `tax_year_overrides`：所得年度 × 所得類別的扣繳憑單給付總額與扣繳稅額。
-- `deposit_events.withheld_tax_minor`、`nhi_premium_minor`：該次定存領息的所得稅扣繳與補充保費；`NULL` 表示未記錄。
+- `deposit_events.withheld_tax_minor`、`nhi_premium_minor`：v14 起確認時寫入該次定存利息的所得稅扣繳與補充保費；`NULL` 表示未記錄。
 
 ```mermaid
 erDiagram

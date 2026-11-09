@@ -56,6 +56,9 @@ from tagcor_ledger.domain.deposits import DEPOSIT_EVENT_TYPE_NAMES, DepositEvent
 from tagcor_ledger.domain.money import Money, MoneyError
 from tagcor_ledger.ui.controller import LedgerController
 from tagcor_ledger.ui.formatting import (
+    DEPOSIT_NHI_PREMIUM_LABEL,
+    DEPOSIT_WITHHELD_TAX_LABEL,
+    deposit_confirm_note,
     deposit_event_values,
     display_date,
     error_text,
@@ -141,10 +144,15 @@ class InboxSection(QWidget):
         self.empty.setObjectName("hintLabel")
         self.empty.setWordWrap(True)
 
-        # **四欄用 `fit_content` 收寬**，`fit_rows` 收高：它在盤點頁最底下，
-        # 用 QTableView 那個沒有意義的預設高度（約 600 px）會把一頁撐出一大片空框。
+        # **四欄用 `fit_content` 收寬、讓自由文字的合約名稱欄讓路**，`fit_rows` 收高：
+        # 名稱太長時不讓表格橫向溢出；它在盤點頁最底下，用 QTableView 那個沒有意義的
+        # 預設高度（約 600 px）會把一頁撐出一大片空框。
         setup_table(
-            self.table, self.model, fit_content=True, fit_rows=PENDING_TABLE_ROWS
+            self.table,
+            self.model,
+            stretch_column=1,
+            fit_content=True,
+            fit_rows=PENDING_TABLE_ROWS,
         )
         # 確認與略過是對所選那一列動作 —— 沒選就停用，不要按了沒反應。
         bind_selection(self.table, self.confirm_button, self.skip_button)
@@ -178,7 +186,7 @@ class InboxSection(QWidget):
     # --- 動作 -------------------------------------------------------------------
 
     def confirm_selected(self) -> None:
-        """只問日期與實際入帳金額。
+        """詢問日期、實際入帳金額與適用的利息扣款。
 
         **不開一張可以改帳戶與類別的表單。** 定存事件的帳戶、流向與類別都是合約
         當初就決定好的（三種計息方式 × 四種到期及轉存方式），在確認的當下改它們等於
@@ -194,19 +202,49 @@ class InboxSection(QWidget):
         item: dict[str, Any] | None = self.model.selected_item(self.table)
         if item is None:
             return
-        suggested = item.get("suggested_amount_minor")
+        suggested = item.get("expected_amount_minor")
+        event_type = DepositEventType(str(item["event_type"]))
+        fields: list[DateField | TextField] = [
+            DateField("occurred_on", "入帳日期", default=str(item["due_date"])),
+            TextField(
+                "amount",
+                "實際入帳金額（TWD）",
+                default=minor_text(suggested) if suggested is not None else "",
+                placeholder="以存摺為準，建議值只是試算",
+            ),
+        ]
+        if event_type is not DepositEventType.INSTALLMENT:
+            withheld_suggestion = item.get("suggested_withheld_tax_minor")
+            premium_suggestion = item.get("suggested_nhi_premium_minor")
+            fields.extend(
+                [
+                    TextField(
+                        "withheld_tax",
+                        DEPOSIT_WITHHELD_TAX_LABEL,
+                        default=(
+                            minor_text(withheld_suggestion)
+                            if withheld_suggestion is not None
+                            else ""
+                        ),
+                        required=False,
+                    ),
+                    TextField(
+                        "nhi_premium",
+                        DEPOSIT_NHI_PREMIUM_LABEL,
+                        default=(
+                            minor_text(premium_suggestion)
+                            if premium_suggestion is not None
+                            else ""
+                        ),
+                        required=False,
+                    ),
+                ]
+            )
         values = ask_form(
             self,
             "確認定存入帳",
-            [
-                DateField("occurred_on", "入帳日期", default=str(item["due_date"])),
-                TextField(
-                    "amount",
-                    "實際入帳金額（TWD）",
-                    default=minor_text(suggested) if suggested is not None else "",
-                    placeholder="以存摺為準，建議值只是試算",
-                ),
-            ],
+            fields,
+            note=deposit_confirm_note(item),
         )
         if values is None:
             return
@@ -214,6 +252,18 @@ class InboxSection(QWidget):
             amount = Money.from_decimal_string(
                 str(values["amount"]), allow_zero=True
             ).amount_minor
+            withheld_text = str(values.get("withheld_tax", "")).strip()
+            premium_text = str(values.get("nhi_premium", "")).strip()
+            withheld = (
+                Money.from_decimal_string(withheld_text, allow_zero=True).amount_minor
+                if withheld_text
+                else None
+            )
+            premium = (
+                Money.from_decimal_string(premium_text, allow_zero=True).amount_minor
+                if premium_text
+                else None
+            )
         except MoneyError as exc:
             warn(
                 self, "金額無效", error_text(exc, fallback=BAD_AMOUNT_TEXT)
@@ -223,6 +273,8 @@ class InboxSection(QWidget):
             str(item["event_id"]),
             actual_amount_minor=amount,
             occurred_on=str(values["occurred_on"]),
+            withheld_tax_minor=withheld,
+            nhi_premium_minor=premium,
         )
         if not result.success:
             warn(self, "無法確認", result_message(result))

@@ -66,6 +66,8 @@ def _event_view(event: DepositEvent) -> dict[str, object]:
         "status": event.status,
         "suggested_amount_minor": event.suggested_amount_minor,
         "actual_amount_minor": event.actual_amount_minor,
+        "withheld_tax_minor": event.withheld_tax_minor,
+        "nhi_premium_minor": event.nhi_premium_minor,
         "transaction_id": event.transaction_id,
         "note": event.note,
     }

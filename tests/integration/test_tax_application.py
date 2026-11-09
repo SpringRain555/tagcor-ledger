@@ -28,7 +28,7 @@ from tagcor_ledger.domain.tax.kinds import (
 )
 from tagcor_ledger.domain.tax.records import TaxYearInputs, TaxYearOverride
 from tagcor_ledger.domain.tax.reminders import ReminderState, ReminderSwitch
-from tagcor_ledger.infrastructure.database import connect_database, database_transaction
+from tagcor_ledger.infrastructure.database import database_transaction
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
@@ -310,7 +310,11 @@ def test_estimate_uses_ledger_interest_withheld_tax_and_manual_slip(
     assert deposit_service.generate_due(today="2025-02-01").success
     event = store.list_pending_events()[0]
     confirmed = deposit_service.confirm(
-        event.event_id, actual_amount_minor=26_367, occurred_on="2025-02-01"
+        event.event_id,
+        actual_amount_minor=17_579,
+        occurred_on="2025-02-01",
+        withheld_tax_minor=2_000,
+        nhi_premium_minor=422,
     )
     assert confirmed.success, confirmed.message
     interest_category = next(item for item in store.list_categories() if item.name == "利息收入")
@@ -320,26 +324,22 @@ def test_estimate_uses_ledger_interest_withheld_tax_and_manual_slip(
         flow=Flow.INCOME,
         tax_kind=IncomeKind.INTEREST_TAXABLE.value,
     )
-    transaction_id = str(confirmed.details["transaction_id"])
-    with connect_database(paths.database_path) as connection:
-        connection.execute(
-            """UPDATE deposit_events
-               SET withheld_tax_minor = 3000, nhi_premium_minor = 633
-               WHERE transaction_id = ?""",
-            (transaction_id,),
-        )
+    total = store.income_totals(2025).total(IncomeKind.INTEREST_TAXABLE)
+    assert total.net_minor == 17_579
+    assert total.withheld_tax_minor == 2_000
+    assert total.nhi_premium_minor == 422
 
     estimate = service.estimate(2025)
     assert not estimate.refused
     by_key = {line.step.value: line.amount_minor for line in estimate.lines}
-    assert by_key["interest"] == 30_000
-    assert by_key["gross_income"] == 930_000
-    assert by_key["savings_deduction"] == 30_000
-    assert by_key["basic_living"] == 170_000
-    assert by_key["net_income"] == 430_000
-    assert estimate.tax_minor == 21_500
-    assert estimate.withheld_minor == 33_000
-    assert estimate.balance_minor == -11_500
+    assert by_key["interest"] == 20_001
+    assert by_key["gross_income"] == 920_001
+    assert by_key["savings_deduction"] == 20_001
+    assert by_key["basic_living"] == 179_999
+    assert by_key["net_income"] == 420_001
+    assert estimate.tax_minor == 21_000
+    assert estimate.withheld_minor == 32_000
+    assert estimate.balance_minor == -11_000
 
 
 def test_filing_prefills_last_year_without_carrying_official_results(

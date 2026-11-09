@@ -138,6 +138,8 @@ class PostingSection(DepositServiceBase):
         *,
         actual_amount_minor: int | None = None,
         occurred_on: str | None = None,
+        withheld_tax_minor: int | None = None,
+        nhi_premium_minor: int | None = None,
     ) -> Result:
         """確認一件事件：建立交易、更新期狀態、必要時開出下一期。
 
@@ -165,22 +167,37 @@ class PostingSection(DepositServiceBase):
             if actual_amount_minor is not None
             else event.suggested_amount_minor
         )
-        if amount is None:
-            return Result.fail(
-                "DEPOSIT_AMOUNT_REQUIRED",
-                "請填入實際金額。利率尚未填寫時算不出建議值，需要照存摺輸入。",
-            )
-
         try:
+            if (withheld_tax_minor is not None and withheld_tax_minor < 0) or (
+                nhi_premium_minor is not None and nhi_premium_minor < 0
+            ):
+                raise ValueError("DEPOSIT_DEDUCTION_INVALID")
+            if (
+                DepositEventType(event.event_type) is DepositEventType.INSTALLMENT
+                and (withheld_tax_minor is not None or nhi_premium_minor is not None)
+            ):
+                raise ValueError("DEPOSIT_DEDUCTION_INVALID")
+            if amount is None:
+                return Result.fail(
+                    "DEPOSIT_AMOUNT_REQUIRED",
+                    "請填入實際金額。利率尚未填寫時算不出建議值，需要照存摺輸入。",
+                )
             postings = self.plan_postings(event, amount)
             transaction_id = self._write_postings(postings, occurred_on or event.due_date)
             self.store.settle_event(
                 event_id,
                 status=str(DepositEventStatus.CONFIRMED),
                 actual_amount_minor=amount,
+                withheld_tax_minor=withheld_tax_minor,
+                nhi_premium_minor=nhi_premium_minor,
                 transaction_id=transaction_id,
             )
-            renewed = self._advance_term(event, amount)
+            renewed = self._advance_term(
+                event,
+                amount,
+                withheld_tax_minor=withheld_tax_minor,
+                nhi_premium_minor=nhi_premium_minor,
+            )
         except STORE_FAILURES as exc:
             return failure(
                 exc,
@@ -340,10 +357,17 @@ class PostingSection(DepositServiceBase):
         return primary
 
     def _interest_category_id(self) -> str:
-        """利息收入要記在哪個項目。沒有就建一組「利息收入／定存利息」。"""
+        """利息優先記到「利息收入／定存利息」。
+
+        沒有同名項目時取「利息收入」下的第一個項目；完全沒有項目才建立。
+        定存利息是程式唯一會自動建立的類別／項目例外（REQ-0007）。
+        """
         for parent in self.store.list_categories():
             if parent.name == "利息收入":
                 children = self.store.list_categories(parent_id=parent.category_id)
+                named = next((child for child in children if child.name == "定存利息"), None)
+                if named is not None:
+                    return named.category_id
                 if children:
                     return children[0].category_id
                 return self.store.create_category(
@@ -352,7 +376,14 @@ class PostingSection(DepositServiceBase):
         parent = self.store.create_category(name="利息收入")
         return self.store.create_category(name="定存利息", parent_id=parent.category_id).category_id
 
-    def _advance_term(self, event: DepositEvent, interest_minor: int) -> str | None:
+    def _advance_term(
+        self,
+        event: DepositEvent,
+        interest_minor: int,
+        *,
+        withheld_tax_minor: int | None = None,
+        nhi_premium_minor: int | None = None,
+    ) -> str | None:
         """到期事件確認後，把這一期收掉，需要續約就開下一期。
 
         同時**從實際利息反推出這一期真正的年利率**存起來。機動利率沒有事前的利率可填，
@@ -364,11 +395,15 @@ class PostingSection(DepositServiceBase):
         term = self.store.get_term(event.term_id)
         contract = self.store.get_contract(event.contract_id)
         earned = self._term_interest(contract, term, interest_minor)
+        gross_maturity_interest = (
+            interest_minor + (withheld_tax_minor or 0) + (nhi_premium_minor or 0)
+        )
+        gross_earned = self._term_gross_interest(contract, term, gross_maturity_interest)
         principal = self._matured_principal(contract, term)
         effective = derive_annual_rate_ppm(
             interest_method=contract.interest_method,
             principal_minor=principal,
-            interest_minor=earned,
+            interest_minor=gross_earned,
             term_months=contract.term_months,
             monthly_deposit_minor=term.monthly_deposit_minor,
         )
@@ -419,3 +454,14 @@ class PostingSection(DepositServiceBase):
             term.term_id, str(DepositEventType.INTEREST_PAYOUT)
         )
         return paid + maturity_amount
+
+    def _term_gross_interest(
+        self, contract: DepositContract, term: DepositTerm, gross_maturity_amount: int
+    ) -> int:
+        """這一期的毛利息：已確認領息的毛額，加上到期事件的毛額。"""
+        if InterestMethod(contract.interest_method) is not InterestMethod.MONTHLY_INTEREST:
+            return gross_maturity_amount
+        paid_gross = self.store.sum_confirmed_gross_amount(
+            term.term_id, str(DepositEventType.INTEREST_PAYOUT)
+        )
+        return paid_gross + gross_maturity_amount

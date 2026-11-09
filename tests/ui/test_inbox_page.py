@@ -12,12 +12,16 @@
 
 from typing import Any
 
+import pytest
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtWidgets import QTableView
+from PySide6.QtWidgets import QLineEdit, QTableView
 
+from tagcor_ledger.infrastructure.clock import today_taipei
 from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.navigation import PageId
 from tagcor_ledger.ui.widgets.sidebar import BADGE_ROLE
+from tagcor_ledger.ui.widgets.simple_form import SimpleFormDialog
+from tagcor_ledger.domain.tax.withholding import InterestDeductions
 
 
 def answer_form(monkeypatch: Any, values: dict[str, str] | None) -> None:
@@ -70,6 +74,240 @@ def test_the_inbox_is_one_table_of_deposit_events(window, make_deposit) -> None:
 
     assert window.inbox.hint.isVisibleTo(window.inbox)
     assert "存摺" in window.inbox.hint.text()
+
+
+def test_long_contract_name_keeps_pending_table_inside_its_viewport(window, qtbot) -> None:
+    """長合約名只在名稱欄省略，收寬的待確認表不溢出或切掉末列。"""
+    window.resize(1280, 760)
+    controller = window.controller
+    today = today_taipei().isoformat()
+    account_id = str(controller.account_options()[0]["account_id"])
+    created = controller.create_deposit_contract(
+        account_id=account_id,
+        name="長" * 30,
+        interest_method="monthly_interest",
+        maturity_action="none",
+        interest_destination_account_id=account_id,
+        term_months=36,
+        opened_on=today,
+        principal="100000",
+        annual_rate_ppm=16_000,
+        recorded_on=today,
+    )
+    assert created.success, created.message
+    contract_id = str(created.details["contract_id"])
+    term_id = str(controller.list_deposit_terms(contract_id)[0]["term_id"])
+    assert controller.store.add_event(
+        term_id=term_id,
+        event_type="interest_payout",
+        due_date=today,
+        suggested_amount_minor=20_001,
+    )
+    window.inbox.refresh()
+    window.show_page(PageId.BALANCE)
+    qtbot.wait(20)
+
+    table = window.inbox.table
+    model = window.inbox.model
+    assert model.rowCount() == 1
+    assert model.items[0]["event_type"] == "interest_payout"
+    assert model.items[0]["suggested_amount_minor"] == 20_001
+    header = table.horizontalHeader()
+    column_width = sum(header.sectionSize(column) for column in range(model.columnCount()))
+    assert column_width <= table.viewport().width(), (
+        column_width,
+        table.viewport().width(),
+    )
+
+    last_row = table.visualRect(model.index(model.rowCount() - 1, 0))
+    assert table.viewport().rect().contains(last_row), (last_row, table.viewport().rect())
+
+
+@pytest.mark.parametrize(
+    ("gross", "withheld", "premium", "net"),
+    [(19_999, 0, 0, 19_999), (20_001, 2_000, 422, 17_579)],
+)
+def test_interest_suggestions_are_net_and_show_the_exact_calculation(
+    window, make_deposit, monkeypatch, gross: int, withheld: int, premium: int, net: int
+) -> None:
+    controller = window.controller
+    make_deposit(controller)
+    event_id = str(controller.deposits.list_pending().details["events"][0]["event_id"])
+    controller.store.update_event_suggestion(event_id, gross)
+
+    window.inbox.refresh()
+
+    item = window.inbox.model.items[0]
+    row = _inbox_rows(window)[0]
+    assert item["suggested_amount_minor"] == gross
+    assert item["suggested_withheld_tax_minor"] == withheld
+    assert item["suggested_nhi_premium_minor"] == premium
+    assert item["expected_amount_minor"] == net
+    assert row[3] == f"{net:,}"
+    expected_note = (
+        f"試算：利息 {gross:,} − 扣繳 {withheld:,} − 補充保費 {premium:,} "
+        f"＝ 預期入帳 {net:,}。三格都以存摺為準。"
+    )
+    seen: dict[str, str] = {}
+
+    def inspect_form(parent: Any, title: str, fields: Any, *, note: str = "") -> None:
+        seen["note"] = note
+        return None
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.inbox.ask_form", inspect_form)
+    window.inbox.table.selectRow(0)
+    window.inbox.confirm_selected()
+    assert seen["note"] == expected_note
+
+
+def test_interest_confirmation_prefills_both_deductions_and_saves_edits(
+    window, make_deposit, monkeypatch
+) -> None:
+    controller = window.controller
+    make_deposit(controller)
+    event_id = str(controller.deposits.list_pending().details["events"][0]["event_id"])
+    controller.store.update_event_suggestion(event_id, 20_001)
+    window.inbox.refresh()
+    window.inbox.table.selectRow(0)
+    seen: dict[str, Any] = {}
+
+    def edit_form(parent: Any, title: str, fields: Any, *, note: str = "") -> dict[str, str]:
+        dialog = SimpleFormDialog(title, fields, parent, note=note)
+        seen["keys"] = list(dialog._widgets)
+        seen["fields"] = {field.key: field for field in fields}
+        seen["dialog"] = dialog
+        assert dialog._widgets["amount"].text() == "17579"
+        assert dialog._widgets["withheld_tax"].text() == "2000"
+        assert dialog._widgets["nhi_premium"].text() == "422"
+        assert seen["fields"]["withheld_tax"].label == "所得稅扣繳（TWD）"
+        assert seen["fields"]["nhi_premium"].label == "二代健保補充保費（TWD）"
+        assert seen["fields"]["withheld_tax"].required is False
+        assert seen["fields"]["nhi_premium"].required is False
+        assert isinstance(dialog._widgets["withheld_tax"], QLineEdit)
+        assert isinstance(dialog._widgets["nhi_premium"], QLineEdit)
+        dialog._widgets["withheld_tax"].setText("1900")
+        dialog._widgets["nhi_premium"].setText("400")
+        return dialog.values()
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.inbox.ask_form", edit_form)
+    window.inbox.confirm_selected()
+
+    confirmed = controller.store.get_event(event_id)
+    assert confirmed.actual_amount_minor == 17_579
+    assert confirmed.withheld_tax_minor == 1_900
+    assert confirmed.nhi_premium_minor == 400
+
+
+def test_blank_confirmation_deductions_are_saved_as_null(window, make_deposit, monkeypatch) -> None:
+    controller = window.controller
+    make_deposit(controller)
+    event_id = str(controller.deposits.list_pending().details["events"][0]["event_id"])
+    controller.store.update_event_suggestion(event_id, 20_001)
+    window.inbox.refresh()
+    window.inbox.table.selectRow(0)
+    monkeypatch.setattr(
+        "tagcor_ledger.ui.pages.inbox.ask_form",
+        lambda *_args, **_kwargs: {
+            "occurred_on": "2021-01-15",
+            "amount": "17579",
+            "withheld_tax": "",
+            "nhi_premium": "",
+        },
+    )
+
+    window.inbox.confirm_selected()
+
+    confirmed = controller.store.get_event(event_id)
+    assert confirmed.status == "confirmed"
+    assert confirmed.actual_amount_minor == 17_579
+    assert confirmed.withheld_tax_minor is None
+    assert confirmed.nhi_premium_minor is None
+
+
+@pytest.mark.parametrize(
+    "deductions",
+    [None, InterestDeductions(20_001, 0, 0, False, False)],
+    ids=["dataset-unavailable", "no-rules-on-date"],
+)
+def test_missing_tax_rules_suggest_zero_and_do_not_block_confirmation(
+    window, make_deposit, monkeypatch, deductions
+) -> None:
+    controller = window.controller
+    make_deposit(controller)
+    event_id = str(controller.deposits.list_pending().details["events"][0]["event_id"])
+    controller.store.update_event_suggestion(event_id, 20_001)
+    monkeypatch.setattr(controller.tax, "interest_deductions", lambda *_args, **_kwargs: deductions)
+    window.inbox.refresh()
+    item = window.inbox.model.items[0]
+    assert item["suggested_withheld_tax_minor"] == 0
+    assert item["suggested_nhi_premium_minor"] == 0
+    assert item["expected_amount_minor"] == 20_001
+    assert item["deduction_data_unavailable"] is True
+    window.inbox.table.selectRow(0)
+    seen: dict[str, Any] = {}
+
+    def confirm_with_zero(parent: Any, title: str, fields: Any, *, note: str = "") -> dict[str, str]:
+        seen["note"] = note
+        return {
+            "occurred_on": "2021-01-15",
+            "amount": "20001",
+            "withheld_tax": "0",
+            "nhi_premium": "0",
+        }
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.inbox.ask_form", confirm_with_zero)
+    window.inbox.confirm_selected()
+
+    assert seen["note"] == (
+        "試算：利息 20,001 − 扣繳 0 − 補充保費 0 ＝ 預期入帳 20,001。三格都以存摺為準。\n"
+        "稅務資料不可用，扣款請照存摺填。"
+    )
+    confirmed = controller.store.get_event(event_id)
+    assert confirmed.status == "confirmed"
+    assert confirmed.actual_amount_minor == 20_001
+    assert confirmed.withheld_tax_minor == 0
+    assert confirmed.nhi_premium_minor == 0
+
+
+def test_installment_confirmation_has_no_deduction_widgets(window, monkeypatch) -> None:
+    controller = window.controller
+    account_id = str(controller.account_options()[0]["account_id"])
+    created = controller.create_deposit_contract(
+        account_id=account_id,
+        name="零存整付",
+        interest_method="installment_savings",
+        maturity_action="renew_principal_only",
+        interest_destination_account_id=account_id,
+        term_months=12,
+        opened_on="2025-10-15",
+        principal="0",
+        annual_rate_ppm=16_000,
+        monthly_deposit="3000",
+        recorded_on="2025-10-15",
+    )
+    assert created.success, created.message
+    assert controller.generate_deposit_events().success
+    window.inbox.refresh()
+    row = next(
+        index
+        for index, item in enumerate(window.inbox.model.items)
+        if item["event_type"] == "installment"
+    )
+    window.inbox.table.selectRow(row)
+    seen: dict[str, Any] = {}
+
+    def inspect_form(parent: Any, title: str, fields: Any, *, note: str = "") -> None:
+        dialog = SimpleFormDialog(title, fields, parent, note=note)
+        seen["keys"] = list(dialog._widgets)
+        seen["note"] = note
+        return None
+
+    monkeypatch.setattr("tagcor_ledger.ui.pages.inbox.ask_form", inspect_form)
+    window.inbox.confirm_selected()
+
+    assert "withheld_tax" not in seen["keys"]
+    assert "nhi_premium" not in seen["keys"]
+    assert seen["note"] == ""
 
 
 def test_the_inbox_explains_itself_when_it_is_empty(window, make_deposit) -> None:
