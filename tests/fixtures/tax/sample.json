@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-11-01",
+  "next_review_on": "2027-01-01",
+  "notes": [
+    "測試用的假資料，數字只為了測試，不是任何年度的公告值",
+    "測試期間與來源僅供驗證資料模型使用。"
+  ],
+  "sources": [
+    {
+      "id": "calendar-example",
+      "title": "測試用期間來源",
+      "publisher": "測試資料",
+      "url": "https://example.invalid/calendar",
+      "published_on": "2026-01-01",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "fetched_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "income-example",
+      "title": "測試用所得參數來源",
+      "publisher": "測試資料",
+      "url": "https://example.invalid/income",
+      "published_on": null,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "fetched_at": "2026-01-02T00:00:00Z"
+    },
+    {
+      "id": "rules-example",
+      "title": "測試用扣款規則來源",
+      "publisher": "測試資料",
+      "url": "https://example.invalid/rules",
+      "published_on": "2026-01-03",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "fetched_at": "2026-01-03T00:00:00+00:00"
+    }
+  ],
+  "calendar": {
+    "typical": {
+      "income_tax": {
+        "start": "05-01",
+        "end": "05-31",
+        "basis": "測試用綜所稅期間",
+        "source_ids": ["calendar-example"]
+      },
+      "house_tax": {
+        "start": "05-01",
+        "end": "05-31",
+        "basis": "測試用房屋稅期間",
+        "source_ids": ["calendar-example"]
+      },
+      "land_value_tax": {
+        "start": "11-01",
+        "end": "11-30",
+        "basis": "測試用地價稅期間",
+        "source_ids": ["calendar-example"]
+      },
+      "vehicle_license_tax": {
+        "start": "04-01",
+        "end": "04-30",
+        "basis": "測試用牌照稅期間",
+        "source_ids": ["calendar-example"]
+      },
+      "fuel_fee": {
+        "start": "07-01",
+        "end": "07-31",
+        "basis": "測試用燃料費期間",
+        "source_ids": ["calendar-example"]
+      }
+    },
+    "years": {
+      "2026": {
+        "income_tax": {
+          "start": "2026-05-01",
+          "end": "2026-06-01",
+          "note": "測試用期間順延說明",
+          "source_ids": ["calendar-example"]
+        },
+        "house_tax": {
+          "start": "2026-05-01",
+          "end": "2026-06-01",
+          "note": null,
+          "source_ids": ["calendar-example"]
+        },
+        "fuel_fee": {
+          "start": "2026-07-01",
+          "end": "2026-07-31",
+          "note": null,
+          "source_ids": ["calendar-example"]
+        }
+      }
+    }
+  },
+  "income_tax": {
+    "2025": {
+      "exemption": {"value": 100000, "source_ids": ["income-example"]},
+      "exemption_70_plus": {"value": 150000, "source_ids": ["income-example"]},
+      "standard_deduction_single": {"value": 200000, "source_ids": ["income-example"]},
+      "salary_special_deduction_cap": {"value": 300000, "source_ids": ["income-example"]},
+      "savings_investment_cap": {"value": 400000, "source_ids": ["income-example"]},
+      "basic_living_expense": {"value": 500000, "source_ids": ["income-example"]},
+      "writing_lecture_exemption_cap": {"value": 600000, "source_ids": ["income-example"]},
+      "foreign_income_amt_threshold": {"value": 700000, "source_ids": ["income-example"]},
+      "amt_basic_exemption": {"value": 800000, "source_ids": ["income-example"]},
+      "brackets": {
+        "rows": [
+          {"up_to": 590000, "rate_ppm": 50000, "progressive_difference": 0},
+          {"up_to": 1330000, "rate_ppm": 120000, "progressive_difference": 41300},
+          {"up_to": 2660000, "rate_ppm": 200000, "progressive_difference": 147700},
+          {"up_to": 4980000, "rate_ppm": 300000, "progressive_difference": 413700},
+          {"up_to": null, "rate_ppm": 400000, "progressive_difference": 911700}
+        ],
+        "source_ids": ["income-example"]
+      },
+      "tax_rounding": {"value": "half_up", "source_ids": ["income-example"]}
+    },
+    "2026": {
+      "exemption": {"value": 110000, "source_ids": ["income-example"]},
+      "exemption_70_plus": {"value": 160000, "source_ids": ["income-example"]},
+      "standard_deduction_single": {"value": 210000, "source_ids": ["income-example"]},
+      "salary_special_deduction_cap": {"value": 310000, "source_ids": ["income-example"]},
+      "savings_investment_cap": {"value": 410000, "source_ids": ["income-example"]},
+      "basic_living_expense": {"value": 510000, "source_ids": ["income-example"]},
+      "writing_lecture_exemption_cap": {"value": 610000, "source_ids": ["income-example"]},
+      "foreign_income_amt_threshold": {"value": 710000, "source_ids": ["income-example"]},
+      "amt_basic_exemption": {"value": 810000, "source_ids": ["income-example"]},
+      "brackets": {
+        "rows": [
+          {"up_to": 590000, "rate_ppm": 50000, "progressive_difference": 0},
+          {"up_to": 1330000, "rate_ppm": 120000, "progressive_difference": 41300},
+          {"up_to": 2660000, "rate_ppm": 200000, "progressive_difference": 147700},
+          {"up_to": 4980000, "rate_ppm": 300000, "progressive_difference": 413700},
+          {"up_to": null, "rate_ppm": 400000, "progressive_difference": 911700}
+        ],
+        "source_ids": ["income-example"]
+      },
+      "tax_rounding": {"value": "half_up", "source_ids": ["income-example"]}
+    }
+  },
+  "interest_withholding": [
+    {
+      "effective_from": "2010-01-01",
+      "rate_ppm": 100000,
+      "exempt_if_tax_at_most": 2000,
+      "rounding": "floor",
+      "source_ids": ["rules-example"]
+    }
+  ],
+  "nhi_supplementary_premium": [
+    {
+      "effective_from": "2021-01-01",
+      "rate_ppm": 21100,
+      "threshold_at_least": 20000,
+      "base_cap": 10000000,
+      "rounding": "half_up",
+      "source_ids": ["rules-example"]
+    }
+  ]
+}
