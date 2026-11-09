@@ -83,6 +83,15 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     overview = controller.overview_snapshot()
     overview_elapsed = perf_counter() - started
 
+    # 稅務頁的「所得歸類」與「試算」分頁每次切過去都會重算這兩個（v0.28 起）。
+    # 種子的 20 萬筆全落在 2020 年，所以量 2020 是最壞的情況。
+    started = perf_counter()
+    mapping_rows = controller.tax_mapping_rows(2020)
+    mapping_elapsed = perf_counter() - started
+    started = perf_counter()
+    income = store.income_totals(2020)
+    income_elapsed = perf_counter() - started
+
     print(
         "performance:",
         f"add={add_elapsed * 1000:.2f}ms",
@@ -92,6 +101,8 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
         f"gap={gap_elapsed * 1000:.2f}ms",
         f"accounts={accounts_elapsed * 1000:.2f}ms",
         f"overview={overview_elapsed * 1000:.2f}ms",
+        f"tax_mapping_rows={mapping_elapsed * 1000:.2f}ms",
+        f"income_totals={income_elapsed * 1000:.2f}ms",
     )
     assert overview["accounts"], "沒有帳戶就等於什麼都沒算到，門檻會變成假的"
     assert accounts.success
@@ -111,7 +122,16 @@ def test_large_ledger_common_operations_meet_latency_budget(tmp_path: Path) -> N
     # 實測 183ms / 182ms（2026-08-20，兩次，20 萬筆）。它幾乎剛好是
     # accounts（77ms）＋ gap（100ms）—— 其餘幾項（定存、收件匣、設定）的筆數與
     # 資料量無關，所以這一頁只有兩個成本會隨帳本長大。門檻取那兩筆各自預算的和。
+    # 2026-11-10 加上稅務摘要之後實測 266ms（20 萬筆）。
     assert overview_elapsed < 1.0
+    # 實測 283ms（2026-11-10，20 萬筆都在 2020）。它會走過每一筆分攤再依年度過濾 ——
+    # 量一個**沒有任何一筆**的年度（2025）也要 146ms，所以成本跟帳本總量成正比，不跟那一年的筆數。
+    # 門檻比照盤點與差額的 0.5s；真的超過時，第一步是讓年度條件先走 transactions 的日期索引。
+    assert mapping_rows, "所得歸類一列都沒有就等於什麼都沒量到，門檻會變成假的"
+    assert mapping_elapsed < 0.5
+    # 實測 64ms（2026-11-10，20 萬筆）；它的年度條件走得到索引（空年度 1ms）。
+    assert income.unmapped.count == 0
+    assert income_elapsed < 0.5
 
 
 def _seed_transactions(paths, count: int) -> None:
