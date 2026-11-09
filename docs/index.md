@@ -40,6 +40,7 @@
 | [版本界線](environment/versions.md) | 每條上下界的**理由**、哪幾條要一起動、刻意不裝什麼 |
 | [發版檢查表](operations/release-checklist.md) | 發版前的**人工**驗收步驟 |
 | [稅務資料更新手冊](operations/tax-data-runbook.md) | 公開稅務資料與法規參考庫的更新流程、來源清單與提交前審閱 |
+| [回答稅務問題](operations/tax-questions.md) | App 之外的 session 怎麼回答稅務問題：先驗資料新鮮度、依據順序、答案格式、預設不讀帳本 |
 | [維護者筆記](operations/maintainer-notes.md) | **對什麼都沒有權威。** 它是「這件事的規則寫在哪」的查詢表 |
 | `architecture/diagrams/*.svg` | **對什麼都沒有權威。** 產生物，正本是各文件裡的 ` ```mermaid ` 區塊 |
 
