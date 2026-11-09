@@ -40,7 +40,7 @@ class PageId(StrEnum):
     ENTRY = "entry"
     TRANSACTIONS = "transactions"
     BALANCE = "balance"
-    REFERENCE = "reference"
+    TAX = "tax"
     OPERATION_SETTINGS = "operation_settings"
     SYSTEM_SETTINGS = "system_settings"
 
@@ -66,7 +66,7 @@ LANDING_PAGE: PageId = PageId.OVERVIEW
 """
 
 SETTINGS_PAGES: tuple[PageId, ...] = (
-    PageId.REFERENCE,
+    PageId.TAX,
     PageId.OPERATION_SETTINGS,
     PageId.SYSTEM_SETTINGS,
 )
@@ -77,7 +77,7 @@ LABELS: dict[PageId, str] = {
     PageId.ENTRY: "記帳",
     PageId.TRANSACTIONS: "交易紀錄",
     PageId.BALANCE: "餘額盤點",
-    PageId.REFERENCE: "法規參考",
+    PageId.TAX: "稅務",
     PageId.OPERATION_SETTINGS: "操作設定",
     PageId.SYSTEM_SETTINGS: "系統設定",
 }

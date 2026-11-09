@@ -31,7 +31,7 @@ def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(window) -> None:
         "記帳",
         "交易紀錄",
         "餘額盤點",
-        "法規參考",
+        "稅務",
         "操作設定",
         "系統設定",
     ]
@@ -41,7 +41,7 @@ def test_sidebar_lists_every_page_and_keeps_the_stack_in_step(window) -> None:
         (PageId.ENTRY, window.entry),
         (PageId.TRANSACTIONS, window.transactions),
         (PageId.BALANCE, window.balance),
-        (PageId.REFERENCE, window.reference),
+        (PageId.TAX, window.tax),
         (PageId.OPERATION_SETTINGS, window.operation_settings),
         (PageId.SYSTEM_SETTINGS, window.system_settings),
     ):
@@ -104,7 +104,7 @@ def test_focus_landing_on_the_sidebar_does_not_navigate(window) -> None:
     """
 
     # **剛開程式、還沒點過任何一頁**時，「設定」那一組從來沒有被選過。
-    # 它的 current row 若是無效的，焦點一碰就會跳到法規參考。
+    # 它的 current row 若是無效的，焦點一碰就會跳到稅務。
     for widget in (window.sidebar.daily, window.sidebar.settings):
         widget.setFocus(Qt.FocusReason.TabFocusReason)
         QApplication.processEvents()

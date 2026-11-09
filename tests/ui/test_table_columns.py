@@ -21,6 +21,7 @@ UI 測試一條都抓不到** —— 它們斷言的是「表格上有沒有這�
 from __future__ import annotations
 
 import ast
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
@@ -28,6 +29,15 @@ import pytest
 
 from tagcor_ledger.ui import formatting
 from tagcor_ledger.ui.pages.catalog import AccountsPage, CategoriesPage, ItemsPage
+from tagcor_ledger.application.reference import ReferenceEntry
+from tagcor_ledger.domain.tax.dataset import TaxSource, Window
+from tagcor_ledger.domain.tax.kinds import TaxKind
+from tagcor_ledger.domain.tax.reminders import (
+    ReminderCycle,
+    ReminderState,
+    ReminderSwitch,
+    ReminderView,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PAGES_ROOT = PROJECT_ROOT / "src" / "tagcor_ledger" / "ui" / "pages"
@@ -127,6 +137,62 @@ SAMPLES: dict[str, dict[str, Any]] = {
         "amended_date": "2026-01-01",
         "stale": False,
     },
+    "tax_reminder_values": {
+        "view": ReminderView(
+            TaxKind.FUEL_FEE,
+            ReminderState.OPEN,
+            ReminderCycle(
+                TaxKind.FUEL_FEE,
+                2026,
+                Window(
+                    TaxKind.FUEL_FEE,
+                    2026,
+                    date(2026, 7, 1),
+                    date(2026, 7, 31),
+                    True,
+                    None,
+                    (),
+                ),
+                date(2026, 6, 17),
+                date(2026, 8, 30),
+            ),
+            None,
+            None,
+        ),
+        "switch": ReminderSwitch.ON,
+        "today": date(2026, 7, 15),
+    },
+    "tax_source_values": {
+        "source": TaxSource(
+            "test-source",
+            "測試來源",
+            "測試機關",
+            "https://example.invalid/source",
+            date(2026, 1, 1),
+            "a" * 64,
+            "2026-01-02T00:00:00+08:00",
+        )
+    },
+    "tax_law_entry_values": {
+        "entry": ReferenceEntry(
+            "test-entry",
+            "income_tax",
+            "綜合所得稅",
+            "所得稅法",
+            "14",
+            "測試條文",
+            "測試機關",
+            "2026-01-01",
+            "有效",
+            "https://example.invalid/law",
+            "2026-01-02T00:00:00+08:00",
+            "2026-01-03",
+            "測試摘要",
+            "測試意義",
+            "測試條文內容",
+        ),
+        "stale": False,
+    },
 }
 
 # 值比標題多、而且**那是刻意的**：`(檔名, formatter 名) → 標題數`。
@@ -137,7 +203,7 @@ DELIBERATE_TRUNCATION: dict[tuple[str, str], int] = {}
 
 
 def _rows_model_sites() -> list[tuple[str, list[str], str]]:
-    """`(檔名, 標題清單, formatter 名)`。只挑標題是字面清單的那些。"""
+    """`(檔名, 標題清單, formatter 名)`，包含 formatting 常數與單層 lambda。"""
     sites: list[tuple[str, list[str], str]] = []
     for path in sorted(PAGES_ROOT.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -147,17 +213,53 @@ def _rows_model_sites() -> list[tuple[str, list[str], str]]:
             if node.func.id != "RowsModel" or len(node.args) < 2:
                 continue
             headers, mapper = node.args[0], node.args[1]
-            if not isinstance(headers, ast.List) or not isinstance(mapper, ast.Name):
+            formatter_name = _formatter_name(mapper)
+            header_values = _header_values(headers)
+            if formatter_name is None or header_values is None:
                 continue  # `catalog.py` 走 class 屬性，底下另外驗
-            if not all(
-                isinstance(item, ast.Constant) and isinstance(item.value, str)
-                for item in headers.elts
-            ):
-                continue
-            sites.append(
-                (path.name, [item.value for item in headers.elts], mapper.id)  # type: ignore[attr-defined]
-            )
+            sites.append((path.name, header_values, formatter_name))
     return sites
+
+
+def _formatter_name(mapper: ast.expr) -> str | None:
+    if isinstance(mapper, ast.Name):
+        return mapper.id
+    if (
+        isinstance(mapper, ast.Lambda)
+        and isinstance(mapper.body, ast.Call)
+        and isinstance(mapper.body.func, ast.Name)
+    ):
+        return mapper.body.func.id
+    return None
+
+
+def _header_values(headers: ast.expr) -> list[str] | None:
+    if isinstance(headers, ast.List):
+        values: list[str] = []
+        for item in headers.elts:
+            if not isinstance(item, ast.Constant) or not isinstance(item.value, str):
+                return None
+            values.append(item.value)
+        return values
+    if isinstance(headers, ast.Name):
+        value = getattr(formatting, headers.id, None)
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return value
+    return None
+
+
+def _sample_values(mapper_name: str) -> list[str]:
+    sample = SAMPLES[mapper_name]
+    if mapper_name == "tax_reminder_values":
+        return formatting.tax_reminder_values(
+            sample["view"], switch=sample["switch"], today=sample["today"]
+        )
+    if mapper_name == "tax_source_values":
+        return formatting.tax_source_values(sample["source"])
+    if mapper_name == "tax_law_entry_values":
+        return formatting.tax_law_entry_values(sample["entry"], stale=sample["stale"])
+    mapper: Callable[[dict[str, Any]], list[str]] = getattr(formatting, mapper_name)
+    return mapper(sample)
 
 
 def _all_rows_model_calls() -> int:
@@ -177,15 +279,15 @@ def _all_rows_model_calls() -> int:
 def test_the_extractor_finds_every_table_in_the_app() -> None:
     """陽性對照：抽取器漏掉一張表時這裡先失敗，而不是讓那張表靜靜不受檢查。
 
-    `catalog.py` 那一個走 `list(self.HEADERS)`，抽取器認不出來 —— 所以是
-    「字面清單的數量 ＋ 1」。這個 1 由 `test_the_catalog_pages_...` 那一條接手。
+    `catalog.py` 那一個走 `list(self.HEADERS)`，抽取器認不出來；這個 1 由
+    `test_the_catalog_pages_...` 那一條接手。其他頁支援字面清單與 formatting 標題常數。
     """
-    literal = _rows_model_sites()
-    assert _all_rows_model_calls() == len(literal) + 1, (
+    sites = _rows_model_sites()
+    assert _all_rows_model_calls() == len(sites) + 1, (
         "新增或改寫了一個 RowsModel，抽取器沒認出來 —— 先修抽取器，不要改這個數字"
     )
-    # 八張：2026-09-20 餘額盤點頁少了「差額期間內的交易」那一張，從九降到八。
-    assert len(literal) >= 8, f"只抽到 {len(literal)} 張表，掃描路徑可能寫錯了"
+    # 十一張，含總覽、記帳、盤點、定存、模板與稅務各表。
+    assert len(sites) >= 10, f"只抽到 {len(sites)} 張表，掃描路徑可能寫錯了"
 
 
 def test_every_formatter_used_by_a_table_has_a_sample_row() -> None:
@@ -209,8 +311,7 @@ def test_a_table_never_has_more_columns_than_its_formatter_produces(
     值比標題多是另一回事（尾巴被截掉，畫面正常），只在 `DELIBERATE_TRUNCATION`
     列出來的地方允許 —— 新出現的靜默截斷要有人看過才算數。
     """
-    mapper: Callable[[dict[str, Any]], list[str]] = getattr(formatting, mapper_name)
-    values = mapper(SAMPLES[mapper_name])
+    values = _sample_values(mapper_name)
     assert len(values) >= len(headers), (
         f"{filename} 的「{mapper_name}」只給得出 {len(values)} 個值，"
         f"但表格宣告了 {len(headers)} 欄（{headers}）—— 最後一欄會 IndexError"

@@ -42,6 +42,7 @@ from tagcor_ledger.ui.formatting.tax import (
     QUESTION_INSTRUCTION,
     REMINDER_STATE_NAMES,
     SWITCH_NAMES,
+    TAX_KIND_SHORT_NAMES,
     caution_lines,
     coverage_lines,
     dataset_location_text,
@@ -147,7 +148,8 @@ def test_upcoming_reminder_sentence_uses_estimated_dates() -> None:
     view = _view(TaxKind.VEHICLE_LICENSE_TAX, ReminderState.UPCOMING, cycle=cycle)
 
     assert reminder_sentence(view, today=date(2027, 3, 18)) == (
-        "使用牌照稅：2027/04/01 開始繳納，2027/04/30 截止（日期為預估）。"
+        # REQ-0011 §UI 2026-11-09：總覽提醒不標示預估期間。
+        "使用牌照稅：2027/04/01 開始繳納，2027/04/30 截止。"
     )
 
 
@@ -227,7 +229,26 @@ def test_income_tax_reminder_refusal_suffixes(
         view,
         today=date(2026, 5, 22),
         estimate=_estimate(refused=(reason,), balance=None, filing_exempt=None),
-    ) == f"綜合所得稅：申報期間到 2026/05/31，還有 9 天{suffix}（日期為預估）。"
+    ) == f"綜合所得稅：申報期間到 2026/05/31，還有 9 天{suffix}。"  # REQ-0011 §UI 2026-11-09
+
+
+def test_fuel_fee_short_name_is_only_used_in_overview_sentence() -> None:
+    view = _view(
+        TaxKind.FUEL_FEE,
+        ReminderState.OPEN,
+        cycle=_cycle(TaxKind.FUEL_FEE, estimated=True),
+        paid=PaymentFact(2, 123_456, "2025-05-31"),
+    )
+
+    sentence = reminder_sentence(view, today=date(2026, 5, 22))
+    values = tax_reminder_values(view, switch=ReminderSwitch.ON, today=date(2026, 5, 22))
+
+    # REQ-0011 §UI 2026-11-09：總覽用短名且不標預估，提醒表保留正式稅名與預估期間。
+    assert TAX_KIND_SHORT_NAMES[TaxKind.FUEL_FEE] == "公路使用養護安全管理費"
+    assert sentence == "公路使用養護安全管理費：繳納期間到 2026/05/31，還有 9 天（去年 123,456 元）。"
+    assert "預估" not in sentence and "（原燃料費）" not in sentence
+    assert values[0] == "公路使用養護安全管理費（原燃料費）"
+    assert values[2].endswith("（預估）")
 
 
 def test_income_tax_reminder_refusal_suffixes_follow_the_required_priority() -> None:

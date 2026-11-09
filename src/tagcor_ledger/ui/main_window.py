@@ -51,8 +51,8 @@ from tagcor_ledger.ui.pages.balance_snapshot import BalanceSnapshotPage
 from tagcor_ledger.ui.pages.entry import EntryPage
 from tagcor_ledger.ui.pages.operation_settings import OperationSettingsPage
 from tagcor_ledger.ui.pages.overview import OverviewPage
-from tagcor_ledger.ui.pages.reference import ReferencePage
 from tagcor_ledger.ui.pages.system_settings import SystemSettingsPage
+from tagcor_ledger.ui.pages.tax import TaxPage
 from tagcor_ledger.ui.pages.transactions import TransactionsPage
 from tagcor_ledger.ui.theme import apply_dark_theme
 from tagcor_ledger.ui.widgets.layout import NARROW_BREAKPOINT, scrollable, set_page_compact
@@ -78,7 +78,7 @@ class MainWindow(QMainWindow):
         self.inbox = self.balance.inbox
         self.transactions = TransactionsPage(self.controller)
         self.operation_settings = OperationSettingsPage(self.controller)
-        self.reference = ReferencePage(self.controller)
+        self.tax = TaxPage(self.controller)
         self.system_settings = SystemSettingsPage(self.controller, paths)
         self._build(paths)
         self.refresh_pending_badge()
@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
             PageId.ENTRY: self.entry,
             PageId.TRANSACTIONS: self.transactions,
             PageId.BALANCE: self.balance,
-            PageId.REFERENCE: self.reference,
+            PageId.TAX: self.tax,
             PageId.OPERATION_SETTINGS: self.operation_settings,
             PageId.SYSTEM_SETTINGS: self.system_settings,
         }
@@ -145,6 +145,7 @@ class MainWindow(QMainWindow):
 
         self.overview.inbox_requested.connect(self.show_pending)
         self.overview.balance_requested.connect(lambda: self.show_page(PageId.BALANCE))
+        self.overview.tax_requested.connect(self._tax_requested)
         # **每一個會改動帳務的來源都接到同一個 `_ledger_changed`。** 三個來源
         # （記帳、交易紀錄的刪除／編輯、待確認的確認入帳）做的是同一件事 ——
         # 產生或改變交易 —— 所以它們該通知的對象也是同一組。分成三個「差不多」
@@ -256,8 +257,14 @@ class MainWindow(QMainWindow):
             # **切過去就重算**，不在每個 `_..._changed` 各記一筆 —— 那種清單一定會漏掉
             # 一項，而漏掉的症狀是總資產停在舊數字，看起來像算錯帳。
             self.overview.refresh()
+        elif page is PageId.TAX:
+            self.tax.refresh()
         self.pages.setCurrentWidget(self._page_scrolls[page])
         self._sync_page_menu()
+
+    def _tax_requested(self, tab: str) -> None:
+        self.tax.show_tab(tab)
+        self.show_page(PageId.TAX)
 
     def current_page_widget(self) -> QWidget | None:
         """堆疊**真正**顯示著的那一頁（捲動區裡面那個）。
@@ -344,6 +351,7 @@ class MainWindow(QMainWindow):
         """
         self.transactions.first_page()
         self.balance.refresh()
+        self.tax.refresh()
         self.refresh_pending_badge()
 
     def _balance_changed(self) -> None:
@@ -367,6 +375,7 @@ class MainWindow(QMainWindow):
         self.transactions.first_page()
         self.system_settings.reload()
         self.operation_settings.refresh()
+        self.tax.refresh()
         self.refresh_pending_badge()
 
     def _settings_changed(self) -> None:
@@ -384,6 +393,7 @@ class MainWindow(QMainWindow):
         self.transactions.reload_filters()
         self.transactions.first_page()
         self.operation_settings.refresh()
+        self.tax.refresh()
         self.system_settings.reload()
         self.refresh_pending_badge()
 

@@ -2,9 +2,27 @@
 
 **這一頁是「切過去就重算」，不接跨頁連動的訊號** —— 理由在 `pages/overview.py`。
 """
+import json
+import os
+from datetime import date, timedelta
+from pathlib import Path
 
+import pytest
+from PySide6.QtTest import QSignalSpy
+from PySide6.QtWidgets import QApplication
 
-
+from tagcor_ledger.app.paths import resolve_app_paths
+from tagcor_ledger.domain.tax.dataset import Window
+from tagcor_ledger.domain.tax.estimate import Estimate
+from tagcor_ledger.domain.tax.kinds import (
+    DeductionChoice,
+    FilingStatus,
+    TaxKind,
+)
+from tagcor_ledger.domain.tax.records import PaymentFact, TaxYearInputs
+from tagcor_ledger.domain.tax.reminders import ReminderCycle, ReminderState, ReminderSwitch, ReminderView
+from tagcor_ledger.ui.controller.tax import TaxOverview
+from tagcor_ledger.ui.main_window import MainWindow
 from tagcor_ledger.ui.navigation import PageId
 from tagcor_ledger.ui.widgets.sidebar import BADGE_ROLE
 
@@ -103,6 +121,9 @@ def test_overview_hides_what_it_has_nothing_to_say_about(window) -> None:
     assert not page.gap_note.isVisible()
     assert page.inbox_note.text() == "沒有待確認草稿。"
     assert not page.inbox_button.isVisible()
+    # 新帳本有四個稅目尚未決定是否提醒，所以總覽會多一列稅務狀態。
+    assert page.tax_notes[0].text() == "還有 4 項稅務提醒沒決定要不要開。"
+    assert not page.tax_notes[0].isHidden()
     # 全新的帳本只有一個餘額 0 的「現金」—— 一片都畫不出來，圓環整塊收起來。
     # 一個空的圓框跟一個沒有內容的標題是同一種壞法。
     assert not page.chart.isVisible()
@@ -211,3 +232,250 @@ def test_the_gap_reminder_lives_on_the_page_not_the_status_bar(window) -> None:
 
     page.gap_button.click()
     assert window.current_page_widget() is window.balance
+
+
+def _tax_window_data(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    kinds: tuple[TaxKind, ...] = tuple(TaxKind),
+    base_path: Path | None = None,
+) -> Path:
+    base = base_path or Path(os.environ["TAGCOR_TAX_DATA"])
+    dataset = json.loads(base.read_text(encoding="utf-8"))
+    source_id = str(dataset["sources"][0]["id"])
+    dataset["calendar"] = {
+        "typical": {
+            kind.value: {
+                "start": "05-01",
+                "end": "05-31",
+                "basis": "測試用期間",
+                "source_ids": [source_id],
+            }
+            for kind in kinds
+        },
+        "years": {},
+    }
+    target = tmp_path / "overview-tax-dataset.json"
+    target.write_text(json.dumps(dataset, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("TAGCOR_TAX_DATA", str(target))
+    return target
+
+
+def _new_window(qtbot, tmp_path: Path) -> MainWindow:
+    window = MainWindow(resolve_app_paths(tmp_path / "ledger-data"))
+    qtbot.addWidget(window)
+    window.resize(1280, 760)
+    window.show()
+    return window
+
+
+def test_income_tax_row_routes_to_the_unbuilt_tab_for_each_refusal(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    _tax_window_data(tmp_path, monkeypatch, kinds=(TaxKind.INCOME_TAX,))
+    window = _new_window(qtbot, tmp_path)
+    window.controller.today_provider = lambda: date(2026, 5, 15)
+    row_signal = QSignalSpy(window.overview.tax_requested)
+
+    window.overview.refresh()
+    assert "綜合所得稅：" in window.overview.tax_notes[0].text()
+    window.overview.tax_buttons[0].click()
+    assert row_signal.count() == 1
+    assert row_signal.at(0)[0] == "estimate"
+    assert window.current_page_widget() is window.tax
+    # 試算分頁尚未建置，show_tab 依約先停在提醒。
+    assert window.tax.tabs.currentWidget() is window.tax.reminders
+
+    assert window.controller.save_tax_year_inputs(
+        TaxYearInputs(
+            income_year=2025,
+            filing=FilingStatus.SINGLE,
+            deduction=DeductionChoice.STANDARD,
+            other_special_deductions=False,
+            dependents_have_income=False,
+            filer_70_plus=False,
+            dependents=0,
+            dependents_70_plus=0,
+            official_tax_minor=None,
+            official_balance_minor=None,
+        )
+    ).success
+    assert window.controller.submit(
+        occurred_at="2025-08-19T10:00:00+08:00",
+        entry_type="income",
+        amount="100",
+        account_id="acct_cash",
+        destination_account_id=None,
+        category_id="cat_food_711",
+        description="未歸類收入",
+    ).success
+    window.overview.refresh()
+    window.overview.tax_buttons[0].click()
+    assert row_signal.count() == 2
+    assert row_signal.at(1)[0] == "mapping"
+    assert window.tax.tabs.currentWidget() is window.tax.reminders
+
+
+def test_missing_dataset_status_opens_data_and_supported_reminder_opens_reminders(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    baseline = Path(os.environ["TAGCOR_TAX_DATA"])
+    monkeypatch.setenv("TAGCOR_TAX_DATA", str(tmp_path / "missing.json"))
+    missing_window = _new_window(qtbot, tmp_path / "missing")
+    missing_window.controller.today_provider = lambda: date(2026, 11, 9)
+    missing_window.overview.refresh()
+    assert missing_window.overview.tax_notes[0].text() == (
+        "稅務資料不在，稅務提醒與試算暫停。"
+    )
+    missing_window.overview.tax_buttons[0].click()
+    assert missing_window.current_page_widget() is missing_window.tax
+    assert missing_window.tax.tabs.currentWidget() is missing_window.tax.data
+
+    _tax_window_data(
+        tmp_path,
+        monkeypatch,
+        kinds=(TaxKind.INCOME_TAX,),
+        base_path=baseline,
+    )
+    reminder_window = _new_window(qtbot, tmp_path / "reminders")
+    reminder_window.controller.today_provider = lambda: date(2026, 5, 15)
+    assert reminder_window.controller.save_tax_year_inputs(
+        TaxYearInputs(
+            income_year=2025,
+            filing=FilingStatus.SINGLE,
+            deduction=DeductionChoice.STANDARD,
+            other_special_deductions=False,
+            dependents_have_income=False,
+            filer_70_plus=False,
+            dependents=0,
+            dependents_70_plus=0,
+            official_tax_minor=None,
+            official_balance_minor=None,
+        )
+    ).success
+    reminder_window.overview.refresh()
+    signal = QSignalSpy(reminder_window.overview.tax_requested)
+    reminder_window.overview.tax_buttons[0].click()
+    assert signal.at(0)[0] == "reminders"
+    assert reminder_window.tax.tabs.currentWidget() is reminder_window.tax.reminders
+
+
+def test_five_open_tax_items_fold_into_at_most_four_overview_rows(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    _tax_window_data(tmp_path, monkeypatch)
+    window = _new_window(qtbot, tmp_path)
+    window.controller.today_provider = lambda: date(2026, 5, 15)
+    for kind in TaxKind:
+        assert window.controller.save_tax_reminder_switch(kind, ReminderSwitch.ON).success
+    window.overview.refresh()
+
+    active = [
+        (label, button)
+        for label, button in zip(
+            window.overview.tax_notes,
+            window.overview.tax_buttons,
+            strict=True,
+        )
+        if not label.isHidden()
+    ]
+    assert len(active) == 3
+    assert sum("：" in label.text() for label, _ in active) == 2
+    assert "另有 3 件稅務提醒。" in [label.text() for label, _ in active]
+    assert any("還有" in label.text() for label, _ in active)
+
+
+@pytest.mark.parametrize(
+    ("kind", "state", "start", "end", "today", "income_balance"),
+    [
+        (
+            TaxKind.FUEL_FEE,
+            ReminderState.OVERDUE,
+            date(2026, 7, 1),
+            date(2026, 7, 31),
+            date(2026, 8, 1),
+            None,
+        ),
+        (
+            TaxKind.FUEL_FEE,
+            ReminderState.OPEN,
+            date(2026, 7, 1),
+            date(2026, 7, 31),
+            date(2026, 7, 15),
+            None,
+        ),
+        (
+            TaxKind.INCOME_TAX,
+            ReminderState.OVERDUE,
+            date(2026, 5, 1),
+            date(2026, 5, 31),
+            date(2026, 6, 1),
+            1_234_567,
+        ),
+    ],
+    ids=("燃料費逾期", "燃料費期間中", "綜所稅逾期"),
+)
+def test_longest_tax_sentence_fits_its_action_row_geometry(
+    window,
+    monkeypatch,
+    kind: TaxKind,
+    state: ReminderState,
+    start: date,
+    end: date,
+    today: date,
+    income_balance: int | None,
+) -> None:
+    cycle = ReminderCycle(
+        kind=kind,
+        year=start.year,
+        window=Window(
+            kind=kind,
+            year=start.year,
+            start=start,
+            end=end,
+            estimated=True,
+            note=None,
+            source_ids=(),
+        ),
+        notify_from=start - timedelta(days=14),
+        overdue_until=end + timedelta(days=30),
+    )
+    view = ReminderView(
+        kind=kind,
+        state=state,
+        cycle=cycle,
+        mark=None,
+        last_year_paid=(
+            PaymentFact(count=2, total_minor=123_456, last_on="2025-07-31")
+            if kind is TaxKind.FUEL_FEE
+            else None
+        ),
+    )
+    estimate = (
+        Estimate(2025, (), (), None, None, income_balance, False, None, ())
+        if income_balance is not None
+        else None
+    )
+    overview = TaxOverview((view,), 0, None, 0, estimate)
+    monkeypatch.setattr(window.controller, "tax_overview", lambda: overview)
+    window.controller.today_provider = lambda: today
+    window.resize(1280, 760)
+    QApplication.processEvents()
+    window.overview.refresh()
+    QApplication.processEvents()
+    label = window.overview.tax_notes[0]
+
+    sentence = label.text()
+    # REQ-0011 §UI 2026-11-09：總覽不標預估；燃料費用正式短名。
+    assert "預估" not in sentence
+    if kind is TaxKind.FUEL_FEE:
+        assert "公路使用養護安全管理費" in sentence
+        assert "（原燃料費）" not in sentence
+        assert "（去年 123,456 元）" in sentence
+    else:
+        assert "估計應補 1,234,567 元" in sentence
+    assert label.sizeHint().width() <= label.width(), (
+        f"{kind.value}/{state.value}：句子需要 {label.sizeHint().width()} px，"
+        f"分到 {label.width()} px；{sentence}"
+    )

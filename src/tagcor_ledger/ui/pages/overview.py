@@ -2,8 +2,8 @@
 
 ## 這一頁回答什麼問題
 
-**「我現在總共有多少錢，還有什麼事沒處理？」** ——就這兩件。它刻意不提供任何操作，
-只有兩顆把你送到能處理的地方的按鈕。會在這裡做的事，就不該在這裡做。
+**「我現在總共有多少錢，還有什麼事沒處理？」** ——就這兩件。待辦只提供通往
+對應處理頁的按鈕，不在總覽直接改帳或設定。
 
 ## 三個容易做錯的決定
 
@@ -49,8 +49,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tagcor_ledger.domain.tax.estimate import UnsupportedReason
+from tagcor_ledger.domain.tax.kinds import TaxKind
+from tagcor_ledger.ui.controller.tax import TaxOverview
 from tagcor_ledger.ui.controller import LedgerController
-from tagcor_ledger.ui.formatting import display_date, group_digits, overview_account_values
+from tagcor_ledger.ui.formatting import (
+    TAX_VIEW_BUTTON,
+    display_date,
+    folded_sentence,
+    group_digits,
+    overview_account_values,
+    reminder_sentence,
+    status_sentence,
+)
 from tagcor_ledger.ui.widgets.asset_share import AssetShareChart
 from tagcor_ledger.ui.widgets.layout import SUMMARY_WIDTH, page_layout
 from tagcor_ledger.ui.widgets.table import RowsModel, setup_table
@@ -62,6 +73,7 @@ MAX_ACCOUNT_ROWS = 12
 class OverviewPage(QWidget):
     inbox_requested = Signal()
     balance_requested = Signal()
+    tax_requested = Signal(str)
 
     def __init__(self, controller: LedgerController) -> None:
         super().__init__()
@@ -74,6 +86,9 @@ class OverviewPage(QWidget):
         self.inbox_note = QLabel()
         self.inbox_button = QPushButton("去處理")
         self.gap_button = QPushButton("去盤點")
+        self.tax_notes = [QLabel() for _ in range(4)]
+        self.tax_buttons = [QPushButton(TAX_VIEW_BUTTON) for _ in range(4)]
+        self._tax_routes: list[str | None] = [None] * 4
         self.table = QTableView()
         self.model = RowsModel(
             ["帳戶", "目前餘額（TWD）"],
@@ -126,6 +141,16 @@ class OverviewPage(QWidget):
         layout.addWidget(todo_caption)
         layout.addLayout(self._action_row(self.inbox_note, self.inbox_button))
         layout.addLayout(self._action_row(self.gap_note, self.gap_button))
+        for row_index, (label, button) in enumerate(
+            zip(self.tax_notes, self.tax_buttons, strict=True)
+        ):
+            label.setObjectName("hintLabel")
+            layout.addLayout(self._action_row(label, button))
+            label.setVisible(False)
+            button.setVisible(False)
+            button.clicked.connect(
+                lambda _=False, row=row_index: self._request_tax(row)
+            )
         layout.addStretch()
 
         self.inbox_button.clicked.connect(lambda: self.inbox_requested.emit())
@@ -175,6 +200,57 @@ class OverviewPage(QWidget):
         self._show_deposit(snapshot["deposit"])
         self._show_inbox(int(snapshot["inbox_count"]))
         self._show_gap(snapshot["latest_gap"])
+        self._show_tax(snapshot["tax"])
+
+    def _show_tax(self, overview: TaxOverview) -> None:
+        today = self.controller.today_provider()
+        rows: list[tuple[str, str]] = []
+        for view in overview.reminders:
+            estimate = (
+                overview.income_tax_estimate
+                if view.kind is TaxKind.INCOME_TAX
+                else None
+            )
+            rows.append(
+                (
+                    reminder_sentence(view, today=today, estimate=estimate),
+                    self._reminder_route(overview, view.kind),
+                )
+            )
+        if overview.folded > 0:
+            rows.append((folded_sentence(overview.folded), "reminders"))
+        state = status_sentence(overview)
+        if state is not None:
+            rows.append((state, "data" if overview.problem is not None else "reminders"))
+
+        self._tax_routes = [None] * len(self.tax_notes)
+        for index, (label, button) in enumerate(zip(self.tax_notes, self.tax_buttons, strict=True)):
+            if index >= len(rows):
+                label.clear()
+                label.setVisible(False)
+                button.setVisible(False)
+                continue
+            sentence, route = rows[index]
+            label.setText(sentence)
+            label.setVisible(True)
+            button.setVisible(True)
+            self._tax_routes[index] = route
+
+    @staticmethod
+    def _reminder_route(overview: TaxOverview, kind: TaxKind) -> str:
+        if kind is TaxKind.INCOME_TAX and overview.income_tax_estimate is not None:
+            refused = set(overview.income_tax_estimate.refused)
+            if UnsupportedReason.INPUTS_MISSING in refused:
+                return "estimate"
+            if UnsupportedReason.UNMAPPED_INCOME in refused:
+                return "mapping"
+        return "reminders"
+
+    def _request_tax(self, row: int) -> None:
+        if 0 <= row < len(self._tax_routes):
+            tab = self._tax_routes[row]
+            if tab is not None:
+                self.tax_requested.emit(tab)
 
     def _show_chart(self, accounts: list[dict[str, Any]]) -> None:
         """畫圓環，並把「有帳戶餘額是負的」寫成一句話。

@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from tagcor_ledger.application.reference import ReferenceEntry
 from tagcor_ledger.application.tax.data import TaxDataStatus
 from tagcor_ledger.domain.tax.dataset import TaxSource
 from tagcor_ledger.domain.tax.estimate import (
@@ -77,6 +78,148 @@ INCOME_KIND_SHORT = {
 
 ESTIMATE_FOOTER = "這是估計，不是申報；以財政部稅額試算為準；不會改動帳本任何金額。"
 QUESTION_INSTRUCTION = "問稅務問題：請依 docs/operations/tax-questions.md 回答："
+TAX_PAGE_NOTE = "提醒與試算是估計，以主管機關公告與財政部稅額試算為準。"
+TAX_PAGE_TITLE = "稅務"
+TAX_KIND_SHORT_NAMES: dict[TaxKind, str] = {
+    **TAX_KIND_NAMES,
+    TaxKind.FUEL_FEE: "公路使用養護安全管理費",
+}
+TAX_REMINDER_HEADERS = ["稅目", "開關", "期間", "狀態", "去年繳款", "備註"]
+TAX_REMINDER_NOTE_LINES = (
+    "提醒只依法定期間觸發；期間內記了一筆對應這個稅目的支出，就算已繳。",
+    "繳款類別對應到稅目，在『所得歸類』分頁設定。",
+)
+TAX_DATA_SOURCE_HEADERS = ["來源", "發布機關", "發布日", "抓取", "SHA-256 前 12 碼", "網址"]
+TAX_TAB_LABELS = {
+    "reminders": "提醒",
+    "estimate": "試算",
+    "mapping": "所得歸類",
+    "data": "資料狀態",
+    "law": "法規參考",
+}
+TAX_SWITCH_OPTIONS = ("開", "關")
+TAX_REMINDER_SWITCH_LABEL = "提醒開關"
+TAX_REMINDER_ACTION_LABELS = ("標記已處理", "本年不適用", "取消標記")
+TAX_NO_FRESHNESS_PROBLEMS = "稅務資料是最新的。"
+TAX_NOT_REVIEWED = "—"
+TAX_COPY_BUTTON = "複製"
+TAX_COPIED = "已複製。"
+TAX_VIEW_BUTTON = "查看"
+TAX_UPDATE_TITLE = "更新稅務資料"
+TAX_QUESTION_TITLE = "問稅務問題"
+TAX_DATASET_LOCATION_LABEL = "資料集位置"
+TAX_DATA_SUMMARY_LABEL = "資料摘要"
+TAX_DATA_COVERAGE_LABEL = "涵蓋情形與規則生效日"
+TAX_DATA_FRESHNESS_LABEL = "資料新鮮度"
+TAX_DATA_SOURCES_LABEL = "資料來源"
+TAX_DATA_ESTIMATED_LABEL = "只有預估期間的稅目"
+TAX_LAW_NOTE = (
+    "這個分頁只查條文；稅額的估計在『試算』分頁，"
+    "數字來自 reference/tax/dataset.json，不是從條文推算。"
+)
+TAX_LAW_SEARCH_PLACEHOLDER = "搜尋條文、摘要或法規名稱，例如：存簿儲金、贈與"
+TAX_LAW_STALE_HTML = (
+    "<p><b>需複查</b>：這一篇超過半年沒有複查過，數字與條文可能已經修正。</p>"
+)
+TAX_LAW_HEADERS = ["法規", "條號", "標題", "版本", "複查"]
+TAX_LAW_TOPICS_LABEL = "主題"
+TAX_LAW_ALL_TOPICS = "全部主題"
+TAX_LAW_REFRESH = "重新整理"
+TAX_LAW_STATUS_HINT = "法規庫共 {count} 篇，建立於 {built_at}。條文原文抓自全國法規資料庫，每篇附來源網址與抓取時間。"
+TAX_LAW_MISSING_LOCATION = "預期位置：專案底下的 {shown}"
+TAX_LAW_STATUS_TEMPLATE = (
+    "共 {count} 篇，建立於 {built_at}。"
+    "條文原文抓自全國法規資料庫，每篇都附來源網址與抓取時間。"
+)
+
+
+def freshness_lines(problems: Sequence[FreshnessProblem]) -> list[str]:
+    """一個新鮮度問題一行；沒有問題時也給出明確狀態。"""
+    if not problems:
+        return [TAX_NO_FRESHNESS_PROBLEMS]
+    return [freshness_sentence(problem) for problem in problems]
+
+
+def tax_data_summary_lines(status: TaxDataStatus, *, law_entry_count: int | None) -> list[str]:
+    """資料複查與法規庫摘要，供資料狀態分頁逐行顯示。"""
+    reviewed = display_date(status.reviewed_at.isoformat()) if status.reviewed_at else TAX_NOT_REVIEWED
+    next_review = (
+        display_date(status.next_review_on.isoformat())
+        if status.next_review_on
+        else TAX_NOT_REVIEWED
+    )
+    oldest = (
+        display_date(status.law_oldest_reviewed_at.isoformat())
+        if status.law_oldest_reviewed_at
+        else TAX_NOT_REVIEWED
+    )
+    entries = str(law_entry_count) if law_entry_count is not None else TAX_NOT_REVIEWED
+    return [
+        f"資料複查日：{reviewed}",
+        f"下次複查日：{next_review}",
+        f"法規庫條數：{entries}",
+        f"法規庫最舊複查日：{oldest}",
+    ]
+
+
+def estimated_window_lines(status: TaxDataStatus) -> list[str]:
+    """指出目前只有預估期間的稅目與年度。"""
+    return [
+        f"{year} 年 {TAX_KIND_NAMES[kind]}只有預估期間。"
+        for kind, year in status.missing_windows
+    ]
+
+
+def tax_law_topic_label(title: str, count: object) -> str:
+    return f"{title}（{count}）"
+
+
+def tax_law_status_hint(entry_count: object, built_at: object) -> str:
+    return TAX_LAW_STATUS_HINT.format(count=entry_count, built_at=built_at)
+
+
+def tax_law_missing_text(message: str, how: str, shown_path: str) -> str:
+    location = TAX_LAW_MISSING_LOCATION.format(shown=shown_path)
+    return f"{message}\n{how}\n{location}"
+
+
+def tax_law_entry_values(entry: ReferenceEntry, *, stale: bool) -> list[str]:
+    return [
+        entry.law_name,
+        f"第 {entry.article} 條",
+        entry.title,
+        entry.amended_date,
+        "需複查" if stale else "已複查",
+    ]
+
+
+def tax_law_entry_html(entry: ReferenceEntry, *, stale: bool) -> str:
+    """法規條文詳細內容；資料庫欄位一律逸出，只轉摘要的 Markdown 粗體。"""
+    stale_note = TAX_LAW_STALE_HTML if stale else ""
+    return (
+        f"<h2>{_escape(entry.heading)}　{_escape(entry.title)}</h2>"
+        f"{stale_note}"
+        f"<p><b>白話摘要</b><br>{_html(entry.plain)}</p>"
+        f"<p><b>對這個帳本的意義</b><br>{_html(entry.ledger_note)}</p>"
+        "<p><b>條文原文</b>（摘要與原文有出入時，以原文為準）</p>"
+        f"<pre>{_escape(entry.body)}</pre>"
+        f"<hr><p>主管機關：{_escape(entry.agency)}　版本：{_escape(entry.amended_date)}　"
+        f"法律狀態：{_escape(entry.legal_status)}</p>"
+        f"<p>來源：{_escape(entry.source_url)}<br>"
+        f"抓取時間：{_escape(entry.fetched_at)}　複查日期：{_escape(entry.reviewed_at)}</p>"
+    )
+
+
+def _escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _html(text: str) -> str:
+    """摘要是我們自己寫的 Markdown 粗體，轉成 HTML；其餘一律逸出。"""
+    escaped = _escape(text)
+    parts = escaped.split("**")
+    rebuilt = [f"<b>{part}</b>" if index % 2 else part for index, part in enumerate(parts)]
+    return "".join(rebuilt).replace("\n", "<br>")
 
 
 def reminder_sentence(
@@ -94,7 +237,7 @@ def reminder_sentence(
     }:
         raise ValueError("只有有期間的即將開始、期間中與已過期限提醒能顯示在總覽")
 
-    name = TAX_KIND_NAMES[view.kind]
+    name = TAX_KIND_SHORT_NAMES[view.kind]
     action = TAX_KIND_ACTIONS[view.kind]
     start = display_date(cycle.window.start.isoformat())
     due = display_date(cycle.window.end.isoformat())
@@ -116,8 +259,6 @@ def reminder_sentence(
     elif view.last_year_paid is not None:
         paid = view.last_year_paid
         additions.append(f"（去年 {group_digits(paid.total_minor)} 元）")
-    if cycle.window.estimated:
-        additions.append("（日期為預估）")
     return sentence + "".join(additions) + "。"
 
 

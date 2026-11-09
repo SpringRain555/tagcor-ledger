@@ -315,7 +315,7 @@ def test_the_minimum_width_does_not_depend_on_where_the_project_lives(
     assert not deep.exists(), "這條測試要的正是「檔案不存在」那個分支"
 
     window = _open(qtbot, tmp_path)
-    hint = window.reference.minimumSizeHint()
+    hint = window.tax.minimumSizeHint()
     assert (hint.width(), hint.height()) <= PAGE_BUDGET, (
         f"法規庫路徑長度洩漏到版面上了：最小尺寸 {hint.width()}×{hint.height()}，"
         f"而那條路徑有 {len(str(deep))} 個字元。完整路徑要放 tooltip，不是標籤本文。"
