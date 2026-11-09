@@ -13,8 +13,8 @@ from tagcor_ledger.domain.tax.arithmetic import Rounding
 from tagcor_ledger.domain.tax.dataset_parse import (
     TaxDatasetInvalid,
     parse_tax_dataset,
-    validate_tax_dataset,
 )
+from tagcor_ledger.domain.tax.dataset_validate import validate_tax_dataset
 from tagcor_ledger.domain.tax.kinds import TaxKind
 
 
@@ -59,6 +59,21 @@ def _skeleton() -> dict[str, object]:
     [
         (("schema_version",), 2, "schema_version："),
         (("reviewed_at",), "2026-02-30", "reviewed_at："),
+        (
+            ("reviewed_at",),
+            "2027-01-01",
+            "next_review_on：已複查的資料要寫下次複查日，而且要晚於 reviewed_at。",
+        ),
+        (
+            ("next_review_on",),
+            None,
+            "next_review_on：已複查的資料要寫下次複查日，而且要晚於 reviewed_at。",
+        ),
+        (
+            ("next_review_on",),
+            "2026-11-01",
+            "next_review_on：已複查的資料要寫下次複查日，而且要晚於 reviewed_at。",
+        ),
         (("sources", 0, "id"), "bad_id", "sources[0].id："),
         (("sources", 1, "id"), "calendar-example", "sources[1].id：來源識別字重複"),
         (("sources", 0, "url"), "http://example.invalid/calendar", "sources[0].url："),
@@ -78,6 +93,21 @@ def _skeleton() -> dict[str, object]:
         (("income_tax", "2025", "brackets", "rows", 1, "up_to"), 500000, "rows[1].up_to："),
         (("income_tax", "2025", "brackets", "rows", 4, "up_to"), 6000000, "rows[4].up_to："),
         (("income_tax", "2025", "brackets", "rows", 1, "rate_ppm"), 50000, "rows[1].rate_ppm："),
+        (
+            ("income_tax", "2025", "brackets", "rows", 0, "rate_ppm"),
+            0,
+            "rate_ppm：比率必須大於 0、小於 1000000（100%）。",
+        ),
+        (
+            ("interest_withholding", 0, "rate_ppm"),
+            1_000_000,
+            "interest_withholding[0].rate_ppm：比率必須大於 0、小於 1000000（100%）。",
+        ),
+        (
+            ("nhi_supplementary_premium", 0, "rate_ppm"),
+            0,
+            "nhi_supplementary_premium[0].rate_ppm：比率必須大於 0、小於 1000000（100%）。",
+        ),
         (("income_tax", "2025", "brackets", "rows", 0, "progressive_difference"), 1, "rows[0].progressive_difference："),
         (("income_tax", "2025", "brackets", "rows", 2, "progressive_difference"), 147000, "rows[2].progressive_difference："),
         (("interest_withholding", 0, "rounding"), "ceil", "interest_withholding[0].rounding："),
