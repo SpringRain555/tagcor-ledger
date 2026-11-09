@@ -24,6 +24,31 @@
 
 ---
 
+## 2026-11-10 中文在 agent 改檔的途中變成一排 `?`，而 Verify 全綠
+
+**情境**：驗收 Codex 交回來的稅務頁（派工單 T7 與續派）。逐檔讀新檔時，`ui/pages/tax_data.py`
+第一行是 `"""` 夾著 22 個 `?`。
+
+**做了什麼**：Codex 的紀錄裡，這個檔一開始由 `apply_patch` 寫出、docstring 是正常的中文；
+之後有一條 PowerShell 指令用 `(Get-Content -Raw).Replace(...) | Set-Content` 改過它，續派那一輪
+讀到時已經是問號。確切是哪一步換掉的沒有定論。
+
+**為什麼失敗**：Windows PowerShell 5.1 讀寫文字的預設都不是 UTF-8 —— `Get-Content` 不帶
+`-Encoding` 用系統字碼頁讀無 BOM 的 UTF-8，字串經管線交給原生程式用 `$OutputEncoding`
+（預設 US-ASCII）。中文經過其中任何一段都會被換掉，而且**不報錯**。也沒有一條守門看得到：
+簡體字守門只認簡體字，`?` 是合法字元；測試又是從常數取值，所以就算壞的是 `ui/formatting/`
+的畫面文字，測試也照樣綠，畫面卻是一排問號。Verify 1,169 passed。
+
+**結論**：`tests/unit/test_traditional_chinese.py` 加 `test_no_encoding_loss_in_project`，掃連續
+三個以上的 `?` 與 U+FFFD；壞掉的這一檔當陽性對照（先紅、修好後綠）。另外對全專案做過一次
+「UTF-8 被當 Big5 讀」的特徵掃描（Big5 編回去能解成 UTF-8 中文的行），323 個檔沒有其他受害者。
+給 Codex 的派工單加一條：改含中文的檔只用 `apply_patch`。
+
+**不要再做**：不要用 `Get-Content`／`Set-Content` 管線改含中文的檔，也不要把含中文的字串經管線
+交給原生程式。Verify 綠不代表文字沒壞 —— 驗收要讀過新檔。
+
+---
+
 ## 2026-10-10 比座標相等的測試沒標 `geometry`，CI 紅了五天、兩次推送都沒人看到
 
 **情境**：使用者要求推上 GitHub。推完看了一眼 Actions —— 紅的，而且 2026-10-05 那次推送就紅在同一條。

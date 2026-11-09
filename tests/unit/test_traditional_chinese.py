@@ -32,6 +32,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,10 @@ SIMPLIFIED_ONLY = set(
 
 SELF = Path(__file__).resolve()
 
+# 中文被編碼弄丟之後的兩種樣子：經過 ASCII 編碼的管線是一個字變一個 `?`，
+# 用 `errors="replace"` 解碼是 U+FFFD。寫成字元類別，這一行自己不會中。
+ENCODING_LOSS = re.compile("[?]{3,}|�")
+
 
 def _scanned_files() -> list[Path]:
     files: list[Path] = []
@@ -137,6 +142,33 @@ def test_no_simplified_chinese_in_project() -> None:
 
     if offenders:
         pytest.fail("偵測到簡體字：\n" + "\n".join(offenders))
+
+
+def test_no_encoding_loss_in_project() -> None:
+    """守門：中文在寫檔途中被換成一排 `?`。
+
+    PowerShell 5.1 的 `$OutputEncoding` 預設是 US-ASCII，中文經過它的管線會一個字變一個
+    `?` —— 不報錯、不是亂碼，所以上面的簡體字守門看不出來。2026-11-10 驗收時抓到一次：
+    `ui/pages/tax_data.py` 第一行 docstring 是 22 個 `?`。那一行剛好只是 docstring；
+    同樣的事發生在 `ui/formatting/` 的畫面文字上，測試從常數取值照樣是綠的，畫面卻是一排問號。
+    """
+    assert ENCODING_LOSS.search('"""' + "?" * 22 + '"""')
+    assert ENCODING_LOSS.search("損�壞")
+    assert not ENCODING_LOSS.search('meta.get("entry_count", "?") 或「真的嗎??」')
+
+    offenders: list[str] = []
+    for path in _scanned_files():
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for number, line in enumerate(lines, 1):
+            if ENCODING_LOSS.search(line):
+                relative = path.relative_to(PROJECT_ROOT)
+                offenders.append(f"{relative}:{number} -> {line.strip()[:80]}")
+
+    if offenders:
+        pytest.fail("偵測到被編碼弄丟的文字（一排 ? 或 U+FFFD）：\n" + "\n".join(offenders))
 
 
 def test_scan_actually_covers_files() -> None:
