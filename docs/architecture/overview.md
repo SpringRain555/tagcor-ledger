@@ -10,7 +10,7 @@
 ```mermaid
 flowchart TD
     UI["ui/<br/>PySide6 頁面與 widget"]
-    CTRL["ui/controller/<br/>LedgerController<br/><i>UI 唯一的入口</i>"]
+    CTRL["ui/controller/<br/>LedgerController<br/>UI 唯一的入口"]
     APP["application/<br/>use case ＋ Result"]
     INFRA["infrastructure/<br/>stores・migration・備份・CSV"]
     DOM["domain/<br/>Money・帳戶・類別・交易・定存"]
@@ -80,7 +80,8 @@ src/tagcor_ledger/
 │   ├── first_run_dialog.py  第一次啟動問資料放哪裡（ADR-0018），在主視窗之前
 │   ├── colors.py       色票的正本
 │   ├── pages/          一個檔案一個畫面（或一頁裡的一塊：inbox.py 是餘額盤點底下的待確認、
-│   │                   category_items.py 是並排類別與項目的那個分頁）
+│   │                   category_items.py 是並排類別與項目的那個分頁、
+│   │                   tax.py 是稅務頁的外殼而 tax_*.py 是它的分頁）
 │   └── widgets/        sidebar、layout、table、forms、filters、simple_form、
 │                       asset_share、template_dialog、deposit_dialog、
 │                       reorder_dialog、sort_editor、confirm（確認框）、notice（提示框）
@@ -161,6 +162,8 @@ sequenceDiagram
 
 `ui/pages/` 底下的頁面**彼此不 import**：要互動就往上發 Qt Signal，由 `main_window.py`
 接起來。所以「按了 A 會影響 B」只會出現在一個檔案裡。
+唯一的例外是**一頁和它自己的區塊或分頁**（`balance_snapshot.py` 帶 `inbox.py`、`tax.py` 帶 `tax_*.py`）；
+分頁之間仍然不互相 import —— 稅務頁的分頁要彼此跟上，靠的是切過去時重算（`tabs.currentChanged`）。
 
 `ui/navigation.py` 的 `PageId` 是頁面的身分，顯示文字在 `LABELS`。
 **不得拿顯示文字當查表的 key** —— 舊版是 `show_page("快速記帳")`，改一個字就是

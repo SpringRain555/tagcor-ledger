@@ -24,13 +24,13 @@
                          "document":  "data-model.md",
                          "index":  1,
                          "svg":  "data-model-1.svg",
-                         "sha256":  "5df8d8a378f7616e1beae034a0a1890849cbf63b4920a809200ac804910297fa"
+                         "sha256":  "48ab730419dcd8144f0fd0955b81a86c6fa5dcc5428954e1d441d037d9cd2a1e"
                      },
                      {
                          "document":  "overview.md",
                          "index":  1,
                          "svg":  "overview-1.svg",
-                         "sha256":  "6ee7204ca5950210bc19e3d283bf4bc2f3328a5294b0cd0cbf3fc1c518cf2f2e"
+                         "sha256":  "0eed1ec38d06a8f901fb1b1cd3c5a0e784f9f6dcdcd9124fb0c776f051518dfa"
                      },
                      {
                          "document":  "overview.md",
@@ -69,10 +69,16 @@
                          "sha256":  "a648f0c07196bb6039b11649dfd8448c52e1d7c83757f62fd0aeb9225a748707"
                      },
                      {
+                         "document":  "state-machines.md",
+                         "index":  6,
+                         "svg":  "state-machines-6.svg",
+                         "sha256":  "b4537bdd9f306bfede4c103a616a8a945cf180955646f1cb51c088ee72ad6710"
+                     },
+                     {
                          "document":  "ui-workflows.md",
                          "index":  1,
                          "svg":  "ui-workflows-1.svg",
-                         "sha256":  "d837550b9fefbe584c009e4e2ff18185af1e7460c70ab427f17f7919f86ab9aa"
+                         "sha256":  "7cbcb88bc48225526ba03ebe29ebff6f0156b5b9b6117ebefcb867cd857f4b28"
                      },
                      {
                          "document":  "ui-workflows.md",

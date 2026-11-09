@@ -544,6 +544,37 @@ stateDiagram-v2
 | 9 | 今天不晚於期間截止日 → `期間中` |
 | 10 | 仍在逾期寬限期內 → `已過期限` |
 
+下圖只畫開關為開、有週期之後的**一個週期**；開關與「沒有期間資料」先判斷（優先 1–3）。
+**狀態是每次現算的**：箭頭表示「日期或帳本變了之後，下一次算出來會是哪一個」，不是存起來的轉移。
+付款判定從提醒起日（`notify_from`）開始，所以「未到」不會直接變成「已繳」。過了逾期寬限就換下一個週期；
+稅務資料還沒有下一期的期間時，顯示「沒有期間資料」。
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "未到" as DORMANT
+    state "即將開始" as UPCOMING
+    state "期間中" as OPEN
+    state "已過期限" as OVERDUE
+    state "已繳" as PAID
+    state "已處理／本年不適用" as MARKED
+
+    [*] --> DORMANT
+    DORMANT --> UPCOMING : 到了提醒起日
+    UPCOMING --> OPEN : 到了期間起日
+    OPEN --> OVERDUE : 過了截止日
+    OVERDUE --> [*] : 過了逾期寬限
+    UPCOMING --> PAID : 帳本出現對應稅目的支出
+    OPEN --> PAID : 帳本出現對應稅目的支出
+    OVERDUE --> PAID : 帳本出現對應稅目的支出
+    UPCOMING --> MARKED : 使用者標記
+    OPEN --> MARKED : 使用者標記
+    OVERDUE --> MARKED : 使用者標記
+    MARKED --> OPEN : 取消標記（回到依日期與帳本現算）
+    PAID --> [*] : 換下一個週期
+    MARKED --> [*] : 換下一個週期
+```
+
 | 操作 | 狀態資料變化 |
 |---|---|
 | 開／關提醒 | 立即儲存該稅目的開關；關閉時狀態優先顯示「不提醒」 |

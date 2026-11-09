@@ -43,6 +43,7 @@ erDiagram
     accounts ||--o{ deposit_contracts : "定存帳戶"
     deposit_contracts ||--|{ deposit_terms : "續存產生新的一期"
     deposit_terms ||--o{ deposit_events : "到期／領息，待確認"
+    categories ||--o{ tax_category_mappings : "所得歸類（刪類別時 cascade）"
 
     accounts {
         text account_id PK
@@ -67,6 +68,16 @@ erDiagram
         text posting_id PK
         int amount_minor "支出負、收入正"
         int sequence "轉帳靠它分辨來源與目的"
+    }
+    deposit_events {
+        int actual_amount_minor "實際入帳（淨額）"
+        int withheld_tax_minor "v14，NULL＝沒記錄"
+        int nhi_premium_minor "v14，NULL＝沒記錄"
+    }
+    tax_category_mappings {
+        text category_id PK "FK，ON DELETE CASCADE"
+        text flow PK "income｜expense"
+        text tax_kind "所得類別或繳款稅目"
     }
 ```
 
