@@ -46,7 +46,11 @@
 | `house_tax` | 房屋稅 | 繳納 | 5/1–5/31 |
 | `land_value_tax` | 地價稅 | 繳納 | 11/1–11/30 |
 | `vehicle_license_tax` | 使用牌照稅 | 繳納 | 4/1–4/30 |
-| `fuel_fee` | 汽車燃料使用費 | 繳納 | 7/1–7/31 |
+| `fuel_fee` | 公路使用養護安全管理費（原燃料費） | 繳納 | 7/1–7/31（自用車及機車） |
+
+**燃料費 2026 年改名**：《汽車燃料使用費徵收及分配辦法》115-05-21 修正名稱及全文（交通部交運字第 1155005949 號令），
+現名《公路使用養護安全管理費徵收及分配辦法》；第 6 條「自用車及機車於每年七月一次徵收」，開徵前公告起迄日期。
+識別字 `fuel_fee` 沿用（內部鍵，不跟著法規名稱改），畫面顯示現行名稱。
 
 存款利息的扣繳與補充保費**不是提醒**，是定存待確認的建議金額與試算的輸入（§存款利息）。
 
@@ -113,7 +117,6 @@ UTF-8、**無 BOM**、繁體中文。金額一律整數元；比率一律 **ppm 
       "standard_deduction_single":     {"value": 0, "source_ids": ["..."]},
       "salary_special_deduction_cap":  {"value": 0, "source_ids": ["..."]},
       "savings_investment_cap":        {"value": 0, "source_ids": ["..."]},
-      "basic_living_expense":          {"value": 0, "source_ids": ["..."]},
       "writing_lecture_exemption_cap": {"value": 0, "source_ids": ["..."]},
       "foreign_income_amt_threshold":  {"value": 0, "source_ids": ["..."]},
       "amt_basic_exemption":           {"value": 0, "source_ids": ["..."]},
@@ -126,6 +129,9 @@ UTF-8、**無 BOM**、繁體中文。金額一律整數元；比率一律 **ppm 
       },
       "tax_rounding": {"value": "half_up", "source_ids": ["..."]}
     }
+  },
+  "basic_living_expense": {
+    "2025": {"value": 0, "source_ids": ["..."]}
   },
   "interest_withholding": [
     {"effective_from": "2010-01-01", "rate_ppm": 100000, "exempt_if_tax_at_most": 2000,
@@ -140,8 +146,12 @@ UTF-8、**無 BOM**、繁體中文。金額一律整數元；比率一律 **ppm 
 
 （上面的 `0` 與 `...` 是格式示意，不是真值。）
 
-- `calendar.years` 的鍵是**期間所在的西元年**；`income_tax` 的 `"2026"` 是「2026 年申報 2025 年度（民國 114 年度）」。
-- `income_tax` 的鍵是**所得年度**（西元）。
+- `calendar.years` 的鍵是**期間所在的西元年**：`calendar.years["2026"].income_tax` 是 2026 年 5 月申報 2025 年度（民國 114 年度）的那一期。
+- `income_tax` 與 `basic_living_expense` 的鍵是**所得年度**（西元）：`income_tax["2025"]` 是民國 114 年度。
+- **基本生活費是另一條序列，因為公告時程差一年**：所得年度 X 的免稅額、扣除額、級距，財政部在 **X−1 年** 11 月底公告；
+  X 的基本生活費要到 **X 年** 11 月底才公告（納稅者權利保護法第 4 條，依主計總處前一年的每人可支配所得中位數）。
+  放在同一個 `income_tax[X]` 裡，X 年度的參數就會大半年都不齊，而那段時間根本沒有東西可以補（2026-11-09 查證：
+  114 年度的基本生活費與 115 年度的免稅額等都是 2025-11-27 公告）。
 - `typical` 是法定的典型期間、**不含假日順延**；`years` 是公告過的實際期間。順延只會延後截止，所以用典型期間當預估永遠偏安全。
 - 規則清單（`interest_withholding`、`nhi_supplementary_premium`）依 `effective_from` 取「那一天適用的那一條」。
 - **每個欄位都要寫出來，沒有值就寫 `null`、不要省略。** 可以是 `null` 的只有：`reviewed_at`、`next_review_on`、
@@ -155,7 +165,8 @@ UTF-8、**無 BOM**、繁體中文。金額一律整數元；比率一律 **ppm 
 3. 每個被引用的 source id 都存在；**沒有沒被引用的 source**；每個值物件的 `source_ids` 非空。
 4. `typical` 是合法 `MM-DD` 且 start ≤ end（不跨年）；`years` 的鍵是四位數年份、日期落在該年內、start ≤ end；稅目只能是上表五種。
 5. 金額是整數（**拒絕布林值**）且 ≥ 0；`rate_ppm` 是整數且 0 < `rate_ppm` < 1,000,000（稅率不會是 0 或 100% 以上，
-   10% 多打一個 0 就會被抓到）；`exemption_70_plus` ≥ `exemption`。
+   10% 多打一個 0 就會被抓到）；`exemption_70_plus` ≥ `exemption`；`basic_living_expense` 是物件（可以是 `{}`）、鍵是四位數所得年度、
+   每個值照金額與 `source_ids` 的規則。
 6. 級距：至少 2 列；`up_to` 嚴格遞增、最後一列是 `null`；`rate_ppm` 嚴格遞增；第一列累進差額為 0；
    第 i 列累進差額 = 第 i−1 列累進差額 + 第 i−1 列 `up_to` ×（第 i 列 − 第 i−1 列 `rate_ppm`）÷ 1,000,000，**必須整除且相等**
    —— 抄錯一個數字就會被抓到。
@@ -227,7 +238,7 @@ DDL 與欄位細節的權威是 [資料模型](../architecture/data-model.md)；
 | `DATASET_MISSING` | `dataset.json` 不在 | 稅務資料不在，稅務提醒與試算暫停。 |
 | `DATASET_INVALID` | 讀不了或驗證不過 | 稅務資料格式有誤，稅務提醒與試算暫停。 |
 | `NOT_POPULATED` | `reviewed_at` 是 `null` | 稅務資料還沒建立。 |
-| `PARAMETERS_MISSING` | 缺 `income_tax[今年−1]` 或 `income_tax[今年]`；12/15 起也要 `income_tax[今年+1]` | 稅務資料缺 {年} 年度的參數，該更新了。 |
+| `PARAMETERS_MISSING` | 缺 `income_tax[今年−1]` 或 `income_tax[今年]`（12/15 起也要 `income_tax[今年+1]`）；或缺 `basic_living_expense[今年−1]`（12/15 起也要 `basic_living_expense[今年]`）。{年} 是兩者缺的年度的聯集 | 稅務資料缺 {年} 年度的參數，該更新了。 |
 | `REVIEW_DUE` | 今天 ≥ `next_review_on` | 稅務資料該複查了（預定 {日期}）。 |
 | `LAW_REVIEW_DUE` | 今天在今年綜所稅期間的 [開始日 − 30 天, 截止日] 之內，且法規庫最舊的 `reviewed_at` 早於今年 1/1 | 報稅季前，法規參考庫該全面複查一次。 |
 
@@ -255,7 +266,8 @@ DDL 與欄位細節的權威是 [資料模型](../architecture/data-model.md)；
 | 定存利息被扣的所得稅與補充保費 | 同一個查詢 `LEFT JOIN deposit_events`（狀態為已確認、`transaction_id` 指到那筆收入） |
 | 申報狀況、受扶養人數、70 歲以上 | `tax_year_inputs[所得年度]`（使用者填） |
 | 扣繳憑單的給付總額與扣繳稅額 | `tax_year_overrides[所得年度][類別]`（使用者填，空白＝用帳本） |
-| 免稅額、扣除額上限、基本生活費、門檻、級距、進位 | `dataset.income_tax[所得年度]` |
+| 免稅額、扣除額上限、門檻、級距、進位 | `dataset.income_tax[所得年度]` |
+| 基本生活費 | `dataset.basic_living_expense[所得年度]`（當年 11 月底才公告；沒有就拒算 `basic_living_pending`） |
 
 **加總一律在 SQL 裡做**（CLAUDE.md），每個新查詢要有 `EXPLAIN QUERY PLAN` 測試。
 
@@ -273,7 +285,7 @@ DDL 與欄位細節的權威是 [資料模型](../architecture/data-model.md)；
 7. 綜合所得總額 G ＝ S ＋ I ＋ P ＋ O。
 8. 人數 n ＝ 1 ＋ 受扶養人數；70 歲以上人數 s ＝ 本人 ＋ 受扶養人中 70 歲以上；免稅額 E ＝ (n − s) × 免稅額 ＋ s × 70 歲免稅額。
 9. 標準扣除 Std ＝ 單身標準扣除額；儲蓄投資 Sav ＝ min(I, 儲蓄投資上限)。
-10. 基本生活費差額 B ＝ max(0, 基本生活費 × n − (E ＋ Std ＋ Sav))。（其他會進這個比較基準的特別扣除都在拒算清單裡，所以基準是完整的。）
+10. 基本生活費差額 B ＝ max(0, `basic_living_expense[所得年度]` × n − (E ＋ Std ＋ Sav))。（其他會進這個比較基準的特別扣除都在拒算清單裡，所以基準是完整的。）
 11. 所得淨額 N ＝ max(0, G − E − Std − Sav − B)；N > 最低稅負基本所得額免稅額 → 拒算。
 12. 找第一個 `up_to` 為 `null` 或 N ≤ `up_to` 的級距 k；應納稅額 T ＝ max(0, apply_rate(N, rate_k, 進位) − 累進差額_k)。
 13. 已扣繳 W ＝ Σ（`ov(k).扣繳稅額`，沒有就 0）for k ∈ {salary, prize, writing_lecture} ＋（`ov(interest_taxable).扣繳稅額` ?? 帳上記錄的利息扣繳）。
@@ -286,6 +298,7 @@ DDL 與欄位細節的權威是 [資料模型](../architecture/data-model.md)；
 | 原因 | 使用者能怎麼辦 |
 |---|---|
 | `dataset_unavailable`、`parameters_missing` | 照資料狀態分頁的指示更新資料 |
+| `basic_living_pending` | 等財政部 11 月底公告那一年的基本生活費，再照手冊補資料（參數缺的時候只報 `parameters_missing`） |
 | `inputs_missing` | 填這一年的申報狀況（沒填過的年度從前一年預填，**按「儲存並試算」才算**） |
 | `unmapped_income` | 到所得歸類分頁把收入歸類 |
 | `with_spouse`、`dependent_of_other`、`dependent_income`、`itemized_deduction`、`other_special_deductions` | 不支援，請改用財政部稅額試算 |
@@ -349,7 +362,7 @@ DDL 與欄位細節的權威是 [資料模型](../architecture/data-model.md)；
 | 分頁 | 內容 |
 |---|---|
 | 提醒 | 五個稅目的開關（立即存）；表：稅目｜期間（公告／預估）｜狀態｜去年繳款｜備註；按鈕：標記已處理／本年不適用／取消標記 |
-| 試算 | 左：年度（1～6 月預設去年度，之後預設今年並標「年度進行中」）、申報方式、扣除方式、其他特別扣除、受扶養人有所得、本人 70 歲以上、受扶養人數與其中 70 歲以上、四類扣繳憑單（給付總額／扣繳稅額）、財政部結果、「儲存並試算」。右：狀態行、明細表（步驟｜金額｜依據）、固定頁尾 |
+| 試算 | 左：年度（預設＝參數與基本生活費都齊的最近一個所得年度、不晚於今年 —— 基本生活費 11 月底才公告，所以通常 1～11 月是去年度、12 月起是今年度；今年度標「年度進行中」）、申報方式、扣除方式、其他特別扣除、受扶養人有所得、本人 70 歲以上、受扶養人數與其中 70 歲以上、四類扣繳憑單（給付總額／扣繳稅額）、財政部結果、「儲存並試算」。右：狀態行、明細表（步驟｜金額｜依據）、固定頁尾 |
 | 所得歸類 | 年度選擇（只影響筆數與金額欄，歸類本身不分年度）；頂部「{年}：N 筆收入（X 元）未歸類」；表：類別｜項目｜收入算作｜支出算作｜該年收入｜狀態（已歸類／覆蓋類別／沿用類別：X／未歸類），未歸類排最上；選一列按「設定歸類…」或雙擊 → 兩個下拉（收入算作、支出算作），每個所得類別附一句說明與法源 |
 | 資料狀態 | dataset 位置（只顯示最後兩層，完整路徑放 tooltip）、上次複查與下次複查、各年度涵蓋情形、規則生效日、問題清單；來源表（來源｜發布｜抓取｜SHA-256 前 12 碼｜網址，純文字）；兩句可複製的指示：「更新稅務資料」與「問稅務問題：請依 docs/operations/tax-questions.md 回答：＿＿」；法規庫條數與最舊的複查日 |
 | 法規參考 | 原本的法規參考頁（拿掉標題），需複查改由 controller 算、用台北日期 |

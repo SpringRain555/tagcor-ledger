@@ -4,7 +4,12 @@ from enum import StrEnum
 
 
 class TaxKind(StrEnum):
-    """稅務提醒使用的稅目。"""
+    """稅務提醒使用的稅目。
+
+    `FUEL_FEE` 的值留在 `fuel_fee`：燃料費 2026-05-21 改名為「公路使用養護安全管理費」
+    （《公路使用養護安全管理費徵收及分配辦法》，原《汽車燃料使用費徵收及分配辦法》），
+    但這個值是帳本與設定鍵裡的內部識別字，不跟著法規名稱改；畫面顯示的是 `TAX_KIND_NAMES`。
+    """
 
     INCOME_TAX = "income_tax"
     HOUSE_TAX = "house_tax"
@@ -18,7 +23,7 @@ TAX_KIND_NAMES = {
     TaxKind.HOUSE_TAX: "房屋稅",
     TaxKind.LAND_VALUE_TAX: "地價稅",
     TaxKind.VEHICLE_LICENSE_TAX: "使用牌照稅",
-    TaxKind.FUEL_FEE: "汽車燃料使用費",
+    TaxKind.FUEL_FEE: "公路使用養護安全管理費（原燃料費）",
 }
 
 TAX_KIND_ACTIONS = {
