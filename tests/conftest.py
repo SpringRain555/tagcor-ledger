@@ -22,9 +22,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from copy import deepcopy
+from datetime import timedelta
+import json
 from pathlib import Path
 
 import pytest
+
+from tagcor_ledger.domain.tax.dataset_validate import validate_tax_dataset
+from tagcor_ledger.infrastructure.clock import today_taipei
 
 USER_DIR_FUNCTIONS: tuple[tuple[str, str, str], ...] = (
     ("tagcor_ledger.app.paths", "user_data_dir", "data"),
@@ -54,3 +60,49 @@ def fake_user_dirs(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
         patch.setattr(PROGRAM_ROOT_FUNCTION, lambda: root / "program")
         patch.delenv(DATA_DIR_ENV, raising=False)
         yield root
+
+
+@pytest.fixture(scope="session", autouse=True)
+def fake_tax_dataset(fake_user_dirs: Path) -> Iterator[Path]:
+    """固定 App 測試使用的稅務資料，避免公開 dataset 年更改動測試結果。
+
+    行為測試不得經 App 預設路徑讀 repo 的真實資料集；否則公告更新會讓 UI 與提醒測試
+    隨年度變色。需要檢查具體資料或日期的測試，應明確傳入自己的 fixture 路徑。
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    sample_path = repo_root / "tests" / "fixtures" / "tax" / "sample.json"
+    sample = json.loads(sample_path.read_text(encoding="utf-8"))
+    fake = deepcopy(sample)
+    today = today_taipei()
+    fake["reviewed_at"] = today.isoformat()
+    fake["next_review_on"] = (today + timedelta(days=366)).isoformat()
+    fake["notes"] = ["測試用的假資料，數字只為了測試，不是任何年度的公告值"]
+    fake["sources"] = [deepcopy(next(source for source in sample["sources"] if source["id"] == "income-example"))]
+    fake["calendar"] = {"typical": {}, "years": {}}
+    fake["income_tax"] = {
+        str(year): deepcopy(sample["income_tax"]["2025"])
+        for year in (today.year - 1, today.year, today.year + 1)
+    }
+    fake["basic_living_expense"] = {
+        str(year): deepcopy(sample["basic_living_expense"]["2025"])
+        for year in (today.year - 1, today.year, today.year + 1)
+    }
+
+    def use_one_source(value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: ["income-example"] if key == "source_ids" else use_one_source(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [use_one_source(item) for item in value]
+        return value
+
+    fake = use_one_source(fake)
+    problems = validate_tax_dataset(fake)
+    assert not problems, problems
+    path = fake_user_dirs / "fake-tax-dataset.json"
+    path.write_text(json.dumps(fake, ensure_ascii=False, indent=2), encoding="utf-8")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("TAGCOR_TAX_DATA", str(path))
+        yield path

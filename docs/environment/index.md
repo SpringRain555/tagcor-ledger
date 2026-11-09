@@ -111,6 +111,7 @@ offscreen 沒有中文字型，中文會渲染成豆腐塊。
 | `PYTHONIOENCODING` | Python | `tools\Launch.ps1` 設成 `utf-8`：導向檔案時 Python 會用系統地區編碼（cp950），路徑含中文會亂碼 |
 | `TAGCOR_LEDGER_DATA_DIR` | `src/tagcor_ledger/app/paths.py` | **開發與測試用的覆寫**：有值時直接當資料根，**完全不讀指標檔**（跟 `--data-dir` 同一條路）。`tests/integration/test_startup_failures.py` 會先把它刪掉，才測得到指標檔那條路 |
 | `TAGCOR_REFERENCE_DB` | `src/tagcor_ledger/application/reference.py` | 換掉法規參考庫的位置（預設是 repo 的 `reference\reference.sqlite3`，它是公開資訊、不是帳務資料）。UI 測試用它指到暫存檔 |
+| `TAGCOR_TAX_DATA` | `src/tagcor_ledger/application/tax/loader.py` | 換掉稅務資料的位置（預設是 repo 的 `reference\tax\dataset.json`，它是公開資訊、不是帳務資料）；測試用它指到假資料 |
 
 資料根平常來自指標檔 `%LOCALAPPDATA%\TagCor\TagCorLedger\system_paths.json`；沒有指標檔時依序找程式資料夾的
 `userdata`、使用者資料夾，都沒有帳本就在第一次啟動時問（[儲存配置](../architecture/storage-layout.md)、ADR-0018）。`--data-dir` 與

@@ -129,6 +129,8 @@ ERROR_MESSAGES: dict[str, str] = {
         "改掉或刪掉那些模板就刪得掉；或改用「封存」。"
     ),
     "TAX_MAPPING_KIND_INVALID": "所得歸類的選項不正確。",
+    "TAX_KIND_UNKNOWN": "稅目不正確。",
+    "TAX_REMINDER_SWITCH_INVALID": "提醒只能設成開或關。",
     "TAX_INPUTS_INVALID": (
         "申報狀況不一致：人數不能是負的、70 歲以上的人數不能多於受扶養人數、"
         "財政部的應納稅額不能是負的。"

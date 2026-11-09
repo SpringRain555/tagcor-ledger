@@ -52,6 +52,8 @@ src/tagcor_ledger/
 │   ├── deposits/       定存。用繼承把 contracts（合約與期）／events（產生待確認）／
 │   │                   postings（確認入帳與續約）組成 DepositService；
 │   │                   base（共同基底＋DepositPosting）、views（送給 UI 的 dict）
+│   ├── tax/            稅務。用繼承把資料、新鮮度、提醒、申報試算與歸類組成 TaxService；
+│   │                   base 放共用資料、設定與日期來源
 │   ├── reference.py    離線法規庫（唯讀）
 │   ├── settings.py     ledger 內的一般偏好
 │   ├── diagnostics.py  診斷資訊匯出

@@ -19,6 +19,8 @@ from tagcor_ledger.app.paths import AppPaths
 from tagcor_ledger.application.failures import STORE_FAILURES, failure
 from tagcor_ledger.application.result import Result
 from tagcor_ledger.domain.models import ApplicationSettings, SortLevel, SortSpec
+from tagcor_ledger.domain.tax.kinds import TaxKind
+from tagcor_ledger.domain.tax.reminders import ReminderSwitch, default_switch
 from tagcor_ledger.infrastructure.clock import now_iso
 from tagcor_ledger.infrastructure.database import connect_database, database_transaction
 
@@ -32,6 +34,12 @@ def _sort_spec_key(page: str) -> str:
     if page not in SORT_SPEC_PAGES:
         raise ValueError("SORT_SPEC_PAGE_UNKNOWN")
     return f"sort_spec.{page}"
+
+
+def _tax_reminder_key(kind: TaxKind) -> str:
+    if not isinstance(kind, TaxKind):
+        raise ValueError("TAX_KIND_UNKNOWN")
+    return f"tax_reminder.{kind.value}"
 
 
 class SettingsService:
@@ -92,6 +100,45 @@ class SettingsService:
                 exc,
                 fallback_code="SORT_SPEC_SAVE_FAILED",
                 fallback_message="排序方式無法儲存。請匯出診斷資訊回報。",
+            )
+
+    def get_tax_reminder_switches(self) -> dict[TaxKind, ReminderSwitch]:
+        keys = {_tax_reminder_key(kind): kind for kind in TaxKind}
+        with connect_database(self.paths.database_path) as connection:
+            rows = connection.execute("SELECT key, value FROM settings").fetchall()
+        values = {str(row["key"]): str(row["value"]) for row in rows}
+        switches: dict[TaxKind, ReminderSwitch] = {}
+        for key, kind in keys.items():
+            raw = values.get(key)
+            if raw in {ReminderSwitch.ON.value, ReminderSwitch.OFF.value}:
+                switches[kind] = ReminderSwitch(raw)
+            else:
+                switches[kind] = default_switch(kind)
+        return switches
+
+    def save_tax_reminder_switch(
+        self, kind: TaxKind, switch: ReminderSwitch
+    ) -> Result:
+        try:
+            key = _tax_reminder_key(kind)
+            value = str(switch)
+            if value not in {ReminderSwitch.ON.value, ReminderSwitch.OFF.value}:
+                raise ValueError("TAX_REMINDER_SWITCH_INVALID")
+            with database_transaction(self.paths.database_path) as connection:
+                connection.execute(
+                    """
+                    INSERT INTO settings(key, value, updated_at) VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                        updated_at = excluded.updated_at
+                    """,
+                    (key, value, now_iso()),
+                )
+            return Result.ok("提醒設定已儲存。")
+        except STORE_FAILURES as exc:
+            return failure(
+                exc,
+                fallback_code="TAX_REMINDER_SAVE_FAILED",
+                fallback_message="提醒設定無法儲存。請匯出診斷資訊回報。",
             )
 
     def get(self) -> ApplicationSettings:

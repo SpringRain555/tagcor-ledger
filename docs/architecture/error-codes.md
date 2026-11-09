@@ -226,6 +226,9 @@
 | `TAX_INPUTS_INVALID` | 人數為負、70 歲以上受扶養人多於受扶養人數，或財政部應納稅額為負 | 修正申報狀況與人數、確認財政部的應納稅額 |
 | `TAX_OVERRIDE_KIND_INVALID` | 所得類別不接受手填扣繳憑單 | UI 正常操作不會發生 |
 | `TAX_OVERRIDE_AMOUNT_INVALID` | 扣繳憑單金額為負 | 填入非負的給付總額與扣繳稅額 |
+| `TAX_KIND_UNKNOWN` | 提醒設定收到不在稅目清單內的值 | 重新選擇稅目；UI 正常操作不會發生 |
+| `TAX_REMINDER_SWITCH_INVALID` | 提醒開關不是 `on` 或 `off` | 將提醒設成開或關 |
+| `TAX_MAPPING_SAVE_FAILED` / `TAX_INPUTS_SAVE_FAILED` / `TAX_OVERRIDE_SAVE_FAILED` / `TAX_REMINDER_SAVE_FAILED` | **退路碼**：對應儲存失敗，原因認不出來 | 匯出診斷資訊回報 |
 
 ## 備份
 

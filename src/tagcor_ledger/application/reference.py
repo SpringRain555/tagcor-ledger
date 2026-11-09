@@ -33,6 +33,7 @@ from datetime import date
 from pathlib import Path
 
 from tagcor_ledger.application.result import Result
+from tagcor_ledger.infrastructure.clock import today_taipei
 
 REFERENCE_DB_ENV = "TAGCOR_REFERENCE_DB"
 STALE_AFTER_MONTHS = 6
@@ -89,7 +90,7 @@ def phrase_query(keyword: str) -> str:
 
 def is_stale(reviewed_at: str, *, today: date | None = None) -> bool:
     """超過半年沒複查就標「需複查」。**只是提示，不會自動去抓新版。**"""
-    current = today or date.today()
+    current = today if today is not None else today_taipei()
     try:
         reviewed = date.fromisoformat(reviewed_at)
     except ValueError:
@@ -203,6 +204,24 @@ class ReferenceLibrary:
             # 搜尋字串讓 FTS5 語法錯誤時回空清單，不要把例外丟到畫面上。
             return []
         return [_row_to_entry(row) for row in rows]
+
+    def oldest_reviewed_at(self) -> date | None:
+        """回傳所有條文中最早的複查日期；缺庫或資料無法讀取時回傳 None。"""
+        try:
+            if not self.available:
+                return None
+            with closing(self._connect()) as connection:
+                row = connection.execute(
+                    "SELECT MIN(reviewed_at) AS oldest_reviewed_at FROM reference_entries"
+                ).fetchone()
+        except (OSError, sqlite3.Error):
+            return None
+        if row is None or row["oldest_reviewed_at"] is None:
+            return None
+        try:
+            return date.fromisoformat(str(row["oldest_reviewed_at"]))
+        except ValueError:
+            return None
 
 
 def _row_to_entry(row: sqlite3.Row) -> ReferenceEntry:

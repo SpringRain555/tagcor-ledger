@@ -228,6 +228,7 @@ CONTROLLER_PACKAGE = "tagcor_ledger.ui.controller"
 ASSEMBLY_PACKAGES = [
     "ui/controller",
     "application/deposits",
+    "application/tax",
 ]
 
 
@@ -256,24 +257,26 @@ def test_the_assembly_file_holds_no_logic(package: str) -> None:
     )
 
 
-def test_no_deposit_section_calls_another_section() -> None:
-    """`application/deposits/` 的 section 之間不得互相呼叫。
+@pytest.mark.parametrize("package", ("deposits", "tax"))
+def test_no_deposit_section_calls_another_section(package: str) -> None:
+    """定存與稅務套件的 section 之間不得互相呼叫。
 
     與 `stores/` 同一條紀律，理由也一樣：section 一旦互相呼叫，「這個方法屬於哪一段」
     就不再是檔案位置決定的，而拆檔的唯一好處就是那個。
 
-    拆檔前用 AST 確認過二十個方法的呼叫關係全部落在自己的 section 裡，所以這裡
-    **不需要** `ui/controller/overview.py` 那種聚合層例外。真的需要了再加，
-    但要像 `OverviewSection` 一樣明說自己是聚合層。
+    定存拆檔前用 AST 確認過二十個方法的呼叫關係全部落在自己的 section 裡；稅務也採用
+    相同規則。兩個套件都**不需要** `ui/controller/overview.py` 那種聚合層例外。
     """
-    from tagcor_ledger.application import deposits
+    from tagcor_ledger.application import deposits, tax
 
+    selected = deposits if package == "deposits" else tax
     sections = {
         name: klass
-        for name, klass in vars(deposits).items()
+        for name, klass in vars(selected).items()
         if isinstance(klass, type) and name.endswith("Section")
     }
-    assert len(sections) >= 3, f"只找到 {sorted(sections)}，組裝方式可能改了"
+    minimum = 3 if package == "deposits" else 4
+    assert len(sections) >= minimum, f"只找到 {sorted(sections)}，組裝方式可能改了"
 
     owner_of = {
         method: name
@@ -297,7 +300,7 @@ def test_no_deposit_section_calls_another_section() -> None:
                 if target is not None and target != name:
                     offenders.append(f"  {name} 呼叫了 {target}.{node.func.attr}()")
     if offenders:
-        pytest.fail("定存的 section 之間不得互相呼叫：\n" + "\n".join(sorted(set(offenders))))
+        pytest.fail(f"{package} 的 section 之間不得互相呼叫：\n" + "\n".join(sorted(set(offenders))))
 
 
 def test_every_controller_method_lives_in_a_section_module() -> None:
@@ -391,10 +394,11 @@ def test_the_store_package_reexports_exactly_what_ledger_store_composes() -> Non
 
 
 # `application/` 底下**整個模組**都不經過寫入層，所以它們的例外不是「寫入層失敗」。
-# 這兩個是名單而不是猜測 —— 它們自己開連線，`self.store` 根本不存在。
+# 這些是名單而不是猜測：診斷／法規查詢自行管理唯讀連線，稅務 loader 只讀公開資料檔。
 NON_STORE_MODULES = {
     "diagnostics.py": "健檢自己開連線跑 PRAGMA 與 COUNT，不經過 store",
     "reference.py": "法規參考庫是另一個唯讀資料庫，不經過 store",
+    "loader.py": "公開稅務資料集只讀檔案、驗證 JSON，不經過 ledger store",
 }
 
 # 這些 handler 包的**不是** store 呼叫，或是刻意收窄的。key 是（檔名, 函式名, 形狀）。
