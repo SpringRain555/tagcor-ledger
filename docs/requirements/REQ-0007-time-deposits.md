@@ -14,6 +14,11 @@
 >    三層都沒有接它，而 `DEPOSIT_CONTRACT_IN_USE` 的訊息一直叫使用者去用它。
 > 4. **三處計算修正**：存本取息到期不再重複建議整期利息、零存整付到期轉回累積本金
 >    而不是 0、到期項目不能略過。
+>
+> **2026-11-09（[REQ-0011](REQ-0011-tax-reminders-and-estimate.md) §存款利息）**：利息的所得稅扣繳與
+> 二代健保補充保費 —— 待確認的建議金額改成**預期入帳淨額**並附算式、確認對話框多兩格扣款（預填、可改）、
+> 扣款記在那一筆 `deposit_events`，交易金額仍是存摺上的實際入帳；期的實際利率改用毛額推回；
+> `_interest_category_id()` 改成優先找「利息收入／定存利息」。
 
 實作位置：`domain/deposits.py`（列舉與試算）、`infrastructure/stores/deposit_contracts.py`／`deposit_terms.py`／`deposit_events.py`（持久化）、`application/deposits.py`（十二種組合的效果）、`ui/pages/deposits.py`（合約與期）。到期與領息一律走「待確認」（2026-10-05 起在餘額盤點頁底下）。
 
