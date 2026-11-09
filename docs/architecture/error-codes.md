@@ -218,6 +218,15 @@
 | `DEPOSIT_MATURITY_CANNOT_BE_SKIPPED` | 在待確認按了「略過」，而選的是到期項目 | **略過會讓那一期永遠停在「存續中」**（事件不會再生出來）。利息不想記就確認、金額填 0；不再追蹤就結束合約或中途解約 |
 | `DEPOSIT_CONTRACT_CREATE_FAILED` / `DEPOSIT_CONTRACT_UPDATE_FAILED` / `DEPOSIT_CONTRACT_DELETE_FAILED` / `DEPOSIT_TERM_UPDATE_FAILED` / `DEPOSIT_GENERATE_FAILED` / `DEPOSIT_CONFIRM_FAILED` / `DEPOSIT_SKIP_FAILED` / `DEPOSIT_CONTRACT_CLOSE_FAILED` / `DEPOSIT_TERMINATE_FAILED` | **退路碼**：對應操作失敗，原因認不出來 | 匯出診斷資訊回報 |
 
+## 稅務
+
+| 錯誤碼 | 成因 | 使用者該怎麼做 |
+|---|---|---|
+| `TAX_MAPPING_KIND_INVALID` | 所得歸類的收支方向與對應種類不相容 | UI 正常操作不會發生 |
+| `TAX_INPUTS_INVALID` | 人數為負、70 歲以上受扶養人多於受扶養人數，或財政部應納稅額為負 | 修正申報狀況與人數、確認財政部的應納稅額 |
+| `TAX_OVERRIDE_KIND_INVALID` | 所得類別不接受手填扣繳憑單 | UI 正常操作不會發生 |
+| `TAX_OVERRIDE_AMOUNT_INVALID` | 扣繳憑單金額為負 | 填入非負的給付總額與扣繳稅額 |
+
 ## 備份
 
 `validate_backup()` 把碼放在**回傳值**裡（`{"valid": False, "error_code": …}`），

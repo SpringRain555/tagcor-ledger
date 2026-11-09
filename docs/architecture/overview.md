@@ -43,7 +43,7 @@ flowchart TD
 src/tagcor_ledger/
 ├── __main__.py         python -m tagcor_ledger
 ├── main.py             CLI 參數、--json、單一實例、啟動失敗分類
-├── domain/             models、deposits、dates、money
+├── domain/             models、deposits、tax、dates、money
 ├── application/
 │   ├── transaction_service.py  收入／支出／轉帳／編輯／刪除／替換轉帳／列表
 │   ├── catalogs.py     帳戶、類別／項目
@@ -58,12 +58,12 @@ src/tagcor_ledger/
 │   ├── result.py       Result：成功／失敗與錯誤碼
 │   └── failures.py     錯誤碼 → 中文說法。**一個碼的句子只寫在這裡**
 ├── infrastructure/
-│   ├── migrations.py   v1 → v13 的 schema
+│   ├── migrations.py   v1 → v14 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
 │   ├── stores/         一個聚合一個檔：accounts／categories／transactions／
 │   │                   balance／deposit_contracts／deposit_terms／deposit_events／
-│   │                   templates ＋ base（共用）
+│   │                   tax_mappings／tax_filing／templates ＋ base（共用）
 │   ├── maintenance.py  備份、驗證、還原、重製、CSV 匯出
 │   └── clock.py        台北時區的「今天」
 ├── ui/
@@ -89,7 +89,7 @@ src/tagcor_ledger/
 
 ### 交易只有一個寫入點
 
-**`LedgerStore` 用繼承把 `stores/` 底下八個聚合組起來，不是委派。**
+**`LedgerStore` 用繼承把 `stores/` 底下十個聚合組起來，不是委派。**
 理由寫在 `sqlite_store.py` 的 module docstring：這些 store 共用同一份 `AppPaths` 與
 同一套「每次呼叫自己開連線」的模型，對外一直是單一物件；用繼承組裝時拆檔只是
 「這個 `def` 放在哪個檔案」，換成委派要手寫幾十個轉發方法。

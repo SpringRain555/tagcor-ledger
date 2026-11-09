@@ -12,7 +12,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 13
+LATEST_SCHEMA_VERSION = 14
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -560,6 +560,74 @@ def migrate_v13(connection: sqlite3.Connection) -> None:
     connection.execute("DELETE FROM transactions WHERE status = 'voided'")
 
 
+SCHEMA_V14 = """
+CREATE TABLE IF NOT EXISTS tax_category_mappings (
+    category_id TEXT NOT NULL REFERENCES categories(category_id) ON DELETE CASCADE,
+    flow TEXT NOT NULL CHECK (flow IN ('income', 'expense')),
+    tax_kind TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (category_id, flow),
+    CHECK (
+        (flow = 'income' AND tax_kind IN (
+            'salary', 'interest_taxable', 'interest_exempt', 'prize', 'writing_lecture',
+            'exempt_income', 'foreign_income', 'other_income', 'excluded', 'unsupported'))
+        OR (flow = 'expense' AND tax_kind IN (
+            'income_tax', 'house_tax', 'land_value_tax', 'vehicle_license_tax', 'fuel_fee'))
+    )
+);
+CREATE TABLE IF NOT EXISTS tax_reminder_marks (
+    kind TEXT NOT NULL CHECK (kind IN (
+        'income_tax', 'house_tax', 'land_value_tax', 'vehicle_license_tax', 'fuel_fee')),
+    cycle_year INTEGER NOT NULL,
+    mark TEXT NOT NULL CHECK (mark IN ('handled', 'not_applicable')),
+    marked_at TEXT NOT NULL,
+    PRIMARY KEY (kind, cycle_year)
+);
+CREATE TABLE IF NOT EXISTS tax_year_inputs (
+    income_year INTEGER PRIMARY KEY,
+    filing TEXT NOT NULL CHECK (filing IN ('single', 'with_spouse', 'dependent_of_other')),
+    deduction TEXT NOT NULL CHECK (deduction IN ('standard', 'itemized')),
+    other_special_deductions INTEGER NOT NULL CHECK (other_special_deductions IN (0, 1)),
+    dependents_have_income INTEGER NOT NULL CHECK (dependents_have_income IN (0, 1)),
+    filer_70_plus INTEGER NOT NULL CHECK (filer_70_plus IN (0, 1)),
+    dependents INTEGER NOT NULL CHECK (dependents >= 0),
+    dependents_70_plus INTEGER NOT NULL CHECK (dependents_70_plus >= 0),
+    official_tax_minor INTEGER CHECK (official_tax_minor IS NULL OR official_tax_minor >= 0),
+    official_balance_minor INTEGER,
+    updated_at TEXT NOT NULL,
+    CHECK (dependents_70_plus <= dependents)
+);
+CREATE TABLE IF NOT EXISTS tax_year_overrides (
+    income_year INTEGER NOT NULL,
+    income_kind TEXT NOT NULL CHECK (income_kind IN (
+        'salary', 'interest_taxable', 'prize', 'writing_lecture')),
+    gross_minor INTEGER CHECK (gross_minor IS NULL OR gross_minor >= 0),
+    withheld_minor INTEGER CHECK (withheld_minor IS NULL OR withheld_minor >= 0),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (income_year, income_kind),
+    CHECK (gross_minor IS NOT NULL OR withheld_minor IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_deposit_events_transaction ON deposit_events(transaction_id);
+"""
+
+
+def migrate_v14(connection: sqlite3.Connection) -> None:
+    """稅務帳本資料；理由見 REQ-0011 §私人與 data-model.md。"""
+    connection.executescript(SCHEMA_V14)
+    _add_column_if_missing(
+        connection,
+        "deposit_events",
+        "withheld_tax_minor",
+        "INTEGER CHECK (withheld_tax_minor IS NULL OR withheld_tax_minor >= 0)",
+    )
+    _add_column_if_missing(
+        connection,
+        "deposit_events",
+        "nhi_premium_minor",
+        "INTEGER CHECK (nhi_premium_minor IS NULL OR nhi_premium_minor >= 0)",
+    )
+
+
 def _add_column_if_missing(
     connection: sqlite3.Connection, table: str, column: str, definition: str
 ) -> None:
@@ -584,6 +652,7 @@ MIGRATIONS: dict[int, Migration] = {
     11: migrate_v11,
     12: migrate_v12,
     13: migrate_v13,
+    14: migrate_v14,
 }
 
 

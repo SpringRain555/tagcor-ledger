@@ -23,6 +23,8 @@ from tagcor_ledger.infrastructure.stores.categories import CategoryStore
 from tagcor_ledger.infrastructure.stores.deposit_contracts import DepositContractStore
 from tagcor_ledger.infrastructure.stores.deposit_events import DepositEventStore
 from tagcor_ledger.infrastructure.stores.deposit_terms import DepositTermStore
+from tagcor_ledger.infrastructure.stores.tax_filing import TaxFilingStore
+from tagcor_ledger.infrastructure.stores.tax_mappings import TaxMappingStore
 from tagcor_ledger.infrastructure.stores.templates import TemplateStore
 from tagcor_ledger.infrastructure.stores.transactions import TransactionStore
 
@@ -36,6 +38,8 @@ __all__ = [
     "NotFoundError",
     "StoreBase",
     "StoreError",
+    "TaxFilingStore",
+    "TaxMappingStore",
     "TemplateStore",
     "TransactionStore",
 ]

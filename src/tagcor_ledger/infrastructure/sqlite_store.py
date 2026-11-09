@@ -3,7 +3,7 @@
 `LedgerStore` 是 application 層唯一該認得的 store。實作依聚合切在
 `tagcor_ledger.infrastructure.stores` 底下，這裡只負責組起來。
 
-**為什麼是繼承而不是委派？** 這六個 store 共用同一份 `AppPaths`、同一套「每次呼叫
+**為什麼是繼承而不是委派？** 這些 store 共用同一份 `AppPaths`、同一套「每次呼叫
 自己開連線」的模型，對外也一直是單一物件。用繼承組裝時，拆檔就只是「這個 `def` 放
 在哪個檔案」，方法本體與簽章一個字都不用改；換成委派則要手寫三十幾個轉發方法，在一
 個「行為零改變」的重構裡等於多開三十幾個出錯的機會。
@@ -24,6 +24,8 @@ from tagcor_ledger.infrastructure.stores.categories import CategoryStore
 from tagcor_ledger.infrastructure.stores.deposit_contracts import DepositContractStore
 from tagcor_ledger.infrastructure.stores.deposit_events import DepositEventStore
 from tagcor_ledger.infrastructure.stores.deposit_terms import DepositTermStore
+from tagcor_ledger.infrastructure.stores.tax_filing import TaxFilingStore
+from tagcor_ledger.infrastructure.stores.tax_mappings import TaxMappingStore
 from tagcor_ledger.infrastructure.stores.templates import TemplateStore
 from tagcor_ledger.infrastructure.stores.transactions import TransactionStore
 
@@ -38,6 +40,8 @@ class LedgerStore(
     DepositContractStore,
     DepositTermStore,
     DepositEventStore,
+    TaxMappingStore,
+    TaxFilingStore,
     TemplateStore,
 ):
     def __init__(self, paths: AppPaths) -> None:

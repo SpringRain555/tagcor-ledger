@@ -26,6 +26,11 @@
 - `deposit_events`：定存的到期與領息，等待使用者確認。**這是「待確認」頁唯一的來源**
   —— v0.23.0 移除定期收支之後（[ADR-0011](../decisions/ADR-0011-drop-recurring-schedules.md)），
   `recurring_schedules` 與 `scheduled_occurrences` 兩張表由 `migrate_v8` 砍掉。
+- `tax_category_mappings`：類別或項目依收支方向對應所得類別或繳款稅目；刪除類別時 cascade。
+- `tax_reminder_marks`：稅目 × 期間年的已處理／本年不適用標記。
+- `tax_year_inputs`：所得年度的申報狀況、受扶養人與財政部結果。
+- `tax_year_overrides`：所得年度 × 所得類別的扣繳憑單給付總額與扣繳稅額。
+- `deposit_events.withheld_tax_minor`、`nhi_premium_minor`：該次定存領息的所得稅扣繳與補充保費；`NULL` 表示未記錄。
 
 ```mermaid
 erDiagram
@@ -130,6 +135,9 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
   理由見 [ADR-0017](../decisions/ADR-0017-delete-transactions-for-real.md)。
   **`deposit_events.transaction_id` 從這一版起可能是 NULL 而事件是 `confirmed`** ——
   代表它產生的那筆交易後來被刪掉了。
+- v14：稅務歸類、提醒標記、申報輸入與扣繳憑單覆寫；新增定存領息的扣繳與補充保費欄位，既有列保留 `NULL`；
+  並新增 `idx_deposit_events_transaction`。欄位與約束依 [REQ-0011 §私人](../requirements/REQ-0011-tax-reminders-and-estimate.md)；
+  理由見該節與本文件「主要表」。
 
 **每一版都是新的一版，不改舊的那一版**，因為使用者的資料庫已經跑過了 —— migration
 記錄下來就不會再跑第二次，改舊版的內容對既有資料庫毫無效果。所以 v3 建的兩張表由

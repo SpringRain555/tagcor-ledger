@@ -128,6 +128,13 @@ ERROR_MESSAGES: dict[str, str] = {
         "有模板用到這個類別／項目（已封存的模板也算），不能刪除。到「操作設定 → 模板」"
         "改掉或刪掉那些模板就刪得掉；或改用「封存」。"
     ),
+    "TAX_MAPPING_KIND_INVALID": "所得歸類的選項不正確。",
+    "TAX_INPUTS_INVALID": (
+        "申報狀況不一致：人數不能是負的、70 歲以上的人數不能多於受扶養人數、"
+        "財政部的應納稅額不能是負的。"
+    ),
+    "TAX_OVERRIDE_KIND_INVALID": "這一類所得不能手填扣繳憑單。",
+    "TAX_OVERRIDE_AMOUNT_INVALID": "扣繳憑單的金額不能是負的。",
     "SORT_SPEC_PAGE_UNKNOWN": "這一頁沒有可以記住的排序設定。正常操作不會發生，請回報。",
     "REORDER_LIST_STALE": (
         "清單在排序視窗開著的時候變了，順序沒有存下來。請關掉這個視窗、重新打開一次"

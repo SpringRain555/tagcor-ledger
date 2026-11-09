@@ -256,7 +256,7 @@ def test_v13_removes_voided_transactions_from_an_existing_database(tmp_path: Pat
         left_voided = connection.execute(
             "SELECT COUNT(*) AS n FROM transactions WHERE status = 'voided'"
         ).fetchone()
-    assert int(version["v"]) == LATEST_SCHEMA_VERSION == 13
+    assert int(version["v"]) == LATEST_SCHEMA_VERSION == 14
     assert int(left_voided["n"]) == 0
     for transaction_id in voided:
         for table in TABLES:

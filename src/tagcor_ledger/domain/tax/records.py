@@ -20,6 +20,29 @@ class TaxMapping:
 
 
 @dataclass(frozen=True, slots=True)
+class TaxMappingRow:
+    """所得歸類分頁的一列：一個類別或項目、它的對應、該年的收入。"""
+
+    category_id: str
+    parent_id: str | None
+    category_name: str
+    item_name: str | None
+    archived: bool
+    income_kind: IncomeKind | None
+    expense_kind: TaxKind | None
+    effective_income_kind: IncomeKind | None
+    effective_expense_kind: TaxKind | None
+    own_year_count: int
+    own_year_minor: int
+    year_count: int
+    year_minor: int
+
+    @property
+    def unmapped(self) -> bool:
+        return self.own_year_count > 0 and self.effective_income_kind is None
+
+
+@dataclass(frozen=True, slots=True)
 class ReminderMarkRecord:
     kind: TaxKind
     cycle_year: int

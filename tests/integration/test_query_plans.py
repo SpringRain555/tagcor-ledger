@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -20,6 +21,7 @@ import pytest
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.domain.models import BalanceSnapshotFilter, TransactionFilter
 from tagcor_ledger.domain.money import Money
+from tagcor_ledger.domain.tax.kinds import TaxKind
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
@@ -322,3 +324,27 @@ def test_pending_deposit_events_are_sorted_and_counted_in_sql(store: LedgerStore
     assert any("idx_deposit_events_status_due" in step for step in list_steps), list_steps
     count_steps = _assert_no_growing_table_scan(store, store.count_pending_events)
     assert any("idx_deposit_events_status_due" in step for step in count_steps), count_steps
+
+
+def test_tax_income_totals_uses_transaction_and_deposit_event_indexes(
+    store: LedgerStore,
+) -> None:
+    steps = _assert_no_growing_table_scan(store, lambda: store.income_totals(2026))
+    assert any("idx_transactions_status_occurred" in step for step in steps)
+    assert any("idx_deposit_events_transaction" in step for step in steps)
+
+
+def test_tax_payment_fact_uses_transaction_date_index(store: LedgerStore) -> None:
+    steps = _assert_no_growing_table_scan(
+        store,
+        lambda: store.payment_fact(
+            TaxKind.HOUSE_TAX,
+            start=date(2026, 1, 1),
+            end=date(2026, 12, 31),
+        ),
+    )
+    assert any("idx_transactions_status_occurred" in step for step in steps)
+
+
+def test_tax_mapping_rows_does_not_scan_growing_tables(store: LedgerStore) -> None:
+    _assert_no_growing_table_scan(store, lambda: store.list_tax_mapping_rows(2026))
