@@ -52,8 +52,14 @@ class TaxRemindersTab(QWidget):
         self.switch.setCurrentIndex(-1)
         self.switch.setEditText(SWITCH_NAMES[ReminderSwitch.UNSET])
         self.switch.setEnabled(False)
+        # 下拉的寬度依選項（「開」「關」）算，而「未設定」是編輯框文字、不是選項 ——
+        # 不給最小字數的話實機只看得到「定」。這個字數是以拉丁字母 X 的寬度計，
+        # 一個中文字約兩個 X 寬，所以乘 2（只乘 1 時實機量過仍然不夠）。
+        self.switch.setMinimumContentsLength(
+            2 * max(len(name) for name in SWITCH_NAMES.values())
+        )
 
-        setup_table(self.table, self.model, stretch_column=5)
+        setup_table(self.table, self.model, stretch_column=5, fit_rows=5)
         for note in self.notes:
             note.setObjectName("hintLabel")
             note.setWordWrap(True)

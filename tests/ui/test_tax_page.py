@@ -109,6 +109,40 @@ def test_reminders_show_five_tax_items_and_switch_changes_persist(window) -> Non
     assert page.model.index(1, 1).data() == "開"
 
 
+def test_reminder_actions_fit_the_unscrolled_page_viewport(window, qtbot) -> None:
+    window.resize(1280, 760)
+    window.show_page(PageId.TAX)
+    window.tax.show_tab(TaxTab.REMINDERS)
+    qtbot.wait(20)
+
+    scroll = window._page_scrolls[PageId.TAX]
+    scroll.verticalScrollBar().setValue(0)
+    viewport = scroll.viewport()
+    page = window.tax.reminders
+    assert page.table.model().rowCount() == 5
+    expected_height = (
+        page.table.horizontalHeader().sizeHint().height()
+        + page.table.model().rowCount()
+        * page.table.verticalHeader().defaultSectionSize()
+        + 2 * page.table.frameWidth()
+    )
+    assert page.table.height() == expected_height
+    for widget, label in (
+        (page.switch, "switch"),
+        (page.handled_button, "handled"),
+        (page.not_applicable_button, "not applicable"),
+        (page.cancel_button, "cancel"),
+    ):
+        rect = widget.rect().translated(widget.mapTo(viewport, widget.rect().topLeft()))
+        assert rect.isValid()
+        assert viewport.rect().contains(rect), label
+
+    # 實機截圖裡開關只剩「定」：「未設定」是編輯框文字、不是選項，下拉的寬度原本只照「開」「關」算。
+    edit = page.switch.lineEdit()
+    assert edit is not None
+    assert edit.width() >= edit.fontMetrics().horizontalAdvance(page.switch.currentText())
+
+
 def test_reminder_marking_and_cancelling_only_affect_a_current_cycle(
     qtbot, tmp_path: Path, monkeypatch
 ) -> None:
@@ -180,6 +214,13 @@ def test_data_tab_shows_dataset_path_summary_coverage_and_sources(
     assert page.coverage.count() > 0
     assert page.sources_model.rowCount() > 0
     assert page.sources_model.columnCount() == 6
+    fitted_rows = min(page.sources_model.rowCount(), 8)
+    expected_height = (
+        page.sources_table.horizontalHeader().sizeHint().height()
+        + fitted_rows * page.sources_table.verticalHeader().defaultSectionSize()
+        + 2 * page.sources_table.frameWidth()
+    )
+    assert page.sources_table.height() == expected_height
 
 
 def test_law_tab_searches_and_uses_controller_date_for_review_flags(window) -> None:

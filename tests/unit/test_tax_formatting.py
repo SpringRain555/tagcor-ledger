@@ -64,6 +64,8 @@ from tagcor_ledger.ui.formatting.tax_estimate import (
     TAX_ESTIMATE_REFUSAL_FOOTER,
     caution_lines,
     estimate_line_values,
+    estimate_source_footnote_markers,
+    estimate_source_footnotes,
     estimate_status,
     official_diff_text,
     refusal_lines,
@@ -496,10 +498,6 @@ def test_unsaved_estimate_note_uses_the_source_year_or_default_summary() -> None
 
 
 def test_estimate_line_values_format_sources_and_negative_balance() -> None:
-    source = TaxSource(
-        "income", "測試來源", "財政部", "https://example.test", date(2026, 1, 2), "a" * 64, "2026-01-03T10:00:00+08:00"
-    )
-    sources = {source.id: source}
     lines = (
         EstimateLine(EstimateStep.SALARY_GROSS, 12345, LineSource.LEDGER, 2, (), True),
         EstimateLine(EstimateStep.SALARY_GROSS, 12345, LineSource.MANUAL, None, (), True),
@@ -509,14 +507,76 @@ def test_estimate_line_values_format_sources_and_negative_balance() -> None:
         EstimateLine(EstimateStep.EXEMPT_INCOME, 500, LineSource.LEDGER, 1, (), False),
     )
 
-    assert [estimate_line_values(line, sources=sources) for line in lines] == [
+    footnotes = {"income": "①", "missing": "②"}
+    assert [
+        estimate_line_values(line, footnotes=footnotes)
+        for line in lines
+    ] == [
         ["薪資收入", "12,345", "帳本 2 筆"],
         ["薪資收入", "12,345", "扣繳憑單（你填的）"],
-        ["應納稅額", "12,345", "財政部公告：測試來源"],
-        ["減：儲蓄投資特別扣除額", "12,345", "計算（missing）"],
-        ["應補（退）稅額", "−12,345", "計算"],
+        ["應納稅額", "12,345", "公告①"],
+        ["減：儲蓄投資特別扣除額", "12,345", "計算（上限②）"],
+        # T10：負號與 App 其他地方一致。
+        ["應補（退）稅額", "-12,345", "計算"],
         ["免稅所得（不併入，依你的歸類）", "500", "帳本 1 筆（依你的歸類）"],
     ]
+
+
+def test_estimate_source_footnotes_deduplicate_and_follow_first_occurrence() -> None:
+    first = TaxSource(
+        "first",
+        "第一個來源",
+        "財政部",
+        "https://example.test/first",
+        date(2026, 1, 2),
+        "a" * 64,
+        "2026-01-03T10:00:00+08:00",
+    )
+    second = TaxSource(
+        "second",
+        "第二個來源",
+        "財政部",
+        "https://example.test/second",
+        date(2026, 1, 2),
+        "b" * 64,
+        "2026-01-03T10:00:00+08:00",
+    )
+    sources = {first.id: first, second.id: second}
+    lines = (
+        EstimateLine(EstimateStep.TAX, 100, LineSource.DATASET, None, ("first", "second"), True),
+        EstimateLine(EstimateStep.EXEMPTION, 200, LineSource.DATASET, None, ("first",), True),
+    )
+    estimate = Estimate(2025, (), lines, 100, None, 100, False, None, ())
+    markers = estimate_source_footnote_markers(estimate)
+
+    assert markers == {"first": "①", "second": "②"}
+    assert estimate_line_values(lines[0], footnotes=markers)[2] == "公告①②"
+    assert estimate_line_values(lines[1], footnotes=markers)[2] == "公告①"
+    assert estimate_source_footnotes(estimate, sources) == [
+        "① 第一個來源",
+        "② 第二個來源",
+    ]
+
+
+def test_markers_in_one_cell_follow_footnote_numbers_not_source_order() -> None:
+    """實機截圖看到「公告③②」：一格裡的編號要照註腳順序，不照那一行 source_ids 的順序。"""
+    lines = (
+        EstimateLine(EstimateStep.TAX, 100, LineSource.DATASET, None, ("a",), True),
+        EstimateLine(EstimateStep.EXEMPTION, 200, LineSource.DATASET, None, ("b",), True),
+        EstimateLine(EstimateStep.STANDARD_DEDUCTION, 300, LineSource.DATASET, None, ("b", "a"), True),
+    )
+    estimate = Estimate(2025, (), lines, 100, None, 100, False, None, ())
+    markers = estimate_source_footnote_markers(estimate)
+
+    assert markers == {"a": "①", "b": "②"}
+    assert estimate_line_values(lines[2], footnotes=markers)[2] == "公告①②"
+
+
+def test_estimate_source_footnotes_are_empty_without_dataset_sources() -> None:
+    line = EstimateLine(EstimateStep.BALANCE, 0, LineSource.COMPUTED, None, (), True)
+    estimate = Estimate(2025, (), (line,), 0, None, 0, False, None, ())
+
+    assert estimate_source_footnotes(estimate, {}) == []
 
 
 def test_caution_lines_use_domain_names() -> None:
@@ -531,7 +591,8 @@ def test_caution_lines_use_domain_names() -> None:
     ("difference", "expected"),
     [
         (1234, "與財政部相差 +1,234 元。常見原因：用了實領而非給付總額、漏記收入、扣繳沒填、歸類錯。"),
-        (-3000, "與財政部相差 −3,000 元。常見原因：用了實領而非給付總額、漏記收入、扣繳沒填、歸類錯。"),
+        # T10：負號與 App 其他地方一致。
+        (-3000, "與財政部相差 -3,000 元。常見原因：用了實領而非給付總額、漏記收入、扣繳沒填、歸類錯。"),
         (0, "與財政部相同。"),
         (None, None),
     ],

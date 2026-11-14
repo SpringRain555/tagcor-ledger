@@ -60,6 +60,8 @@ TAX_ESTIMATE_UNSAVED_RESULT = "按左邊的「儲存並試算」才會算。"
 TAX_ESTIMATE_LEDGER_HINT = "帳本：{count} 筆 {amount} 元"
 TAX_ESTIMATE_SAVE_SUCCESS = "申報狀況與扣繳憑單已儲存。"
 TAX_ESTIMATE_REFUSAL_FOOTER = "請改用財政部稅額試算。"
+_FOOTNOTE_MARKS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+_CAPPED_STEPS = {EstimateStep.SALARY_DEDUCTION, EstimateStep.SAVINGS_DEDUCTION}
 
 TAX_FILING_OPTIONS: tuple[tuple[str, FilingStatus], ...] = tuple(
     (FILING_STATUS_NAMES[kind], kind) for kind in FilingStatus
@@ -125,28 +127,59 @@ def refusal_lines(estimate: Estimate) -> list[str]:
 
 
 def estimate_line_values(
-    line: EstimateLine, *, sources: Mapping[str, TaxSource]
+    line: EstimateLine,
+    *,
+    footnotes: Mapping[str, str] | None = None,
 ) -> list[str]:
     amount = (
-        f"−{group_digits(abs(line.amount_minor))}"
+        f"-{group_digits(abs(line.amount_minor))}"
         if line.step is EstimateStep.BALANCE and line.amount_minor < 0
         else group_digits(line.amount_minor)
     )
-    titles = [
-        sources[source_id].title if source_id in sources else source_id
-        for source_id in line.source_ids
-    ]
+    # 照註腳編號的順序排（`footnotes` 依編號建立），不是照這一行 source_ids 的順序 ——
+    # 否則會出現「公告③②」。
+    wanted = set(line.source_ids)
+    markers = "".join(
+        mark for source_id, mark in (footnotes or {}).items() if source_id in wanted
+    )
     if line.source is LineSource.LEDGER:
         basis = f"帳本 {line.ledger_count} 筆"
     elif line.source is LineSource.MANUAL:
         basis = "扣繳憑單（你填的）"
     elif line.source is LineSource.DATASET:
-        basis = "財政部公告" + (f"：{'、'.join(titles)}" if titles else "")
+        basis = f"公告{markers}"
     else:
-        basis = f"計算（{'、'.join(titles)}）" if titles else "計算"
+        if markers and line.step in _CAPPED_STEPS:
+            basis = f"計算（上限{markers}）"
+        else:
+            basis = f"計算{markers}"
     if line.step is EstimateStep.EXEMPT_INCOME:
         basis += "（依你的歸類）"
     return [ESTIMATE_STEP_NAMES[line.step], amount, basis]
+
+
+def estimate_source_footnote_markers(estimate: Estimate) -> dict[str, str]:
+    """依明細第一次出現的順序，為來源編號。"""
+    source_ids = dict.fromkeys(
+        source_id for line in estimate.lines for source_id in line.source_ids
+    )
+    return {
+        source_id: _FOOTNOTE_MARKS[index]
+        if index < len(_FOOTNOTE_MARKS)
+        else f"({index + 1})"
+        for index, source_id in enumerate(source_ids)
+    }
+
+
+def estimate_source_footnotes(
+    estimate: Estimate, sources: Mapping[str, TaxSource]
+) -> list[str]:
+    """依明細第一次出現的順序，產生來源標題註腳。"""
+    markers = estimate_source_footnote_markers(estimate)
+    return [
+        f"{marker} {sources[source_id].title if source_id in sources else source_id}"
+        for source_id, marker in markers.items()
+    ]
 
 
 def caution_lines(estimate: Estimate) -> list[str]:
@@ -159,7 +192,7 @@ def official_diff_text(estimate: Estimate) -> str | None:
         return None
     if difference == 0:
         return "與財政部相同。"
-    sign = "+" if difference > 0 else "−"
+    sign = "+" if difference > 0 else "-"
     return (
         f"與財政部相差 {sign}{group_digits(abs(difference))} 元。"
         "常見原因：用了實領而非給付總額、漏記收入、扣繳沒填、歸類錯。"

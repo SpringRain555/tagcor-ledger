@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -64,6 +64,8 @@ from tagcor_ledger.ui.formatting import (
     TAX_ESTIMATE_UNSAVED_RESULT,
     caution_lines,
     estimate_line_values,
+    estimate_source_footnote_markers,
+    estimate_source_footnotes,
     estimate_status,
     official_diff_text,
     refusal_lines,
@@ -110,9 +112,13 @@ class TaxEstimateTab(QWidget):
         self.caution_layout = QVBoxLayout(self.caution_box)
         self.official_diff = QLabel()
         self.footer = QLabel(ESTIMATE_FOOTER)
+        self.footnotes = QLabel()
         self.model = RowsModel(
             TAX_ESTIMATE_HEADERS,
-            lambda item: estimate_line_values(item["line"], sources=item["sources"]),
+            lambda item: estimate_line_values(
+                item["line"],
+                footnotes=item["footnotes"],
+            ),
         )
         self.table = QTableView()
         self._override_fields: dict[
@@ -153,6 +159,8 @@ class TaxEstimateTab(QWidget):
         self.result_status.setWordWrap(True)
         self.footer.setObjectName("hintLabel")
         self.footer.setWordWrap(True)
+        self.footnotes.setObjectName("hintLabel")
+        self.footnotes.setWordWrap(True)
         self._style_error(self.official_tax_error)
         self._style_error(self.official_balance_error)
         self._style_error(self.save_status, status=True)
@@ -187,6 +195,7 @@ class TaxEstimateTab(QWidget):
         result_layout.addWidget(self.unsaved_result)
         result_layout.addWidget(self.refusal_box)
         result_layout.addWidget(self.table)
+        result_layout.addWidget(self.footnotes)
         result_layout.addWidget(self.caution_box)
         result_layout.addWidget(self.official_diff)
         result_layout.addStretch()
@@ -194,22 +203,35 @@ class TaxEstimateTab(QWidget):
         columns = QSplitter(Qt.Orientation.Horizontal)
         columns.addWidget(self.input_scroll)
         columns.addWidget(result_column)
-        columns.setStretchFactor(0, 5)
+        columns.setStretchFactor(0, 4)
         columns.setStretchFactor(1, 6)
+        # 初次版面完成後才分配比例，讓試算結果欄先取得六成寬度。
+        QTimer.singleShot(
+            0,
+            lambda: columns.setSizes(
+                [columns.width() * 2 // 5, columns.width() * 3 // 5]
+            ),
+        )
 
         layout = page_layout(self, width=TABLE_WIDTH, margins=(0, 0, 0, 0))
         layout.addWidget(columns, 1)
 
     def _input_form(self) -> QWidget:
         content = QWidget()
+        content.setMinimumWidth(0)
+        content.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(8, 4, 12, 4)
+        layout.setContentsMargins(4, 4, 4, 4)
         title = QLabel(TAX_ESTIMATE_INPUT_TITLE)
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
 
         form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(8)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         year_row = QWidget()
         year_layout = QHBoxLayout(year_row)
         year_layout.setContentsMargins(0, 0, 0, 0)
@@ -223,14 +245,19 @@ class TaxEstimateTab(QWidget):
         form.addRow("", self.dependent_income)
         form.addRow("", self.filer_70_plus)
         form.addRow(TAX_ESTIMATE_DEPENDENTS_LABEL, self.dependents)
-        form.addRow(TAX_ESTIMATE_DEPENDENTS_70_PLUS_LABEL, self.dependents_70_plus)
+        dependents_70_plus_label = QLabel(TAX_ESTIMATE_DEPENDENTS_70_PLUS_LABEL)
+        dependents_70_plus_label.setWordWrap(True)
+        dependents_70_plus_label.setMaximumWidth(220)
+        form.addRow(dependents_70_plus_label, self.dependents_70_plus)
         form.addRow("", self.dependents_note)
         layout.addLayout(form)
 
         override_title = QLabel(TAX_ESTIMATE_OVERRIDE_TITLE)
         override_title.setObjectName("sectionTitle")
         layout.addWidget(override_title)
-        layout.addWidget(QLabel(TAX_ESTIMATE_OVERRIDE_BLANK_NOTE))
+        blank_note = QLabel(TAX_ESTIMATE_OVERRIDE_BLANK_NOTE)
+        blank_note.setWordWrap(True)
+        layout.addWidget(blank_note)
         layout.addWidget(self._override_grid())
 
         official_title = QLabel(TAX_ESTIMATE_OFFICIAL_TITLE)
@@ -268,7 +295,7 @@ class TaxEstimateTab(QWidget):
             header.setObjectName("sectionTitle")
             grid.addWidget(header, 0, column)
         for index, (name, kind) in enumerate(TAX_OVERRIDE_OPTIONS):
-            row_index = 1 + 2 * index
+            row_index = 1 + 3 * index
             gross = QLineEdit()
             withheld = QLineEdit()
             gross.setMaximumWidth(170)
@@ -284,14 +311,15 @@ class TaxEstimateTab(QWidget):
             gross_cell = self._amount_cell(gross, gross_error)
             withheld_cell = self._amount_cell(withheld, withheld_error)
             name_label = QLabel(name)
+            name_label.setWordWrap(True)
             self._override_labels[kind] = name_label
-            grid.addWidget(name_label, row_index, 0)
-            grid.addWidget(gross_cell, row_index, 1)
-            grid.addWidget(withheld_cell, row_index, 2)
+            grid.addWidget(name_label, row_index, 0, 1, 3)
+            grid.addWidget(gross_cell, row_index + 1, 1)
+            grid.addWidget(withheld_cell, row_index + 1, 2)
             hint = QLabel()
             hint.setObjectName("hintLabel")
             hint.setWordWrap(True)
-            grid.addWidget(hint, row_index + 1, 0, 1, 3)
+            grid.addWidget(hint, row_index + 2, 0, 1, 3)
             self._override_fields[kind] = (gross, withheld, gross_error, withheld_error, hint)
         return grid_widget
 
@@ -429,6 +457,8 @@ class TaxEstimateTab(QWidget):
         self._clear_layout(self.refusal_layout)
         self._clear_layout(self.caution_layout)
         self.official_diff.clear()
+        self.footnotes.clear()
+        self.footnotes.hide()
         if not self._inputs_saved:
             self.result_status.clear()
             self.result_status.hide()
@@ -459,7 +489,16 @@ class TaxEstimateTab(QWidget):
 
         self.refusal_box.hide()
         sources = {source.id: source for source in self.controller.tax_data_status().sources}
-        self.model.replace_rows([{"line": line, "sources": sources} for line in estimate.lines])
+        footnote_markers = estimate_source_footnote_markers(estimate)
+        self.model.replace_rows(
+            [
+                {"line": line, "footnotes": footnote_markers}
+                for line in estimate.lines
+            ]
+        )
+        footnotes = estimate_source_footnotes(estimate, sources)
+        self.footnotes.setText("\n".join(footnotes))
+        self.footnotes.setVisible(bool(footnotes))
         self.table.show()
         cautions = caution_lines(estimate)
         for line in cautions:

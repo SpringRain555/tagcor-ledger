@@ -290,7 +290,7 @@ def _header_values(headers: ast.expr) -> list[str] | None:
 def _sample_values(mapper_name: str) -> list[str]:
     sample = SAMPLES[mapper_name]
     if mapper_name == "estimate_line_values":
-        return formatting.estimate_line_values(sample["line"], sources=sample["sources"])
+        return formatting.estimate_line_values(sample["line"])
     if mapper_name == "tax_mapping_values":
         return formatting.tax_mapping_values(sample["row"])
     if mapper_name == "tax_reminder_values":

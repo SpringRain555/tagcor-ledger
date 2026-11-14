@@ -64,7 +64,23 @@ def apply_dark_theme(app: QApplication, *, force: bool = False) -> None:
 CHECK_ICON_PLACEHOLDER = "%CHECK_ICON%"
 """`styles.qss` 裡代表勾選框勾號路徑的佔位字串。"""
 
-_CHECK_ICON_LINE = re.compile(rf"^[^\S\n]*image:\s*url\({re.escape(CHECK_ICON_PLACEHOLDER)}\);\n", re.M)
+SPIN_UP_ICON_PLACEHOLDER = "%SPIN_UP_ICON%"
+SPIN_DOWN_ICON_PLACEHOLDER = "%SPIN_DOWN_ICON%"
+_IMAGE_LINE = re.compile(
+    r"^[^\S\n]*image:\s*url\((?P<placeholder>[^)]+)\);\n", re.M
+)
+
+
+def _resolve_image(styles: str, placeholder: str, filename: str) -> str:
+    icon = resource_filesystem_path(filename)
+    if icon is None:
+        return _IMAGE_LINE.sub(
+            lambda match: ""
+            if match.group("placeholder") == placeholder
+            else match.group(0),
+            styles,
+        )
+    return styles.replace(placeholder, icon.as_posix())
 
 
 def resolve_stylesheet(styles: str) -> str:
@@ -80,10 +96,13 @@ def resolve_stylesheet(styles: str) -> str:
     實心白方框。留著壞掉的 `url()` 更糟：Qt 會把 `image` 當成有指定，於是連
     `background-color` 都不畫，方框會整個消失。
     """
-    icon = resource_filesystem_path("check.png")
-    if icon is None:
-        return _CHECK_ICON_LINE.sub("", styles)
-    return styles.replace(CHECK_ICON_PLACEHOLDER, icon.as_posix())
+    for placeholder, filename in (
+        (CHECK_ICON_PLACEHOLDER, "check.png"),
+        (SPIN_UP_ICON_PLACEHOLDER, "spin-up.png"),
+        (SPIN_DOWN_ICON_PLACEHOLDER, "spin-down.png"),
+    ):
+        styles = _resolve_image(styles, placeholder, filename)
+    return styles
 
 
 FONT_FAMILY = "Microsoft JhengHei UI"

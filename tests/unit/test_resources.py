@@ -56,11 +56,51 @@ def test_the_check_icon_placeholder_is_resolved_to_a_real_file() -> None:
 
     resolved = theme.resolve_stylesheet(styles)
     assert theme.CHECK_ICON_PLACEHOLDER not in resolved
-    match = re.search(r"image:\s*url\(([^)]+)\)", resolved)
-    assert match is not None, "代換之後找不到 image: url(...)"
-    path = Path(match.group(1))
+    paths = re.findall(r"image:\s*url\(([^)]+)\)", resolved)
+    path = next((Path(value) for value in paths if Path(value).name == "check.png"), None)
+    assert path is not None, "代換之後找不到 check.png"
     assert path.is_file(), path
-    assert "\\" not in match.group(1), f"路徑裡有反斜線：{match.group(1)}"
+    assert "\\" not in path.as_posix(), f"路徑裡有反斜線：{path}"
+    assert path.name == "check.png"
+
+
+def test_spinbox_arrows_are_packaged_in_both_sizes_and_resolve_from_qss() -> None:
+    """上下箭頭須有標準與 @2x 圖，樣式表也要指到實際檔案。"""
+    from PySide6.QtGui import QImage
+
+    for direction in ("up", "down"):
+        for suffix, expected in ((".png", 12), ("@2x.png", 24)):
+            name = f"spin-{direction}{suffix}"
+            assert resource_exists(name), name
+            path = resource_filesystem_path(name)
+            assert path is not None, name
+            image = QImage(str(path))
+            assert not image.isNull(), name
+            assert (image.size().width(), image.size().height()) == (expected, expected)
+            assert any(
+                image.pixelColor(x, y).alpha() > 0
+                for y in range(image.height())
+                for x in range(image.width())
+            ), f"{name} 是全透明的"
+
+    styles = read_text_resource("styles.qss")
+    resolved = theme.resolve_stylesheet(styles)
+    assert theme.SPIN_UP_ICON_PLACEHOLDER not in resolved
+    assert theme.SPIN_DOWN_ICON_PLACEHOLDER not in resolved
+    paths = re.findall(r"image:\s*url\(([^)]+)\)", resolved)
+    assert {Path(path).name for path in paths} >= {
+        "check.png",
+        "spin-up.png",
+        "spin-down.png",
+    }
+    assert all(Path(path).is_file() for path in paths)
+
+
+def test_spinbox_icon_generator_uses_the_declared_text_colour() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "tools" / "icons" / "make_spinbox_icons.py"
+    ).read_text(encoding="utf-8")
+    assert f'COLOUR = "{colors.TEXT}"' in source
 
 
 def test_a_missing_check_icon_drops_the_line_instead_of_leaving_it_broken() -> None:

@@ -78,7 +78,7 @@ class TaxDataTab(QWidget):
         ):
             label.setObjectName("sectionTitle")
 
-        setup_table(self.sources_table, self.sources_model, stretch_column=5)
+        setup_table(self.sources_table, self.sources_model, stretch_column=5, fit_rows=8)
         self.update_edit.setReadOnly(True)
         self.question_edit.setReadOnly(True)
         self.copy_status.setObjectName("statusLabel")

@@ -192,6 +192,7 @@ flowchart LR
 - **例外的訊息就是錯誤碼，不要寫英文散文。** `domain/money.py` 以前丟 `MoneyError("Amount must be greater than zero.")`，那句英文因此出現在全中文的畫面上 —— 而且金額打錯是最常見的操作失誤。UI 自己 `except` 的地方用 `ui/formatting.error_text()`，不要直接印 `str(exc)`。
 - 分頁必須由 QSS 覆蓋 `QTabWidget/QTabBar` 的 selected、unselected、hover、disabled 狀態。
 - **QSS 一碰 subcontrol，Fusion 就不再畫它自己的圖形。** 這條踩到兩次：
+  - QSpinBox 的上下按鈕與箭頭也是同一件事：覆寫 subcontrol 後，按鈕與箭頭都要自行繪製，箭頭只用標準與 @2x PNG。
   - **不要覆寫 `QComboBox::drop-down`** —— 箭頭會消失，剩下一塊空白方格。那個很明顯是壞了，所以當場就發現。
   - **`QCheckBox::indicator` 已經覆寫了**（為了方框：Fusion 的外框色是 `palette.window().darker(140)` 推導的，在 `#0D0D0F` 上完全看不見），所以勾號要**自己給圖**，`styles.qss` 的 `:checked` 有一行 `image: url(...)`，路徑由 `theme.py` 的 `resolve_stylesheet()` 在載入時代換。這一次的症狀是一塊**看起來很像設計**的實心白方塊 —— 沒有人發現它壞了。
   - 要給圖只能給 **PNG，而且標準與 `@2x` 兩個尺寸都要**。SVG 需要 Qt SVG image plugin（PySide6 的選配元件，本機的 conda env 就沒有），QSS 的 `url()` 也不吃 `data:` URI —— 兩條都實測過，失敗的樣子都是「那一格靜靜地不畫圖」。圖檔由 `tools/icons/make_check_icon.py` 產生，不要用繪圖軟體改。

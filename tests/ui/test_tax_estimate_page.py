@@ -254,6 +254,29 @@ def test_estimate_column_geometry_keeps_fields_and_long_step_name_in_bounds(
     ]
     longest_step = max(steps, key=page.table.fontMetrics().horizontalAdvance)
     assert page.table.columnWidth(0) >= page.table.fontMetrics().horizontalAdvance(longest_step)
+    column_widths = [page.table.columnWidth(column) for column in range(3)]
+    assert sum(column_widths) <= page.table.viewport().width(), (
+        column_widths,
+        page.table.viewport().width(),
+    )
+    basis_width = page.table.columnWidth(2)
+    basis_metrics = page.table.fontMetrics()
+    basis_values = [page.table.model().headerData(2, Qt.Orientation.Horizontal)]
+    basis_values.extend(
+        page.model.index(row, 2).data(Qt.ItemDataRole.DisplayRole)
+        for row in range(page.model.rowCount())
+    )
+    basis_overflows = [
+        (str(value), basis_metrics.horizontalAdvance(str(value)))
+        for value in basis_values
+        if basis_metrics.horizontalAdvance(str(value)) > basis_width
+    ]
+    assert not basis_overflows, (basis_width, basis_overflows)
+    footnote_rect = page.footnotes.rect().translated(
+        page.footnotes.mapTo(page.result_column, page.footnotes.rect().topLeft())
+    )
+    assert page.footnotes.text()
+    assert page.result_column.rect().contains(footnote_rect)
 
 
 def test_estimate_status_and_footer_stay_in_view_for_result_and_refusal(
