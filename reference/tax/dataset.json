@@ -1,17 +1,396 @@
 {
   "schema_version": 1,
-  "reviewed_at": null,
-  "next_review_on": null,
+  "reviewed_at": "2026-11-09",
+  "next_review_on": "2026-12-15",
   "notes": [
-    "尚未建立：照 docs/operations/tax-data-runbook.md 填入。"
+    "2026-11-09 第一次填入（Claude，照 docs/operations/tax-data-runbook.md）。",
+    "財政部與國稅局的 /download/ 附件（一覽表、速算公式、申報書說明）被 robots.txt 禁止自動擷取，改引用同機關允許擷取的 HTML 頁。",
+    "115 年度 70 歲以上免稅額 151,500 ＝ 101,000（財政部公告）× 1.5（所得稅法第 17 條：年滿七十歲者免稅額增加百分之五十）。",
+    "114 年度各項金額：財政部公告 114 年度「上漲 2.29%，未達應調整標準，免予調整」，數字引自臺北國稅局 114 年度減免扣除頁與 115 年度公告的「由…調高至」。",
+    "115 年度基本生活費尚未公告（財政部每年 11 月底公告當年度的金額）—— 下次複查（12/15）要補，同時補 116 年度 income_tax。",
+    "進位規則找不到官方條文（2026-11-14 使用者手動下載的「114 年度綜合所得稅結算申報書說明」3 頁版也查過，沒有寫）：tax_rounding 用 half_up、利息扣繳用 floor，影響都不超過 1 元。source_ids 指的是公式所在的頁面，不代表那一頁寫了進位方式。對答案若差 1 元，先懷疑這裡。"
   ],
-  "sources": [],
+  "sources": [
+    {
+      "id": "law-income-tax-act",
+      "title": "所得稅法（全文，修正日期 115-09-11）",
+      "publisher": "全國法規資料庫",
+      "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0340003",
+      "published_on": "2026-09-11",
+      "sha256": "dec28e6fa59f375d8c7cdc11f633bbe9d454ffd4151ba8b5bae52ae1e6ce79f1",
+      "fetched_at": "2026-11-09T13:08:24+00:00"
+    },
+    {
+      "id": "law-withholding-rates",
+      "title": "各類所得扣繳率標準（全文，修正日期 110-06-30）",
+      "publisher": "全國法規資料庫",
+      "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0340028",
+      "published_on": "2021-06-30",
+      "sha256": "ecfba4e65adaccf30c618f61e94eea7b123d23e14305de6c0964f413e16735f5",
+      "fetched_at": "2026-11-09T13:08:28+00:00"
+    },
+    {
+      "id": "law-amt-act",
+      "title": "所得基本稅額條例（全文，修正日期 110-01-27）",
+      "publisher": "全國法規資料庫",
+      "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0340115",
+      "published_on": "2021-01-27",
+      "sha256": "2967afb45746eeb427eaa72016f2877dfd190352302ea1190c2a9896ab61d28a",
+      "fetched_at": "2026-11-09T13:08:32+00:00"
+    },
+    {
+      "id": "law-nhi-act",
+      "title": "全民健康保險法（全文，修正日期 112-06-28）",
+      "publisher": "全國法規資料庫",
+      "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0060001",
+      "published_on": "2023-06-28",
+      "sha256": "08976fdfd91aa10b72912177ee3ebba3539790f46dd9dbeab44614e63f05126c",
+      "fetched_at": "2026-11-09T13:08:38+00:00"
+    },
+    {
+      "id": "law-nhi-supplementary-rules",
+      "title": "全民健康保險扣取及繳納補充保險費辦法（全文，修正日期 113-03-20）",
+      "publisher": "全國法規資料庫",
+      "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=L0060027",
+      "published_on": "2024-03-20",
+      "sha256": "03f2ceeb68831c404a7d7f98fe3ad4849a73f387b76b3784367a29951dd52e6d",
+      "fetched_at": "2026-11-09T13:08:42+00:00"
+    },
+    {
+      "id": "law-road-fee-rules",
+      "title": "公路使用養護安全管理費徵收及分配辦法（全文，修正日期 115-05-21；原汽車燃料使用費徵收及分配辦法）",
+      "publisher": "全國法規資料庫",
+      "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=K0040007",
+      "published_on": "2026-05-21",
+      "sha256": "8c8b033c04203e31d491255a9ff006752ee344e519488ac2a9b6f07c1d20a67b",
+      "fetched_at": "2026-11-09T13:08:47+00:00"
+    },
+    {
+      "id": "mof-115-amounts",
+      "title": "公告115年度綜合所得稅及所得基本稅額相關免稅額、扣除額、課稅級距及計算退職所得定額免稅之金額",
+      "publisher": "財政部",
+      "url": "https://www.mof.gov.tw/singlehtml/384fb3077bb349ea973e7fc6f13b6974?cntId=34b463dc8f1b49f29d440d92a6fd5139",
+      "published_on": "2025-11-27",
+      "sha256": "887e501e8cf45e96b1925c3d8d961851856031004aba3bd9074eea44b96039bf",
+      "fetched_at": "2026-11-09T13:08:51+00:00"
+    },
+    {
+      "id": "mof-114-amounts",
+      "title": "公告114年度綜合所得稅及所得基本稅額相關免稅額、扣除額、課稅級距及計算退職所得定額免稅之金額",
+      "publisher": "財政部",
+      "url": "https://www.mof.gov.tw/singlehtml/384fb3077bb349ea973e7fc6f13b6974?cntId=e6bfc90ed42e42ccbcd83be96e331afc",
+      "published_on": "2024-11-28",
+      "sha256": "77157d5c5ac6a752b923607acc50d08d1b99216d8e1937382d3e0ad70ff6ee81",
+      "fetched_at": "2026-11-09T13:08:56+00:00"
+    },
+    {
+      "id": "mof-114-basic-living",
+      "title": "公告114年度每人基本生活所需之費用金額",
+      "publisher": "財政部",
+      "url": "https://www.mof.gov.tw/singlehtml/384fb3077bb349ea973e7fc6f13b6974?cntId=e14d053486394dc6b28c88aba2912f83",
+      "published_on": "2025-11-27",
+      "sha256": "da39c378934b2f620c6d7ba7c21c45f01f90622a1c3bbe3633cbc4d0cadff9da",
+      "fetched_at": "2026-11-09T13:09:00+00:00"
+    },
+    {
+      "id": "etax-local-tax-periods",
+      "title": "房屋稅、地價稅及使用牌照稅於每年何時開徵（繳納期限）及課稅所屬期間各為何時？",
+      "publisher": "財政部稅務入口網",
+      "url": "https://www.etax.nat.gov.tw/etwmain/tax-info/understanding/tax-q-and-a/local/vehicle-license-tax/KbG8wJK",
+      "published_on": null,
+      "sha256": "a974b26221d0826d507891dd348aaf9b9ea0b40309edfcac84f15d6dd373f49b",
+      "fetched_at": "2026-11-09T13:09:25+00:00"
+    },
+    {
+      "id": "nhi-supplementary-manual",
+      "title": "全民健康保險扣取及繳納補充保險費實務手冊",
+      "publisher": "衛生福利部中央健康保險署",
+      "url": "https://www.nhi.gov.tw/ch/dl-64814-5f26c2b955c24ebbbbf1479877ecfb7e-1.pdf",
+      "published_on": null,
+      "sha256": "0ad569abb5bfbd197ddbb5b69e27a25a8c1a94cec2b3e7b5beb1d0306d317f60",
+      "fetched_at": "2026-11-09T13:09:35+00:00"
+    },
+    {
+      "id": "ntbt-tax-rates",
+      "title": "適用稅率（累進稅率：115年度、113至114年度）",
+      "publisher": "財政部臺北國稅局",
+      "url": "https://www.ntbt.gov.tw/multiplehtml/1b82b380e1a34de9afd204d39b007db2",
+      "published_on": null,
+      "sha256": "1049ea7a31518d2957e350790cc29c8a1099886ae56291f63fa18c0bb016dfb0",
+      "fetched_at": "2026-11-09T13:10:52+00:00"
+    },
+    {
+      "id": "ntbt-exemptions-114",
+      "title": "免稅額及扣除額等（114年度綜合所得稅各項減免扣除）",
+      "publisher": "財政部臺北國稅局",
+      "url": "https://www.ntbt.gov.tw/multiplehtml/f4e3899a499b4f05821af5a5afadd2f5",
+      "published_on": null,
+      "sha256": "2f851be8d771721b9dcf2dd5408926894c8529c04956f36b90b00726c8ccd16f",
+      "fetched_at": "2026-11-09T13:10:56+00:00"
+    }
+  ],
   "calendar": {
-    "typical": {},
+    "typical": {
+      "income_tax": {
+        "start": "05-01",
+        "end": "05-31",
+        "basis": "所得稅法第 71 條：每年五月一日起至五月三十一日止（遇假日順延以公告為準）",
+        "source_ids": [
+          "law-income-tax-act"
+        ]
+      },
+      "house_tax": {
+        "start": "05-01",
+        "end": "05-31",
+        "basis": "財政部稅務入口網：房屋稅每年 5 月 1 日至 5 月 31 日開徵",
+        "source_ids": [
+          "etax-local-tax-periods"
+        ]
+      },
+      "land_value_tax": {
+        "start": "11-01",
+        "end": "11-30",
+        "basis": "財政部稅務入口網：地價稅每年 11 月 1 日至 11 月 30 日開徵",
+        "source_ids": [
+          "etax-local-tax-periods"
+        ]
+      },
+      "vehicle_license_tax": {
+        "start": "04-01",
+        "end": "04-30",
+        "basis": "財政部稅務入口網：使用牌照稅自用車每年 4 月 1 日至 4 月 30 日開徵",
+        "source_ids": [
+          "etax-local-tax-periods"
+        ]
+      },
+      "fuel_fee": {
+        "start": "07-01",
+        "end": "07-31",
+        "basis": "公路使用養護安全管理費徵收及分配辦法第 6 條：自用車及機車於每年七月一次徵收（起迄日期以開徵公告為準）",
+        "source_ids": [
+          "law-road-fee-rules"
+        ]
+      }
+    },
     "years": {}
   },
-  "income_tax": {},
-  "basic_living_expense": {},
-  "interest_withholding": [],
-  "nhi_supplementary_premium": []
+  "income_tax": {
+    "2025": {
+      "exemption": {
+        "value": 97000,
+        "source_ids": [
+          "ntbt-exemptions-114",
+          "mof-114-amounts"
+        ]
+      },
+      "exemption_70_plus": {
+        "value": 145500,
+        "source_ids": [
+          "ntbt-exemptions-114"
+        ]
+      },
+      "standard_deduction_single": {
+        "value": 131000,
+        "source_ids": [
+          "ntbt-exemptions-114",
+          "mof-114-amounts"
+        ]
+      },
+      "salary_special_deduction_cap": {
+        "value": 218000,
+        "source_ids": [
+          "mof-115-amounts",
+          "mof-114-amounts"
+        ]
+      },
+      "savings_investment_cap": {
+        "value": 270000,
+        "source_ids": [
+          "law-income-tax-act",
+          "ntbt-exemptions-114"
+        ]
+      },
+      "writing_lecture_exemption_cap": {
+        "value": 180000,
+        "source_ids": [
+          "law-income-tax-act"
+        ]
+      },
+      "foreign_income_amt_threshold": {
+        "value": 1000000,
+        "source_ids": [
+          "law-amt-act"
+        ]
+      },
+      "amt_basic_exemption": {
+        "value": 7500000,
+        "source_ids": [
+          "ntbt-exemptions-114",
+          "mof-114-amounts"
+        ]
+      },
+      "brackets": {
+        "rows": [
+          {
+            "up_to": 590000,
+            "rate_ppm": 50000,
+            "progressive_difference": 0
+          },
+          {
+            "up_to": 1330000,
+            "rate_ppm": 120000,
+            "progressive_difference": 41300
+          },
+          {
+            "up_to": 2660000,
+            "rate_ppm": 200000,
+            "progressive_difference": 147700
+          },
+          {
+            "up_to": 4980000,
+            "rate_ppm": 300000,
+            "progressive_difference": 413700
+          },
+          {
+            "up_to": null,
+            "rate_ppm": 400000,
+            "progressive_difference": 911700
+          }
+        ],
+        "source_ids": [
+          "ntbt-tax-rates"
+        ]
+      },
+      "tax_rounding": {
+        "value": "half_up",
+        "source_ids": [
+          "ntbt-tax-rates"
+        ]
+      }
+    },
+    "2026": {
+      "exemption": {
+        "value": 101000,
+        "source_ids": [
+          "mof-115-amounts"
+        ]
+      },
+      "exemption_70_plus": {
+        "value": 151500,
+        "source_ids": [
+          "mof-115-amounts",
+          "law-income-tax-act"
+        ]
+      },
+      "standard_deduction_single": {
+        "value": 136000,
+        "source_ids": [
+          "mof-115-amounts"
+        ]
+      },
+      "salary_special_deduction_cap": {
+        "value": 227000,
+        "source_ids": [
+          "mof-115-amounts"
+        ]
+      },
+      "savings_investment_cap": {
+        "value": 270000,
+        "source_ids": [
+          "law-income-tax-act"
+        ]
+      },
+      "writing_lecture_exemption_cap": {
+        "value": 180000,
+        "source_ids": [
+          "law-income-tax-act"
+        ]
+      },
+      "foreign_income_amt_threshold": {
+        "value": 1000000,
+        "source_ids": [
+          "law-amt-act"
+        ]
+      },
+      "amt_basic_exemption": {
+        "value": 7500000,
+        "source_ids": [
+          "mof-115-amounts",
+          "ntbt-exemptions-114"
+        ]
+      },
+      "brackets": {
+        "rows": [
+          {
+            "up_to": 610000,
+            "rate_ppm": 50000,
+            "progressive_difference": 0
+          },
+          {
+            "up_to": 1380000,
+            "rate_ppm": 120000,
+            "progressive_difference": 42700
+          },
+          {
+            "up_to": 2770000,
+            "rate_ppm": 200000,
+            "progressive_difference": 153100
+          },
+          {
+            "up_to": 5190000,
+            "rate_ppm": 300000,
+            "progressive_difference": 430100
+          },
+          {
+            "up_to": null,
+            "rate_ppm": 400000,
+            "progressive_difference": 949100
+          }
+        ],
+        "source_ids": [
+          "ntbt-tax-rates"
+        ]
+      },
+      "tax_rounding": {
+        "value": "half_up",
+        "source_ids": [
+          "ntbt-tax-rates"
+        ]
+      }
+    }
+  },
+  "basic_living_expense": {
+    "2025": {
+      "value": 213000,
+      "source_ids": [
+        "mof-114-basic-living",
+        "ntbt-exemptions-114"
+      ]
+    }
+  },
+  "interest_withholding": [
+    {
+      "effective_from": "2021-06-30",
+      "rate_ppm": 100000,
+      "exempt_if_tax_at_most": 2000,
+      "rounding": "floor",
+      "source_ids": [
+        "law-withholding-rates"
+      ]
+    }
+  ],
+  "nhi_supplementary_premium": [
+    {
+      "effective_from": "2021-01-01",
+      "rate_ppm": 21100,
+      "threshold_at_least": 20000,
+      "base_cap": 10000000,
+      "rounding": "half_up",
+      "source_ids": [
+        "nhi-supplementary-manual",
+        "law-nhi-act",
+        "law-nhi-supplementary-rules"
+      ]
+    }
+  ]
 }
