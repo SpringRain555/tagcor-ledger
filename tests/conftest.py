@@ -24,11 +24,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 from copy import deepcopy
 from datetime import timedelta
+import importlib.util
 import json
 from pathlib import Path
 
 import pytest
 
+from tagcor_ledger.application.reference import REFERENCE_DB_ENV
 from tagcor_ledger.domain.tax.dataset_validate import validate_tax_dataset
 from tagcor_ledger.infrastructure.clock import today_taipei
 
@@ -106,3 +108,29 @@ def fake_tax_dataset(fake_user_dirs: Path) -> Iterator[Path]:
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("TAGCOR_TAX_DATA", str(path))
         yield path
+
+
+@pytest.fixture(scope="session", autouse=True)
+def fake_reference_db(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    """法規庫一律**從版控裡的 corpus 現建一份**，不讀工作樹裡那個產生物。
+
+    `reference/reference.sqlite3` 不進版控：開發者的工作樹裡有（一鍵啟動會建），CI 的乾淨
+    checkout 上沒有。經 App 預設路徑讀到它的測試因此本機綠、CI 紅 —— 2026-11-14 稅務頁
+    法規分頁的搜尋測試就是這樣（`docs/lessons.md` 同日）。2026-10-05 同一件事只在
+    `test_reference_library.py` 裡修了，新的 UI 測試經 `window` fixture 又走回預設路徑，
+    所以這次做在這一層，不靠每條測試記得。
+
+    要測「法規庫不在」的測試照舊自己 `monkeypatch.setenv` 指到不存在的路徑，會蓋過這裡。
+    守門在 `tests/unit/test_reference_db_guard.py`。
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    builder_path = repo_root / "tools" / "law_sync" / "build_reference_db.py"
+    spec = importlib.util.spec_from_file_location("build_reference_db", builder_path)
+    assert spec is not None and spec.loader is not None
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    target = tmp_path_factory.mktemp("reference") / "reference.sqlite3"
+    builder.build(repo_root / "reference", target=target)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(REFERENCE_DB_ENV, str(target))
+        yield target

@@ -24,6 +24,33 @@
 
 ---
 
+## 2026-11-14 測試經 App 的預設路徑讀到工作樹裡的法規庫：pre-push 綠，推上去 CI 紅
+
+**情境**：v0.28.0 與 local-qt-app 合回 main 後推上 GitHub。pre-push 的全部測試通過（1,229 passed），
+CI 紅在一條：稅務頁法規分頁搜「存簿儲金」，找到 0 列。
+
+**做了什麼**：這條測試（派工單 T7 新寫的）用 `window` fixture 開主視窗，法規庫走 App 的預設路徑
+`reference/reference.sqlite3`。那是產生物、不進版控 —— 開發者的工作樹裡有（一鍵啟動會建），
+CI 的乾淨 checkout 上沒有。推之前用 grep 找過「讀未進版控檔案的測試」，比對的是路徑字面值，
+而這條測試一個路徑都沒寫：它是經由 App 的預設路徑讀到的。
+
+**為什麼失敗**：2026-10-05 那一筆的修法（從 corpus 現建）只做在 `test_reference_library.py`
+一個檔裡 —— **做在單一測試檔的隔離，新測試不會繼承**。稅務資料集同期就做在 `tests/conftest.py`
+的 session autouse（`fake_tax_dataset`），法規庫沒有跟上。而 pre-push 跑在有產生物的工作樹上，
+這一類它永遠抓不到：三層閘門裡**只有 CI 是乾淨 checkout**，「pre-push 比 CI 完整」只對
+量像素的那幾條成立。
+
+**結論**：`tests/conftest.py` 加 `fake_reference_db`：整個 session 從版控裡的 corpus 現建一份，
+`TAGCOR_REFERENCE_DB` 指過去；要測「法規庫不在」的照舊自己 `monkeypatch.setenv`。
+守門 `tests/unit/test_reference_db_guard.py` 刻意不要求那個 fixture —— 拿掉 autouse 驗過，
+本機（有產生物）與模擬 CI（沒有）都會紅；本機那一次，法規分頁那條測試本身仍是綠的。
+
+**不要再做**：App 會從預設路徑讀的東西（指標檔、帳本、稅務資料、法規庫），測試的隔離一律做在
+`tests/conftest.py` 的 autouse，不做在單一測試檔。要知道測試有沒有依賴未進版控的檔案，
+看乾淨 checkout 的結果（CI），不要用 grep 路徑字面值判斷；推完要看 CI（2026-10-10 那一筆）。
+
+---
+
 ## 2026-11-10 中文在 agent 改檔的途中變成一排 `?`，而 Verify 全綠
 
 **情境**：驗收 Codex 交回來的稅務頁（派工單 T7 與續派）。逐檔讀新檔時，`ui/pages/tax_data.py`
