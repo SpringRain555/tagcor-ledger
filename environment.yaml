@@ -43,3 +43,5 @@ dependencies:
   # 相依就是還沒爆炸的相依**：純 pip venv 上少了它，29 個測試直接 collection
   # error。明白宣告，兩邊的相依清單才對得起來。
   - "tzdata>=2024.1"
+  - pip:
+      - ./vendor/local_qt_app-0.1.0-py3-none-any.whl

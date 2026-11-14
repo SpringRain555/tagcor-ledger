@@ -73,6 +73,27 @@ def _imported_roots(path: Path) -> set[str]:
     return roots
 
 
+def _imports_local_qt_activation(path: Path) -> bool:
+    """偵測直接匯入 Qt 套件的啟動模組，也認得 `from local_qt_app import activation`。"""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    target = "local_qt_app.activation"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(
+                alias.name == target or alias.name.startswith(f"{target}.")
+                for alias in node.names
+            ):
+                return True
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            if node.module == target or (node.module or "").startswith(f"{target}."):
+                return True
+            if node.module == "local_qt_app" and any(
+                alias.name == "activation" for alias in node.names
+            ):
+                return True
+    return False
+
+
 def _sql_strings(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     found: list[str] = []
@@ -125,6 +146,30 @@ def test_only_the_ui_layer_knows_about_qt() -> None:
             offenders.append(f"  {path.relative_to(PROJECT_ROOT)}")
     if offenders:
         pytest.fail("只有 ui/ 可以 import PySide6：\n" + "\n".join(offenders))
+
+
+def test_only_the_ui_layer_imports_local_qt_activation() -> None:
+    """`local_qt_app.activation` 會載入 PySide6，非 UI 模組不得碰它。"""
+    offenders: list[str] = []
+    for path in _modules(""):
+        relative = path.relative_to(SOURCE_ROOT)
+        if relative.parts and relative.parts[0] == "ui":
+            continue
+        if _imports_local_qt_activation(path):
+            offenders.append(f"  {path.relative_to(PROJECT_ROOT)}")
+    if offenders:
+        pytest.fail(
+            "只有 ui/ 可以 import local_qt_app.activation：\n" + "\n".join(offenders)
+        )
+
+
+def test_local_qt_activation_import_guard_has_a_positive_control(tmp_path: Path) -> None:
+    """陽性對照：在 app/ 匯入 Qt 啟動模組時，偵測器必須抓得到。"""
+    probe = tmp_path / "app" / "probe.py"
+    probe.parent.mkdir()
+    probe.write_text("from local_qt_app.activation import request_activation\n", encoding="utf-8")
+
+    assert _imports_local_qt_activation(probe)
 
 
 def test_nothing_below_the_ui_imports_the_ui() -> None:

@@ -15,6 +15,7 @@
 |---|---|
 | 直譯器 | conda env `tagcor-ledger`，Python **≥ 3.12.16、< 3.13**（`environment.yaml` 的安全地板） |
 | GUI | PySide6 6.x，**由 conda 安裝**；`pyproject.toml` 刻意不列它（理由見 [versions.md](versions.md)） |
+| 共用啟動套件 | `local-qt-app` **0.1.0**，由 repo 內 `vendor/` 的 wheel 安裝 |
 | 版本界線 | `requires-python >=3.12`；檢查工具四條有上界，理由在 [versions.md](versions.md) |
 | 機器可讀的定義 | `environment.yaml`（環境）＋ `pyproject.toml`（套件與 `[dev]`），都在根目錄 |
 | **PATH 上那個能不能用** | **不能。** PATH 上的 `python` 幾乎一定是別的直譯器（開發機上是 msys 的 3.14，裸的），沒有 PySide6。一律用 conda 環境的**完整路徑**：`tools\Launch.ps1`／`tools\Verify.ps1` 會自己找，找不到時設 `TAGCOR_PYTHON`（見 §5） |
@@ -32,8 +33,9 @@ conda activate tagcor-ledger
 python -m pip install -e ".[dev]"
 ```
 
-`environment.yaml` 會安裝 conda 版 PySide6；`pip install -e ".[dev]"` 只安裝本專案的
-editable package 與非 Qt 的 Python 相依。**不要用 pip 裝或升 PySide6** —— Windows 下混用
+`environment.yaml` 會安裝 conda 版 PySide6，並從 `vendor/local_qt_app-0.1.0-py3-none-any.whl`
+安裝共用啟動套件；`pip install -e ".[dev]"` 只安裝本專案的 editable package 與非 Qt 的
+Python 相依。**不要用 pip 裝或升 PySide6** —— Windows 下混用
 conda／pip 版會讓 Qt DLL 搜尋路徑混亂，症狀是
 `ImportError: DLL load failed while importing QtWidgets`。已經混裝的話重建環境（§4）。
 
@@ -98,7 +100,15 @@ offscreen 沒有中文字型，中文會渲染成豆腐塊。
    conda activate tagcor-ledger
    python -m pip install -e ".[dev]"
    ```
-4. 更新完跑 `.\tools\Verify.ps1 -Ui`。**升 `ruff` 或 `mypy` 之後要看的不是「有沒有紅」，
+4. **升級共用啟動套件**：換掉 `vendor/` 的 wheel，並同步改 `environment.yaml` 與
+   `.github/workflows/verify.yml` 的 wheel 檔名。從 repo 根目錄重裝後跑 Verify：
+   ```powershell
+   $wheel = Get-ChildItem .\vendor\local_qt_app-*.whl
+   python -m pip install --no-deps --force-reinstall $wheel.FullName
+   .\tools\Verify.ps1 -Ui
+   ```
+   wheel 只從 repo 內安裝；不要在 `pyproject.toml` 用套件名稱宣告，也不要指向共用原始碼資料夾。
+5. 其他更新完跑 `.\tools\Verify.ps1 -Ui`。**升 `ruff` 或 `mypy` 之後要看的不是「有沒有紅」，
    是「紅的是什麼」** —— 新版開了新規則屬於預期。
 
 ## 5. 環境變數

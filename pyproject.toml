@@ -79,14 +79,14 @@ strict = true
 # 2026-08-22 它們從單一模組變成套件，這條仍然成立（子模組同樣不在清單上）。
 #
 # **2026-08-22 實測過這八筆有沒有多餘的：逐一拿掉再跑 mypy --strict，八筆全都會噴。**
-# 沒有殘留。清單增減之後值得再測一次 —— 做法是把某一筆註解掉然後跑
+# `instance_channel` 已改成透過帶 `py.typed` 的 `local-qt-app` 提供 Qt 機制，不再需要這一筆。
+# 剩下七筆逐一拿掉仍會噴。清單增減之後值得再測一次 —— 做法是把某一筆註解掉然後跑
 # `python -m mypy --no-incremental src`，不噴就表示那一筆可以刪。
 [[tool.mypy.overrides]]
 module = [
     "tagcor_ledger.ui.app",
     "tagcor_ledger.ui.main_window",
     "tagcor_ledger.ui.error_handler",
-    "tagcor_ledger.ui.instance_channel",
     "tagcor_ledger.ui.pages.*",
     "tagcor_ledger.ui.startup_dialog",
     "tagcor_ledger.ui.theme",

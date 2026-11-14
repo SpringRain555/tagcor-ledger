@@ -192,11 +192,11 @@ ruff 與 mypy --strict 乾淨。
 
 ## 下一輪開發時先做的
 
-- **單一實例的三支檔案抽成共用套件**（`app/single_instance.py`、`app/startup_signal.py`、`ui/instance_channel.py`）——
-  這三支 2026-09-11 照 `webscouts` 抄來，2026-09-14 `pokerag-pro` 又照這裡抄了一份，三份之後各自改過。
-  `D:\Projects\_meta\CONVENTIONS.md` §16 寫著「第三份出現就抽」；使用者 2026-09-15 決定
-  **`webscouts`、`tagcor-ledger`、`pokerag-pro` 其中一個進入下一輪開發時，三份一起抽**。
-  在那之前改這三支的行為，要回頭看另外兩份。
+- [x] **單一實例的三支檔案已改用共用套件 `local-qt-app` 0.1.0**（`app/single_instance.py`、
+  `app/startup_signal.py`、`ui/instance_channel.py`；2026-11-14）。app 保留鎖與標記位置、管道前綴、logger
+  和錯誤訊息政策，共用套件負責底層機制。
+- **`data_location` 的共用套件抽取仍待辦**：四個 app 的路徑來源、欄位與錯誤處理不同，需另行設計介面；
+  `local-qt-app` 0.1.0 尚未涵蓋這部分。
 
 ## 後續候選 Phase
 

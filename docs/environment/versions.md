@@ -24,6 +24,7 @@
 | `libsqlite` | ✅ `>=3.54.0` | — | — | ✅ | SQLite 安全地板；App 使用 FTS5 |
 | `pip`／`setuptools` | ✅ | setuptools ✅ build-system | — | ✅ | 建置工具的安全地板 |
 | `filelock` | ✅ `>=3.20.3` | ✅ `>=3.20.3` | — | ✅ | 執行期相依，conda 與純 pip 安裝都要拿得到 |
+| `local-qt-app` | ✅ `./vendor/local_qt_app-0.1.0-py3-none-any.whl` | ❌ | ✅ 同一個 vendored wheel | — | 共用啟動機制；不從套件索引或共用原始碼路徑安裝 |
 | `platformdirs`／`tzdata` | ✅ | ✅ | — | — | 執行期相依，conda 環境與純 pip 安裝都要拿得到 |
 | `pytest`／`pytest-qt`／`ruff`／`mypy` | ✅ | ✅ `[dev]` | CI 使用 `[dev]` | — | **兩邊都宣告，所以兩邊要一致** —— 見下一節 |
 | 版本地板清單 | — | — | — | ✅ | `check_env_floors.py` 的機器可讀設定；測試比對它與其他宣告 |

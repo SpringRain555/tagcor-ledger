@@ -31,6 +31,9 @@ def _environment_specs() -> dict[str, str]:
     pattern = re.compile(r'^\s*-\s*"?([A-Za-z0-9_.-]+)(.*?)"?\s*$')
     specs: dict[str, str] = {}
     for line in (PROJECT_ROOT / "environment.yaml").read_text(encoding="utf-8").splitlines():
+        indentation = len(line) - len(line.lstrip())
+        if indentation != 2 or line.strip() == "- pip:":
+            continue
         match = pattern.match(line)
         if match:
             specs[match.group(1)] = match.group(2)

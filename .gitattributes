@@ -52,3 +52,4 @@
 *.webm binary
 *.mp3  binary
 *.wav  binary
+vendor/*.whl binary

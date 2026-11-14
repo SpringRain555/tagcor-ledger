@@ -38,7 +38,7 @@ flowchart TD
 
 ### 啟動器憑什麼退場：一個標記檔，不是五秒
 
-`run_gui` 在 `window.show()` 之後寫 `tmp\ui-ready.txt`（`app/startup_signal.py`），
+`run_gui` 在 `window.show()` 之後寫 `tmp\ui-ready.txt`（`app/startup_signal.py` 轉接到共用套件），
 啟動器等的是那個檔案出現。**2026-08-18 到 2026-09-11 之間這裡是「等 5 秒，
 行程還活著就當視窗開了」** —— 那擋得住一啟動就死的情形，擋不住另外兩種：
 
@@ -47,9 +47,9 @@ flowchart TD
 | 視窗第 8 秒才出來（冷啟動、防毒掃描） | 第 5 秒印「視窗已開啟」然後關掉，使用者對著空白等 |
 | 第 6 秒才炸掉 | 錯誤進了 `launch-stderr.log`，唯一會說話的視窗已經不在了 |
 
-固定秒數不是訊號，是猜測（CONVENTIONS §16 第 3 題）。這一段是 `webscouts`
-那一份的複本 —— 兩個 Qt 專案的單一實例守門本來就是互抄的，這一件也一樣，
-**不抽共用套件**，理由相同。
+固定秒數不是訊號，是猜測（CONVENTIONS §16 第 3 題）。標記檔的寫入與清除由共用套件
+`local-qt-app` 0.1.0 執行；app 的 `startup_signal.py` 保留標記位置政策，仍從 `AppPaths.tmp_dir`
+取路徑，並由 `--json` 提供給啟動器。
 
 標記檔的路徑**由 `--json` 的 `ready_marker` 欄位給**，啟動器不自己拼：
 拼出來的會是第二份路徑實作，`--data-dir` 或指標檔換了資料根之後它會安靜地指錯地方，

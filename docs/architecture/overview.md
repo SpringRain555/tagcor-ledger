@@ -76,6 +76,7 @@ src/tagcor_ledger/
 │   ├── formatting/     dict → 顯示字串（唯一決定畫面中文長相的地方）。
 │   │                   primitives（金額／日期／名稱表）、rows（每一列）、messages、tax
 │   ├── main_window.py  側邊欄、頁面堆疊，以及頁面之間所有的連動
+│   ├── instance_channel.py  單一實例叫醒管道的 app 政策轉接層
 │   ├── theme.py        apply_dark_theme：Fusion style、字體、palette、QSS
 │   ├── first_run_dialog.py  第一次啟動問資料放哪裡（ADR-0018），在主視窗之前
 │   ├── colors.py       色票的正本
@@ -87,7 +88,7 @@ src/tagcor_ledger/
 │                       reorder_dialog、sort_editor、confirm（確認框）、notice（提示框）
 └── app/                bootstrap、paths、path_settings、data_location（沒有指標檔時
                         去哪裡找帳本、什麼時候要問，ADR-0018）、window_state、
-                        logging_setup、single_instance、startup、resources
+                        logging_setup、single_instance、startup_signal、startup、resources
 ```
 
 ### 交易只有一個寫入點
