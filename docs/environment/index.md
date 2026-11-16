@@ -151,13 +151,12 @@ offscreen 沒有中文字型，中文會渲染成豆腐塊。
   `pkg>=1.2` 的 `>` 會被當成輸出重導向，在目前目錄建立以版本號命名的檔案，指令本身不會印出內容
   （2026-11-08 在 repo 根目錄曾產生 6 個檔案）。改用 `Scripts\conda.exe`，或把規格寫進
   `environment.yaml`。
-- **待辦（2026-11-09 記）：research runtime 落後安全修補。** `tools\law_sync\fetch_laws.py`、`tools\fetch.py`
-  用的那一個 runtime 是 Python 3.12.13＋certifi 2026-07 版（3.12.16 修了 ssl 撤銷外洩的中繼 CA 等）。
-  這一輪沒有升，障礙兩個：`D:\Claude_Workspace\claude-skills` 的治理工具只在 runtime 壞掉時才重建
-  （沒有「依 lock 重建」的開關，而 `~\.claude\runtimes` 只能由治理工具改）；uv 管的 3.12 是共用的
-  次版本連結，`sandbox-spectrum` 的 venv（實驗基準保留）也掛在上面，升 patch 會把它一起換掉。
-  要修的地方在 claude-skills：讓 `runtime -Apply` 能依 lock 重建、Python 釘到 patch 並用獨立安裝目錄。
-  在那之前，抓回來的稅務數字一律經使用者看過差異與出處才 commit（REQ-0011）。
+- **research runtime 的安全修補（2026-11-09 記、2026-11-16 處理）。** `tools\law_sync\fetch_laws.py`、`tools\fetch.py`
+  用的 research runtime 原本是 Python 3.12.13＋certifi 2026.7.22，現在是 **3.12.16**（python.org 2026-10-25
+  的加急安全版：`ssl` 擋下外洩的 eMudhra 中繼 CA 金鑰等）＋ certifi 2026.10.23。`D:\Claude_Workspace\claude-skills`
+  的治理工具改成 Python 釘到 patch、裝在 `~\.claude\runtimes\_python` 這個獨立目錄，所以升 patch 不再連帶換掉
+  掛在 uv 共用 3.12 連結上的其他 venv（`sandbox-spectrum` 的 `.venv` 也改成直接連 3.12.13）。做法與踩到的坑
+  寫在那個 repo 的 README〈Python 的 pin 與安裝位置〉。抓回來的稅務數字照舊一律經使用者看過差異與出處才 commit（REQ-0011）。
 
 ## 環境快照
 
