@@ -4,8 +4,11 @@
 monkeypatch 的目標也在那個模組 —— patch 頁面模組的 `ask_form` 會 `AttributeError`。
 """
 
+from datetime import date
+
 from PySide6.QtCore import QDate
 
+from tagcor_ledger.ui.widgets import deposit_dialog
 from tagcor_ledger.ui.widgets.deposit_dialog import DepositContractDialog
 from tagcor_ledger.ui.widgets.forms import select_data
 
@@ -175,7 +178,7 @@ def test_editing_a_deposit_contract_hides_the_term_only_fields(window, qtbot) ->
 # --- 首次起存日與「會建立哪一期」（v0.24.0）-----------------------------------
 
 
-def test_the_dialog_resolves_the_passbook_date_to_the_current_term(window, qtbot) -> None:
+def test_the_dialog_resolves_the_passbook_date_to_the_current_term(window, qtbot, monkeypatch) -> None:
     """**這條守的是使用者照存單抄日期的那一刻。**
 
     存單印的是最初那一期（112/11/15 存入、113/11/15 到期），而勾了「無限次數自動
@@ -184,7 +187,11 @@ def test_the_dialog_resolves_the_passbook_date_to_the_current_term(window, qtbot
 
     第一版是反過來的：欄位問「起存日」＝目前那一期，填錯才警告 —— 於是那個欄位的
     正確值不是使用者手上那張紙印的數字。
+
+    **「今天」釘在第 3 期裡的一天。** 原本讀真的時鐘，2026-11-15 那一期一到期就變成第 4 期，
+    這條測試在 2026-11-16 跟著紅了（主線上也紅）—— 它守的是換算，不是哪一天跑測試。
     """
+    monkeypatch.setattr(deposit_dialog, "today_taipei", lambda: date(2026, 6, 1))
     dialog = DepositContractDialog(window.controller, window)
     qtbot.addWidget(dialog)
     select_data(dialog.maturity_action, "renew_principal_only")
