@@ -1,6 +1,6 @@
 # REQ-0011 稅務：提醒、判斷與試算
 
-狀態：**規格已定，實作中**（2026-11-09 起，分支 `wip/tax-system`）
+狀態：**已實作**（v0.28.0，2026-11-14 合回 main；開發期間在分支 `wip/tax-system`，2026-11-09 起）
 
 > 決定的理由不在這裡：依法定期間觸發的提醒見 [ADR-0019](../decisions/ADR-0019-statutory-tax-reminders.md)，
 > App 試算綜所稅見 [ADR-0020](../decisions/ADR-0020-income-tax-estimate.md)。這一份只寫**做什麼、做到哪、怎麼驗收**。
