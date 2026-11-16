@@ -12,7 +12,7 @@ import sqlite3
 from tagcor_ledger.infrastructure.clock import now_iso
 
 
-LATEST_SCHEMA_VERSION = 14
+LATEST_SCHEMA_VERSION = 15
 Migration = Callable[[sqlite3.Connection], None]
 
 
@@ -628,6 +628,23 @@ def migrate_v14(connection: sqlite3.Connection) -> None:
     )
 
 
+def migrate_v15(connection: sqlite3.Connection) -> None:
+    """拿掉 `accounts.account_type` —— 為逐筆對帳保留、程式從 v1 起只寫過 `cash` 的欄位。
+
+    **理由寫在 [ADR-0021](../../../docs/decisions/ADR-0021-no-statement-reconciliation.md)。**
+    一句話版本：REQ-0010 排在 2026-10 月底重新評估，2026-11-16 定案「不做」；它保留的兩樣東西
+    本來就約好「兩種結論都會讓它消失」—— 留著，下一個人會以為還有人在等它。
+
+    **只拿掉這一欄。** 另一個保留物 `adjustment` 在 `transactions.entry_type` 的 CHECK 裡，拿掉要
+    重建整張 `transactions`（posting、配置、FTS、定存事件與稽核都指著它），換到的只是允許集合
+    小一號 —— 跟 v12／v13 留下 `status` 那條 CHECK 是同一個取捨。程式那一側（`EntryType`）已經沒有它。
+
+    `ALTER TABLE ... DROP COLUMN` 從 v5 起就在用（SQLite 3.35）。沒有索引、外鍵、CHECK、觸發器
+    或檢視引用這一欄，所以可以直接拿掉；它對每一列都是同一個值，不會有資訊跟著消失。
+    """
+    _drop_column_if_exists(connection, "accounts", "account_type")
+
+
 def _add_column_if_missing(
     connection: sqlite3.Connection, table: str, column: str, definition: str
 ) -> None:
@@ -653,6 +670,7 @@ MIGRATIONS: dict[int, Migration] = {
     12: migrate_v12,
     13: migrate_v13,
     14: migrate_v14,
+    15: migrate_v15,
 }
 
 

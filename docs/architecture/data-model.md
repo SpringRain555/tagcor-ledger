@@ -81,11 +81,11 @@ erDiagram
     }
 ```
 
-> **`adjustment` 從 v1 就在 `CHECK` 約束裡，但沒有任何程式碼會建立它**
-> （見 [狀態機 §1](state-machines.md)）。圖上照實列出，免得有人以為漏實作了什麼。
-> `accounts.account_type` 同理 —— 永遠是 `cash`，介面沒有地方能改。
-> 兩者都由 `tests/unit/test_reserved_schema.py` 守著「保持沒有人用」，並在
-> [REQ-0010](../requirements/REQ-0010-reconciliation-gap.md) 的 2026-10 評估時一併處理。
+> **`adjustment` 仍在 `CHECK` 約束裡，但程式裡已經沒有這個流向**（v0.29.0 起，見 [狀態機 §1](state-machines.md)）。
+> 圖上照實列出 CHECK 允許的值，免得有人以為漏實作了什麼。它和 `accounts.account_type` 原本都是為逐筆對帳
+> 保留的；[REQ-0010](../requirements/REQ-0010-reconciliation-gap.md) 2026-11-16 評估後不做，`account_type`
+> 在 schema v15 拿掉，`adjustment` 只剩 CHECK 那一側（拿掉要重建整張表），理由見
+> [ADR-0021](../decisions/ADR-0021-no-statement-reconciliation.md)。
 
 v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `payee_name_snapshot`。
 
@@ -95,6 +95,7 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
 |---|---|---|
 | `payees` 表、`payee_id`、`payee_name_snapshot` | v0.6.0 移除，用「項目」＋「備註」表達 | `test_schema_v1_migrates_to_latest_and_reruns_safely` |
 | 卡內餘額（`card_balance`、`stored_value`、`icash`…） | 電子票證只記儲值當下的支出，見 `AGENTS.md` 與 ADR-0006 | `test_schema_never_grows_a_stored_value_card_concept` |
+| `accounts.account_type`、流向「調整」 | REQ-0010 評估後不做逐筆對帳，schema v15 拿掉（ADR-0021）；`transactions` 的 CHECK 仍允許 `adjustment`，程式不寫它 | `test_reserved_fields_removed.py`、`test_retired_schema_values.py` |
 
 ## 金額規則
 
@@ -149,6 +150,10 @@ v0.6.0（schema v5）起不再有 `payees` 表，也不保留 `payee_id` 或 `pa
 - v14：稅務歸類、提醒標記、申報輸入與扣繳憑單覆寫；新增定存領息的扣繳與補充保費欄位，既有列保留 `NULL`；
   並新增 `idx_deposit_events_transaction`。欄位與約束依 [REQ-0011 §私人](../requirements/REQ-0011-tax-reminders-and-estimate.md)；
   理由見該節與本文件「主要表」。
+- v15：**拿掉** `accounts.account_type`（`DROP COLUMN`；程式從 v1 起只寫過 `cash`，沒有資訊跟著消失）。
+  `transactions.entry_type` 的 CHECK 留著 `adjustment`（拿掉要重建整張表），程式裡已經沒有這個流向。
+  兩者都是為逐筆對帳保留的，REQ-0010 評估後不做 —— 理由見
+  [ADR-0021](../decisions/ADR-0021-no-statement-reconciliation.md)。
 
 **每一版都是新的一版，不改舊的那一版**，因為使用者的資料庫已經跑過了 —— migration
 記錄下來就不會再跑第二次，改舊版的內容對既有資料庫毫無效果。所以 v3 建的兩張表由

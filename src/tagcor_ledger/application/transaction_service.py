@@ -326,7 +326,6 @@ def transaction_to_dict(transaction: TransactionRecord) -> dict[str, Any]:
         "expense": "支出",
         "income": "收入",
         "transfer": "轉帳",
-        "adjustment": "調整",
     }.get(transaction.entry_type, transaction.entry_type)
     category_parts = [
         name

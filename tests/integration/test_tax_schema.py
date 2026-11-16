@@ -10,6 +10,7 @@ import pytest
 from tagcor_ledger.app.paths import resolve_app_paths
 from tagcor_ledger.application.deposits import DepositService
 from tagcor_ledger.infrastructure.database import connect_database, initialize_database
+from tagcor_ledger.infrastructure.migrations import LATEST_SCHEMA_VERSION
 from tagcor_ledger.infrastructure.sqlite_store import LedgerStore
 
 
@@ -52,7 +53,7 @@ def _make_deposit_event(store: LedgerStore) -> str:
     return event_id
 
 
-def test_fresh_database_reaches_v14_and_reruns_safely(tmp_path: Path) -> None:
+def test_fresh_database_gets_the_tax_schema_and_reruns_safely(tmp_path: Path) -> None:
     paths = resolve_app_paths(tmp_path / "data")
     initialize_database(paths)
     initialize_database(paths)
@@ -71,8 +72,8 @@ def test_fresh_database_reaches_v14_and_reruns_safely(tmp_path: Path) -> None:
             "SELECT name FROM sqlite_master WHERE type = 'index' "
             "AND name = 'idx_deposit_events_transaction'"
         ).fetchone()
-    assert int(version["version"]) == 14
-    assert int(versions["count"]) == 14
+    assert int(version["version"]) == LATEST_SCHEMA_VERSION
+    assert int(versions["count"]) == LATEST_SCHEMA_VERSION
     assert set(TAX_TABLES) <= tables
     assert {"withheld_tax_minor", "nhi_premium_minor"} <= event_columns
     assert index is not None
@@ -85,7 +86,7 @@ def test_v13_database_upgrade_keeps_existing_event_amounts_null(tmp_path: Path) 
 
     # 把剛建立的測試帳本退回 v13 schema，保留一列舊定存事件。
     with connect_database(paths.database_path) as connection:
-        connection.execute("DELETE FROM schema_migrations WHERE version = 14")
+        connection.execute("DELETE FROM schema_migrations WHERE version >= 14")
         connection.execute("DROP INDEX idx_deposit_events_transaction")
         for table in TAX_TABLES:
             connection.execute(f"DROP TABLE {table}")
@@ -103,7 +104,7 @@ def test_v13_database_upgrade_keeps_existing_event_amounts_null(tmp_path: Path) 
             (event_id,),
         ).fetchone()
         version = connection.execute("SELECT MAX(version) AS version FROM schema_migrations").fetchone()
-    assert int(version["version"]) == 14
+    assert int(version["version"]) == LATEST_SCHEMA_VERSION
     assert event["withheld_tax_minor"] is None
     assert event["nhi_premium_minor"] is None
 

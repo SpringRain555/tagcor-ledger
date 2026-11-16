@@ -47,7 +47,6 @@ class AccountService:
                     {
                         "account_id": account.account_id,
                         "name": account.name,
-                        "account_type": account.account_type,
                         "currency": account.currency,
                         "opening_balance_minor": account.opening_balance_minor,
                         "balance_minor": balances[account.account_id],
@@ -62,7 +61,6 @@ class AccountService:
         self,
         *,
         name: str,
-        account_type: str = "cash",
         opening_balance: str = "0",
     ) -> Result:
         """建立帳戶。**三種失敗各有各的錯誤碼與說法。**
@@ -106,7 +104,6 @@ class AccountService:
         try:
             account = self.store.create_account(
                 name=cleaned,
-                account_type=account_type,
                 opening_balance_minor=opening.amount_minor,
             )
         except (ValueError, sqlite3.IntegrityError) as exc:

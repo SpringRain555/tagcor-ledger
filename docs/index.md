@@ -73,8 +73,8 @@
 | [REQ-0007 郵局定存](requirements/REQ-0007-time-deposits.md) | 已實作（schema v6–v7、v9–v10）。**v0.23.0 起是「待確認」唯一的來源**（2026-10-05 起待確認住在餘額盤點頁底下，[ADR-0016](decisions/ADR-0016-inbox-under-balance-snapshots.md)）；v0.24.0 補完結束合約與中途解約，並把產生的下界訂在建檔日、建檔改成填存單上那一天（[ADR-0012](decisions/ADR-0012-deposit-events-start-at-record-date.md)）|
 | [REQ-0008 法規參考庫](requirements/REQ-0008-reference-db.md) | 已實作；**「不計算稅額」被 [ADR-0020](decisions/ADR-0020-income-tax-estimate.md) 推翻（僅限 REQ-0011 的試算）**；5 月報稅季前的全面複查提示其實沒做，改由 REQ-0011 實作 |
 | [REQ-0009 例外處理與可觀測性](requirements/REQ-0009-observability.md) | 已實作 |
-| [REQ-0010 對帳缺口](requirements/REQ-0010-reconciliation-gap.md) | **刻意尚未實作** |
-| [REQ-0011 稅務：提醒、判斷與試算](requirements/REQ-0011-tax-reminders-and-estimate.md) | **規格已定，實作中**（2026-11-09 起）。`reference/tax/dataset.json` 的格式以它為準 |
+| [REQ-0010 對帳缺口](requirements/REQ-0010-reconciliation-gap.md) | **評估過，不做**（2026-11-16，[ADR-0021](decisions/ADR-0021-no-statement-reconciliation.md)）；需求與設計留著，日後要做從這裡開始 |
+| [REQ-0011 稅務：提醒、判斷與試算](requirements/REQ-0011-tax-reminders-and-estimate.md) | 已實作（v0.28.0，2026-11-14）。`reference/tax/dataset.json` 的格式以它為準 |
 
 ## Decisions
 
@@ -98,6 +98,7 @@
 - [ADR-0018 第一次啟動時讓使用者選資料位置](decisions/ADR-0018-choose-data-location-on-first-run.md)
 - [ADR-0019 稅務提醒依法定期間觸發，由帳本事實結案](decisions/ADR-0019-statutory-tax-reminders.md) —— 符合 ADR-0014 的推翻條件，不是推翻它
 - [ADR-0020 App 試算綜所稅](decisions/ADR-0020-income-tax-estimate.md) —— **推翻 REQ-0008 的「不計算稅額」**，以護欄回應「算錯比不算更糟」
+- [ADR-0021 不做逐筆對帳，拿掉為它保留的兩樣東西](decisions/ADR-0021-no-statement-reconciliation.md) —— REQ-0010 的評估結果
 
 ## Architecture
 

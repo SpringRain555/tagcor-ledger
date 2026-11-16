@@ -60,7 +60,7 @@ src/tagcor_ledger/
 │   ├── result.py       Result：成功／失敗與錯誤碼
 │   └── failures.py     錯誤碼 → 中文說法。**一個碼的句子只寫在這裡**
 ├── infrastructure/
-│   ├── migrations.py   v1 → v14 的 schema
+│   ├── migrations.py   v1 → v15 的 schema
 │   ├── database.py     連線（WAL、FK、busy_timeout）
 │   ├── sqlite_store.py 組出 LedgerStore，本身不含 SQL
 │   ├── stores/         一個聚合一個檔：accounts／categories／transactions／

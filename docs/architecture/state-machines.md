@@ -75,15 +75,14 @@ stateDiagram-v2
 
 ### `entry_type` 不是狀態
 
-`CHECK (entry_type IN ('income', 'expense', 'transfer', 'adjustment'))`，建立後不變。
+`CHECK (entry_type IN ('income', 'expense', 'transfer', 'adjustment'))`，建立後不變。**程式只用前三種。**
 
-> **`adjustment` 目前沒有任何程式碼會建立。** 它從 v1 就在列舉與 CHECK 約束裡，為了「將來的對帳調整」
-> 預留，至今（2026-08）空置。**這是本專案「先加著以後再說」的實例，不是待辦事項** ——
-> 真的要做對帳調整時再一併設計，不要因為欄位已經在就隨便用它。
->
-> **2026-08-22 起這件事有測試守著**：`tests/unit/test_reserved_schema.py` 會擋住「在別的地方
-> 開始用 `adjustment`」。那份檔案自己寫著期限 —— [REQ-0010](../requirements/REQ-0010-reconciliation-gap.md)
-> 在 2026-10 月底重新評估，判定做或不做都會讓那份守門連同這個欄位一起處理掉。
+> **`adjustment` 只剩 CHECK 那一側。** 它從 v1 就在列舉與 CHECK 裡，為逐筆對帳的「把差額轉成調整交易」
+> 保留，從沒有任何程式碼建立過 —— 本專案「先加著以後再說」的實例。
+> [REQ-0010](../requirements/REQ-0010-reconciliation-gap.md) 2026-11-16 評估後不做，v0.29.0 拿掉列舉與
+> 顯示名稱（[ADR-0021](../decisions/ADR-0021-no-statement-reconciliation.md)）；CHECK 留著，是因為拿掉要重建
+> 整張 `transactions`。`tests/unit/test_retired_schema_values.py` 擋住「程式又開始寫它」，
+> `tests/integration/test_reserved_fields_removed.py` 擋住「列舉又長出第四種」。
 
 ---
 

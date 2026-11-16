@@ -252,5 +252,4 @@ def _entry_type_name(value: str) -> str:
         "income": "收入",
         "expense": "支出",
         "transfer": "轉帳",
-        "adjustment": "調整",
     }.get(value, value)

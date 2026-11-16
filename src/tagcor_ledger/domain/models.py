@@ -10,10 +10,16 @@ from tagcor_ledger.domain.money import Money
 
 
 class EntryType(StrEnum):
+    """交易的流向。**只有三種**，由 `tests/integration/test_reserved_fields_removed.py` 守著。
+
+    v0.29.0 之前還有一個從 v1 就沒有人建立過的「調整」，為了逐筆對帳保留；REQ-0010 評估後不做，
+    就跟 `accounts.account_type` 一起拿掉（[ADR-0021](../../../docs/decisions/ADR-0021-no-statement-reconciliation.md)）。
+    schema 的 CHECK 仍允許那個值 —— 拿掉要重建整張 `transactions`，換到的只是允許集合小一號。
+    """
+
     INCOME = "income"
     EXPENSE = "expense"
     TRANSFER = "transfer"
-    ADJUSTMENT = "adjustment"
 
 
 class RecordStatus(StrEnum):
@@ -25,7 +31,6 @@ class RecordStatus(StrEnum):
 class Account:
     account_id: str
     name: str
-    account_type: str
     currency: str
     opening_balance_minor: int
     status: str

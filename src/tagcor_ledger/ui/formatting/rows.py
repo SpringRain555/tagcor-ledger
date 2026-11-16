@@ -87,11 +87,11 @@ def transaction_summary(item: dict[str, Any]) -> str:
 
 
 def account_values(item: dict[str, Any]) -> list[str]:
-    """**不顯示「類型」與「幣別」。**
+    """**不顯示「幣別」。**
 
-    `account_type` 目前永遠是 `cash`（介面沒有地方可以改），`currency` 永遠是 TWD。
-    兩欄對每一列都印同一個值，其中一個還是英文 —— 那不是資訊，是雜訊。
-    幣別改寫在「目前餘額」的欄位標題上。
+    `currency` 永遠是 TWD，對每一列都印同一個值 —— 那不是資訊，是雜訊。
+    幣別改寫在「目前餘額」的欄位標題上。（v0.29.0 之前還有一欄永遠是 `cash` 的「類型」，
+    那一欄已經從 schema 拿掉，見 ADR-0021。）
     """
     return [
         str(item["name"]),

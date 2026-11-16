@@ -67,9 +67,9 @@ def _seed_defaults(connection: sqlite3.Connection, version: int) -> None:
     connection.execute(
         """
         INSERT OR IGNORE INTO accounts(
-            account_id, name, account_type, currency, opening_balance_minor,
+            account_id, name, currency, opening_balance_minor,
             status, sort_order, created_at, updated_at
-        ) VALUES ('acct_cash', '現金', 'cash', 'TWD', 0, 'active', 10, ?, ?)
+        ) VALUES ('acct_cash', '現金', 'TWD', 0, 'active', 10, ?, ?)
         """,
         (timestamp, timestamp),
     )

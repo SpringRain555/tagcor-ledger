@@ -50,7 +50,7 @@ class AccountStore(StoreBase):
         with connect_database(self.paths.database_path) as connection:
             rows = connection.execute(
                 f"""
-                SELECT account_id, name, account_type, currency, opening_balance_minor,
+                SELECT account_id, name, currency, opening_balance_minor,
                        status, sort_order
                 FROM accounts
                 {where}
@@ -90,7 +90,6 @@ class AccountStore(StoreBase):
         self,
         *,
         name: str,
-        account_type: str = "cash",
         currency: str = "TWD",
         opening_balance_minor: int = 0,
     ) -> Account:
@@ -98,7 +97,6 @@ class AccountStore(StoreBase):
         account = Account(
             account_id=f"acct_{uuid4().hex}",
             name=name.strip(),
-            account_type=account_type,
             currency=currency,
             opening_balance_minor=opening_balance_minor,
             status="active",
@@ -110,14 +108,13 @@ class AccountStore(StoreBase):
             connection.execute(
                 """
                 INSERT INTO accounts(
-                    account_id, name, account_type, currency, opening_balance_minor,
+                    account_id, name, currency, opening_balance_minor,
                     status, sort_order, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     account.account_id,
                     account.name,
-                    account.account_type,
                     account.currency,
                     account.opening_balance_minor,
                     account.status,

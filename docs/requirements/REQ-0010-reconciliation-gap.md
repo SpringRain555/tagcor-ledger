@@ -1,6 +1,7 @@
 # REQ-0010 對帳缺口
 
-狀態：**已記錄需求，刻意尚未實作。** 見下方「為什麼現在不做」。
+狀態：**評估過，不做**（2026-11-16，[ADR-0021](../decisions/ADR-0021-no-statement-reconciliation.md)）。
+下面的需求與設計留著 —— 日後用眼睛對存摺不夠用時，從這裡開始。結案經過見最後一節。
 
 ## 問題
 
@@ -81,3 +82,14 @@ Actual Budget 的做法可以直接參考
 **`tests/unit/test_reserved_schema.py` 鎖住「保持沒有人用」**，
 並把期限寫在那份檔案的 docstring 裡。上面那次評估**兩種結論都會讓它消失**：
 要做，欄位就開始有值；不做，就在那時發 schema v8 清掉。
+
+## 2026-11-16 結案：不做
+
+評估拖過了期限才處理。**使用者判定以「沒有問題」結案，沒有逐題回答〈重新評估的時機〉那三個問題**
+—— 照實記下，免得日後被讀成三題都答過。
+
+照上一節的約定，兩個保留物在 v0.29.0 拿掉（當初寫的「schema v8」那時已經是 v15）：
+`migrate_v15` 拿掉 `accounts.account_type`；`EntryType` 拿掉 `adjustment`，而
+`transactions.entry_type` 的 CHECK 留著它（拿掉要重建整張表），由
+`tests/unit/test_retired_schema_values.py` 守著程式不寫它。`test_reserved_schema.py` 跟著刪掉。
+理由與後果見 [ADR-0021](../decisions/ADR-0021-no-statement-reconciliation.md)。

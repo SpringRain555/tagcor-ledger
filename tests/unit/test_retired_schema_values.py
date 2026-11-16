@@ -1,14 +1,16 @@
 """守門：schema 裡**留著、但執行期不再寫**的欄位與值。
 
-拿掉一個欄位或一個 CHECK 值要重建整張表，所以 v12、v13 都選擇留著
+拿掉一個欄位或一個 CHECK 值要重建整張表，所以 v12、v13、v15 都選擇留著
 （[ADR-0015](../../docs/decisions/ADR-0015-delete-balance-snapshots-for-real.md)、
-[ADR-0017](../../docs/decisions/ADR-0017-delete-transactions-for-real.md)）。
+[ADR-0017](../../docs/decisions/ADR-0017-delete-transactions-for-real.md)、
+[ADR-0021](../../docs/decisions/ADR-0021-no-statement-reconciliation.md)）。
 留著的代價是「看起來還能用」—— 這份檔案把「不再寫」從註解裡的一句話變成會失敗的測試。
 
 | 留著的 | 從哪一版起不寫 | 為什麼 |
 |---|---|---|
 | `transactions.replaces_transaction_id` | v13 | 它指向被替換掉的舊轉帳，而舊轉帳現在是真的刪掉 —— 外鍵會擋住刪除。替換關係改記在稽核列 |
 | `status = 'voided'`（交易、盤點） | v13、v12 | 刪除是真的移除，資料庫裡沒有「已刪除」這個狀態了 |
+| `entry_type = 'adjustment'` | 從來沒有人寫過；v15 起程式裡也沒有這個流向 | 為逐筆對帳保留，REQ-0010 評估後不做。同一次拿掉的 `accounts.account_type` 不在這張表：它可以直接 DROP COLUMN，已經不在 schema 裡（`tests/integration/test_reserved_fields_removed.py`） |
 
 只有 `infrastructure/migrations.py` 可以提到它們（建表、CHECK、清掉舊資料的那幾版）。
 docstring 與註解不算 —— 那是寫給人看的歷史，本來就該講得出它們以前是什麼。
@@ -28,6 +30,7 @@ MIGRATIONS = "infrastructure/migrations.py"
 RETIRED = {
     "replaces_transaction_id": "v13 起不寫（ADR-0017）：替換關係記在稽核列的 `replaces`",
     "voided": "v12／v13 起刪除是真的移除（ADR-0015、ADR-0017），沒有已刪除這個狀態",
+    "adjustment": "v15 起沒有這個流向（ADR-0021）：REQ-0010 評估後不做逐筆對帳，CHECK 留著只是因為拿掉要重建整張表",
 }
 
 
@@ -55,7 +58,7 @@ def _modules() -> list[Path]:
 
 
 def test_the_extractor_sees_the_migrations_and_skips_docstrings() -> None:
-    """陽性對照：migration 那一份一定提到這兩個字（建表與清舊資料），抽不到就是抽取器壞了；
+    """陽性對照：migration 那一份一定提到名單上的每一個字（建表、CHECK 與清舊資料），抽不到就是抽取器壞了；
     而 `stores/base.py` 的 docstring 有提到 `replaces_transaction_id`，那不該被抽出來。"""
     migrations = " ".join(_value_strings(SOURCE_ROOT / MIGRATIONS))
     for word in RETIRED:
