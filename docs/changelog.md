@@ -6,7 +6,36 @@
 > **2026-08-22 決定不分卷** —— 理由同 [`lessons.md`](lessons.md) 開頭那段：
 > 標題清單已經是索引，分卷只會多一層查找。
 
-## 未發布
+## 0.29.0 - 對帳缺口評估後不做：拿掉為它保留的兩樣東西（schema v15）；啟動機制改用共用套件
+
+> **升級前先在「系統設定 → 備份與還原」手動備份一份。** 開啟 0.29.0 時 `migrate_v15` 會拿掉
+> `accounts.account_type`，拿掉的那一欄回不來；程式依規定不自動備份。
+
+### REQ-0010 結案：不做逐筆對帳（[ADR-0021](decisions/ADR-0021-no-statement-reconciliation.md)）
+
+REQ-0010 排在 2026-10 月底重新評估，2026-11-16 才處理：使用者判定以「沒有問題」結案，**沒有逐題回答**
+它的三個問題。為那個設計保留、從 v1 起從沒有人用過的兩樣東西，照 REQ-0010 自己的約定一起拿掉：
+
+- **`accounts.account_type`**：`migrate_v15` 用 `DROP COLUMN` 拿掉（程式只寫過 `cash`，沒有資訊跟著消失）。
+  store 的讀寫、`AccountService.create` 的參數、預設帳戶的種子、帳戶清單 details 裡沒人讀的那個鍵一起拿掉。
+- **`EntryType.ADJUSTMENT`**：列舉與兩張顯示名稱表拿掉。`transactions.entry_type` 的 CHECK **留著**
+  `adjustment` —— 拿掉要重建整張表，與 v12／v13 留下 `status` 那條 CHECK 同一個取捨；
+  `tests/unit/test_retired_schema_values.py` 加一列，守著程式不再寫它。
+- `tests/unit/test_reserved_schema.py`（「保持沒有人用」）刪掉 —— 它的 docstring 約好兩種結論都會讓它消失。
+  接手的是 `tests/integration/test_reserved_fields_removed.py`：用原本的 migration 照順序建出一份 v14 帳本再升上來，
+  那一欄不在、其他欄位與餘額不變、外鍵乾淨、重跑不壞；流向只有三種。三條都注入過違規、看著它們紅。
+- 兩條測試把版本號寫死成 14（`test_tax_schema.py`、`test_transaction_deletion.py`），改成跟著 `LATEST_SCHEMA_VERSION`。
+
+### 測試
+
+- `test_the_dialog_resolves_the_passbook_date_to_the_current_term` 讀真的時鐘、卻寫死「第 3 期」：2026-11-15
+  那一期到期後答案變成第 4 期，主線上 11-16 起就紅（pre-push 與 CI 都會被它擋）。改成在測試裡把「今天」釘在第 3 期裡的一天。
+
+### 文件
+
+- REQ-0011 的狀態列與 `docs/index.md` 那一列還寫著「實作中」，改成已實作（v0.28.0）。沒有 drift 測試守 REQ 的狀態。
+- `docs/environment/index.md` 那條「research runtime 落後安全修補」的待辦處理掉了：抓法規與稅務資料用的 runtime
+  現在是 Python 3.12.16＋certifi 2026.10.23（變更在 `D:\Claude_Workspace\claude-skills`，這個 repo 只改文件）。
 
 ### 啟動機制改用共用套件 `local-qt-app` 0.1.0
 
